@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   Bell,
   Calculator,
+  FileDiff,
   FlaskConical,
   GitPullRequest,
   HardDrive,
@@ -20,6 +21,7 @@ import {
 import { cn } from '@/lib/utils'
 import { FerrixLogo } from './logo'
 import { CommandPalette } from './command-palette'
+import { DiffQueueSheet } from './diff-queue-sheet'
 import { StorageDialog } from './storage-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +35,8 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useWorkspaces } from '@/lib/ferrix/hooks'
 import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
+import { useScanStore } from '@/lib/ferrix/scan-store'
+import { countPending, useDiffQueueStore } from '@/lib/ferrix/diff-store'
 import type { ViewId, WorkspaceSummary } from '@/lib/ferrix/types'
 
 const WS_ACCENT: Record<WorkspaceSummary['accent'], string> = {
@@ -94,9 +98,10 @@ export function AppShell({
 }) {
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const [clock, setClock] = useState<string>('')
+  const [clock, setClock] = useState<string>('--:--:-- local')
   const [uptime, setUptime] = useState(22320) // 6h 12m in seconds — engine process age
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [diffOpen, setDiffOpen] = useState(false)
 
   /* workspace registry + active selection (issue #34) */
   const workspacesQuery = useWorkspaces()
@@ -104,6 +109,11 @@ export function AppShell({
   const activeWs = useWorkspaceStore((s) => s.active)
   const setActiveWs = useWorkspaceStore((s) => s.setActive)
   const activeSummary = workspaces.find((w) => w.id === activeWs)
+
+  /* global scan event (issue #37) + reviewable-diff queue (issue #38) */
+  const bumpScan = useScanStore((s) => s.bumpScan)
+  const diffEntries = useDiffQueueStore((s) => s.entries)
+  const pendingDiffs = countPending(diffEntries, activeWs)
 
   useEffect(() => {
     const update = () => {
@@ -121,6 +131,7 @@ export function AppShell({
 
   const runScan = () => {
     queryClient.invalidateQueries()
+    bumpScan('topbar') // doctor view reacts with a replay + history entry (issue #37)
     toast({
       title: 'Scan re-triggered',
       description: `Ferrix engine is re-collecting cargo + git telemetry for ${activeSummary?.name ?? 'the active workspace'}.`,
@@ -236,7 +247,7 @@ export function AppShell({
                       className={`size-1.5 shrink-0 rounded-full ${WS_ACCENT[activeSummary?.accent ?? 'primary'] ?? 'bg-primary'}`}
                       aria-hidden
                     />
-                    <SelectValue>{activeSummary?.name}</SelectValue>
+                    <SelectValue>{activeSummary?.name ?? 'loading…'}</SelectValue>
                   </span>
                 </SelectTrigger>
                 <SelectContent>
@@ -267,6 +278,22 @@ export function AppShell({
               <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={runScan}>
                 <RefreshCw className="size-3.5" />
                 <span className="hidden sm:inline">Run scan</span>
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className={cn('relative h-8 gap-1.5 text-xs', pendingDiffs > 0 && 'border-primary/40 text-foreground')}
+                onClick={() => setDiffOpen(true)}
+                aria-label={`Pending diffs — ${pendingDiffs} awaiting review`}
+              >
+                <FileDiff className="size-3.5" />
+                <span className="hidden sm:inline">Pending diffs</span>
+                {pendingDiffs > 0 && (
+                  <span className="flex size-4 items-center justify-center rounded-full bg-primary font-mono text-[9px] font-bold text-primary-foreground">
+                    {pendingDiffs}
+                  </span>
+                )}
               </Button>
 
               <Button
@@ -340,7 +367,15 @@ export function AppShell({
           </div>
         </footer>
 
-        <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onNavigate={onNavigate} onRunScan={runScan} />
+        <CommandPalette
+          open={paletteOpen}
+          setOpen={setPaletteOpen}
+          onNavigate={onNavigate}
+          onRunScan={runScan}
+          onOpenDiffs={() => setDiffOpen(true)}
+          pendingDiffs={pendingDiffs}
+        />
+        <DiffQueueSheet open={diffOpen} onOpenChange={setDiffOpen} />
       </div>
     </div>
   )
