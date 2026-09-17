@@ -1,9 +1,26 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, RotateCcw, ShieldAlert, ShieldCheck, Terminal } from 'lucide-react'
+import {
+  CheckCircle2,
+  Download,
+  FileJson,
+  FileText,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
+  Terminal,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -14,8 +31,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { GateStatus } from '@/lib/ferrix/types'
+import type { GateStatus, GatesPayload } from '@/lib/ferrix/types'
 import { useGates } from '@/lib/ferrix/hooks'
+import { useToast } from '@/hooks/use-toast'
 import { Panel, SectionHeading } from '../shared'
 import { ExplainDialog } from '../explain-dialog'
 import type { ViewProps } from '../view-types'
@@ -75,6 +93,108 @@ function LoadingState() {
   )
 }
 
+/* --------------------------------------------------------------- export */
+
+const RELEASE = '0.4.2'
+
+function downloadBlob(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function ExportMenu({ data }: { data: GatesPayload }) {
+  const { toast } = useToast()
+
+  const exportJson = () => {
+    const payload = {
+      schema: 'ferrix.release-scorecard/v1',
+      generatedAt: new Date().toISOString(),
+      release: RELEASE,
+      verdict: data.verdict,
+      rationale: data.rationale,
+      gates: data.gates,
+      blockingConditions: data.blockingConditions,
+    }
+    downloadBlob(
+      `ferrix-scorecard-${RELEASE}.json`,
+      JSON.stringify(payload, null, 2),
+      'application/json',
+    )
+    toast({
+      title: 'Scorecard exported as JSON',
+      description: 'ferrix.release-scorecard/v1 — versioned schema (Gate 28).',
+    })
+  }
+
+  const exportMarkdown = () => {
+    const md = [
+      `# Ferrix Release Scorecard — ${RELEASE}`,
+      '',
+      `**Verdict: ${data.verdict}**`,
+      '',
+      data.rationale,
+      '',
+      '## Gates',
+      '',
+      '| # | Gate | Target | Measured | Status | Blocking |',
+      '|---|------|--------|----------|--------|----------|',
+      ...data.gates.map(
+        (g) =>
+          `| ${g.id} | ${g.name} | ${g.target} | ${g.measured} | ${g.status} | ${g.blocking ? '⚠️ blocking' : '—'} |`,
+      ),
+      '',
+      '## Release-blocking conditions',
+      ...(data.blockingConditions ?? []).map(
+        (c) => `- [${c.clear ? 'x' : ' '}] ${c.condition} — ${c.note}`,
+      ),
+      '',
+      '---',
+      '_Machine-readable contract: ferrix doctor --json (Gate 11) · estimates are never presented as measurements (Gate 21)._',
+    ].join('\n')
+    downloadBlob(`ferrix-scorecard-${RELEASE}.md`, md, 'text/markdown')
+    toast({
+      title: 'Scorecard exported as markdown',
+      description: 'Verdict, gates and blocking conditions included.',
+    })
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1.5">
+          <Download className="size-3.5" aria-hidden />
+          Export
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          release scorecard
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={exportJson} className="gap-2">
+          <FileJson className="size-4 text-primary" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-[12.5px] font-medium">JSON</p>
+            <p className="font-mono text-[10px] text-muted-foreground">ferrix.release-scorecard/v1</p>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={exportMarkdown} className="gap-2">
+          <FileText className="size-4 text-primary" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-[12.5px] font-medium">Markdown</p>
+            <p className="font-mono text-[10px] text-muted-foreground">verdict · gates · blockers</p>
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /* ------------------------------------------------------------------- view */
 
 export default function ScorecardView(_: ViewProps) {
@@ -128,7 +248,11 @@ export default function ScorecardView(_: ViewProps) {
 
   return (
     <div className="space-y-5">
-      <SectionHeading eyebrow="Release Governance" title="Release scorecard" />
+      <SectionHeading
+        eyebrow="Release Governance"
+        title="Release scorecard"
+        actions={data ? <ExportMenu data={data} /> : undefined}
+      />
 
       {/* ------------------------------------------------ verdict banner */}
       <div className="rounded-xl bg-gradient-to-r from-amber-500/50 via-primary/40 to-amber-500/50 p-px">
