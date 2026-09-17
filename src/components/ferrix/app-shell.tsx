@@ -7,11 +7,13 @@ import {
   Bell,
   Calculator,
   FileDiff,
+  FileText,
   FlaskConical,
   GitPullRequest,
   HardDrive,
   LayoutDashboard,
   ListChecks,
+  Loader2,
   Microscope,
   Moon,
   Network,
@@ -38,7 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { useWorkspaces } from '@/lib/ferrix/hooks'
+import { useReportExport, useWorkspaces } from '@/lib/ferrix/hooks'
 import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import { useScanStore } from '@/lib/ferrix/scan-store'
 import { countPending, useDiffQueueStore } from '@/lib/ferrix/diff-store'
@@ -163,6 +165,9 @@ export function AppShell({
   const diffEntries = useDiffQueueStore((s) => s.entries)
   const pendingDiffs = countPending(diffEntries, activeWs)
 
+  /* workspace report export (round 9) */
+  const reportExport = useReportExport()
+
   useEffect(() => {
     const update = () => {
       setClock(
@@ -197,8 +202,32 @@ export function AppShell({
     })
   }
 
+  const exportReport = () => {
+    reportExport.mutate(undefined, {
+      onSuccess: (b) =>
+        toast({
+          title: 'Workspace report downloaded',
+          description: `${b.filename} · ${(b.bytes / 1024).toFixed(1)} KB · doctor + graph + gates + storage`,
+        }),
+      onError: (e) =>
+        toast({ title: 'Report export failed', description: e.message, variant: 'destructive' }),
+    })
+  }
+
   return (
     <div className="flex min-h-screen bg-background bg-grid">
+      {/* a11y: skip link — visible on first Tab, jumps past the sidebar */}
+      <a
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault()
+          document.getElementById('main-content')?.focus()
+        }}
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-1.5 focus:text-xs focus:font-semibold focus:text-primary-foreground focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+
       {/* ---------------- sidebar ---------------- */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-border/70 bg-sidebar lg:flex">
         <div className="flex items-center gap-2.5 px-4 py-4">
@@ -345,6 +374,23 @@ export function AppShell({
               </Button>
 
               <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={exportReport}
+                disabled={reportExport.isPending}
+                aria-label={`Download workspace report for ${activeSummary?.name ?? 'active workspace'} (Markdown)`}
+                title="Markdown report — findings, evidence, gates, storage"
+              >
+                {reportExport.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <FileText className="size-3.5" aria-hidden />
+                )}
+                <span className="hidden sm:inline">Report</span>
+              </Button>
+
+              <Button
                 size="icon"
                 variant="ghost"
                 className="relative size-8"
@@ -386,8 +432,10 @@ export function AppShell({
           </nav>
         </header>
 
-        {/* content */}
-        <main className="flex-1 px-4 py-5 sm:px-6">{children}</main>
+        {/* content — tabIndex=-1 lets the skip-link anchor move keyboard focus here */}
+        <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-5 outline-none sm:px-6">
+          {children}
+        </main>
 
         {/* sticky status footer */}
         <footer className="footer-hairline mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 bg-sidebar/60 px-4 py-2 font-mono text-[10.5px] text-muted-foreground sm:px-6">
@@ -423,6 +471,7 @@ export function AppShell({
           onNavigate={onNavigate}
           onRunScan={runScan}
           onOpenDiffs={() => setDiffOpen(true)}
+          onExportReport={exportReport}
           pendingDiffs={pendingDiffs}
         />
         <DiffQueueSheet open={diffOpen} onOpenChange={setDiffOpen} />

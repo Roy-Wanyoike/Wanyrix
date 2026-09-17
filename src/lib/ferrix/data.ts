@@ -16,6 +16,7 @@ import type {
   ExperimentsPayload,
   GraphPayload,
   SplitImpact,
+  UpgradeImpact,
   WorkspaceSummary,
   WorkspacesPayload,
 } from './types'
@@ -2085,6 +2086,210 @@ const ATLAS_ADD_DEP_CATALOG: Record<
   },
 }
 
+// ---------------------------------------------------------------------------
+// Version-upgrade simulation catalogs (round 9)
+// Negative deltas are real outcomes here: unifying a duplicated version makes
+// the build FASTER, and the UI renders those tiles as improvements.
+// ---------------------------------------------------------------------------
+
+const UPGRADE_CATALOG: Record<
+  string,
+  {
+    from: string
+    to: string
+    semver: 'major' | 'minor' | 'patch'
+    duplicateBefore?: boolean
+    recompileCrates: number
+    cleanDelta: number
+    incrementalDelta: number
+    ciDelta: number
+    breaking: { title: string; detail: string }[]
+    migrations: { code: string; note: string }[]
+    notes: string[]
+    suggestions: string[]
+  }
+> = {
+  tokio: {
+    from: '1.40.0',
+    to: '1.41.1',
+    semver: 'minor',
+    recompileCrates: 46,
+    cleanDelta: 0.8,
+    incrementalDelta: 0.2,
+    ciDelta: 3,
+    breaking: [],
+    migrations: [],
+    notes: [
+      'Semver-minor — all 1.x APIs stable; no source changes expected',
+      'tokio is linked into 46/47 workspace crates — one bump recompiles nearly everything',
+      'New: tokio::task::JoinSet::poll_next stabilizations used by the ingest pipeline',
+    ],
+    suggestions: [
+      'cargo update -p tokio && cargo test -p helios-store (runtime crate is the risk surface)',
+      'Stage the bump separately from feature work to isolate telemetry noise',
+      'Run ferrix doctor after the bump — critical-path numbers shift when 46 crates recompile',
+    ],
+  },
+  serde: {
+    from: '1.0.210',
+    to: '1.0.215',
+    semver: 'patch',
+    recompileCrates: 52,
+    cleanDelta: 0.3,
+    incrementalDelta: 0.1,
+    ciDelta: 2,
+    breaking: [],
+    migrations: [],
+    notes: [
+      'Patch release — bugfix + performance only; zero expected API impact',
+      'serde_derive (proc-macro) changes version → 52 crates recompile despite the patch',
+    ],
+    suggestions: [
+      'Bump freely in the same PR as dependency hygiene work — noise is low',
+      'Pin with =1.0.215 only if downstream consumers snapshot your lockfile',
+    ],
+  },
+  'wasm-bindgen': {
+    from: '0.2.95',
+    to: '0.2.100',
+    semver: 'patch',
+    recompileCrates: 38,
+    cleanDelta: 0.4,
+    incrementalDelta: 0.1,
+    ciDelta: 2,
+    breaking: [],
+    migrations: [],
+    notes: [
+      'wasm-bindgen 0.2.x pairs strictly with wasm-bindgen-cli — update BOTH',
+      'Mismatched cli versions produce runtime link errors, not compile errors — easy to miss locally',
+      'CI uses --locked; the wasm toolchain Dockerfile needs the same bump',
+    ],
+    suggestions: [
+      'Update wasm-bindgen-cli in .cargo/config + CI image in the same commit',
+      'wasm-pack build --target web must be re-verified on the fixtures suite',
+    ],
+  },
+  hyper: {
+    from: '0.14.31',
+    to: '1.5.2',
+    semver: 'major',
+    recompileCrates: 23,
+    cleanDelta: 1.2,
+    incrementalDelta: 0.5,
+    ciDelta: 6,
+    breaking: [
+      {
+        title: 'Body trait redesign',
+        detail: 'hyper::Body is gone — http_body::Frame + BodyData replaces the stream API in server handlers.',
+      },
+      {
+        title: 'Server builder moves to hyper-util',
+        detail: 'hyper::server::Server is now hyper_util::server::conn::auto::Builder — connection plumbing changes.',
+      },
+      {
+        title: 'Client connection pool removed',
+        detail: 'hyper 1.x has no built-in pool — adopt hyper-util::client::legacy or migrate to reqwest.',
+      },
+    ],
+    migrations: [
+      {
+        code: 'let svc = hyper_util::service::TokioExecutor::new();\nlet conn = hyper_util::server::conn::auto::Builder::new(svc);',
+        note: 'replaces hyper::server::conn::Http — auto builder serves both HTTP/1 and h2',
+      },
+      {
+        code: 'use http_body_util::BodyExt;\nlet body = req.into_body().collect().await?.to_bytes();',
+        note: 'replaces hyper::body::to_bytes — collect() is the 1.x streaming join',
+      },
+    ],
+    notes: [
+      '23 crates compile against hyper directly (helios-server, gateway, ws transport)',
+      'Existing reqwest 0.12 already vendors hyper 1.x — tree gains ONE hyper instead of two if 0.14 is dropped',
+      'tonic version must be co-bumped: tonic 0.12 requires hyper 1.x',
+    ],
+    suggestions: [
+      'Land behind a transport feature gate; migrate helios-gateway first (lowest fan-in)',
+      'Check tonic/hyper compatibility matrix before writing code',
+      'Use the Impact Simulator split-crate view after migration — gateway fan-out will have changed',
+    ],
+  },
+}
+
+const ATLAS_UPGRADE_CATALOG: Record<
+  string,
+  {
+    from: string
+    to: string
+    semver: 'major' | 'minor' | 'patch'
+    duplicateBefore?: boolean
+    recompileCrates: number
+    cleanDelta: number
+    incrementalDelta: number
+    ciDelta: number
+    breaking: { title: string; detail: string }[]
+    migrations: { code: string; note: string }[]
+    notes: string[]
+    suggestions: string[]
+  }
+> = {
+  bytes: {
+    from: '1.8.0',
+    to: '1.9.0',
+    semver: 'minor',
+    duplicateBefore: true,
+    recompileCrates: 6,
+    cleanDelta: -0.6,
+    incrementalDelta: -2.1,
+    ciDelta: -4.0,
+    breaking: [],
+    migrations: [],
+    notes: [
+      'De-duplication win: the tree currently compiles bytes 1.8.0 AND 1.9.0 (cargo tree -d)',
+      'Unifying on 1.9.0 removes the duplicate artifact introduced by PR #97 buffer-pool vendoring',
+      '−2.1s incremental matches the regression PR #97 added to atlas-common touches — this reverses it',
+      'Alternative: pin the tree back to 1.8.0 (cargo update -p bytes@1.9.0 --precise 1.8.0) — same de-dup, opposite direction',
+    ],
+    suggestions: [
+      'cargo update -p bytes@1.8.0 --precise 1.9.0 — unifies the tree on one bytes',
+      'Re-run the PR #97 analysis after landing: atlas-common touches should return to ≈6.8s',
+      'Pair with ATL-WRK-005 (extract atlas-bytes) to keep the fan-out from re-growing',
+    ],
+  },
+  sqlx: {
+    from: '0.8.2',
+    to: '0.8.6',
+    semver: 'patch',
+    recompileCrates: 9,
+    cleanDelta: 0.2,
+    incrementalDelta: 0.1,
+    ciDelta: 1,
+    breaking: [],
+    migrations: [],
+    notes: [
+      'Patch series: query macro caching fix — first compile after bump may be slower once',
+      'atlas-store is the only crate touching sqlx directly; 9 crates recompile through the types module',
+    ],
+    suggestions: [
+      'cargo update -p sqlx && cargo sqlx prepare (offline query data must be regenerated)',
+    ],
+  },
+  prost: {
+    from: '0.13.3',
+    to: '0.13.4',
+    semver: 'patch',
+    recompileCrates: 5,
+    cleanDelta: 0.1,
+    incrementalDelta: 0.1,
+    ciDelta: 1,
+    breaking: [],
+    migrations: [],
+    notes: [
+      'Codegen byte-identical for the current .proto set — verified against the schema snapshot',
+      'prost-build runs in build.rs — build-script reruns touch atlas-ingest and atlas-query',
+    ],
+    suggestions: ['Bump together with the arrow 53→54 upgrade to batch the recompile window'],
+  },
+}
+
 const SPLIT_SIM_ATLAS = {
   source: 'atlas-common',
   before: {
@@ -2407,6 +2612,7 @@ export function getGraphPayload(ws: string): GraphPayload {
       catalog: {
         addDeps: Object.entries(ATLAS_ADD_DEP_CATALOG).map(([id, v]) => ({ id, version: v.version })),
         splitCandidates: [SPLIT_SIM_ATLAS.source],
+        upgrades: Object.entries(ATLAS_UPGRADE_CATALOG).map(([id, v]) => ({ id, from: v.from, to: v.to })),
       },
     }
   }
@@ -2423,15 +2629,16 @@ export function getGraphPayload(ws: string): GraphPayload {
     catalog: {
       addDeps: Object.entries(ADD_DEP_CATALOG).map(([id, v]) => ({ id, version: v.version })),
       splitCandidates: [SPLIT_SIM.source],
+      upgrades: Object.entries(UPGRADE_CATALOG).map(([id, v]) => ({ id, from: v.from, to: v.to })),
     },
   }
 }
 
 export function getImpact(
-  type: 'add-dep' | 'edit-file' | 'split-crate',
+  type: 'add-dep' | 'edit-file' | 'split-crate' | 'upgrade-dep',
   target: string,
   ws: string,
-): AddDepImpact | EditFileImpact | SplitImpact | null {
+): AddDepImpact | EditFileImpact | SplitImpact | UpgradeImpact | null {
   const atlas = ws === 'atlas-consortium'
   if (type === 'add-dep') {
     const catalog = atlas ? ATLAS_ADD_DEP_CATALOG : ADD_DEP_CATALOG
@@ -2469,6 +2676,18 @@ export function getImpact(
       proposal: sim.proposal,
       improvementPct: sim.improvementPct,
       migration: sim.migration,
+      measurementStatus: 'estimated',
+    }
+  }
+  if (type === 'upgrade-dep') {
+    const catalog = atlas ? ATLAS_UPGRADE_CATALOG : UPGRADE_CATALOG
+    const entry = catalog[target]
+    if (!entry) return null
+    return {
+      kind: 'upgrade-dep',
+      crate: target,
+      duplicateBefore: entry.duplicateBefore ?? false,
+      ...entry,
       measurementStatus: 'estimated',
     }
   }

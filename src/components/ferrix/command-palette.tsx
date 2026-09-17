@@ -8,6 +8,7 @@ import {
   Database,
   ExternalLink,
   FileDiff,
+  FileText,
   FlaskConical,
   GitPullRequest,
   HardDrive,
@@ -54,6 +55,7 @@ export function CommandPalette({
   onNavigate,
   onRunScan,
   onOpenDiffs,
+  onExportReport,
   pendingDiffs,
 }: {
   open: boolean
@@ -61,6 +63,7 @@ export function CommandPalette({
   onNavigate: (v: ViewId) => void
   onRunScan: () => void
   onOpenDiffs: () => void
+  onExportReport: () => void
   pendingDiffs: number
 }) {
   useEffect(() => {
@@ -146,6 +149,17 @@ export function CommandPalette({
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">
               {pendingDiffs > 0 ? `${pendingDiffs} awaiting review` : 'review queue'}
             </span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setOpen(false)
+              onExportReport()
+            }}
+            className="gap-2.5"
+          >
+            <FileText className="size-4 text-teal-300" />
+            <span>Export workspace report</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">markdown · findings + gates</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {

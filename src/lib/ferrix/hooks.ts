@@ -69,7 +69,7 @@ export function useDiagnostics() {
   })
 }
 
-export function useImpact(type: 'add-dep' | 'edit-file' | 'split-crate', target: string) {
+export function useImpact(type: 'add-dep' | 'edit-file' | 'split-crate' | 'upgrade-dep', target: string) {
   const ws = useActiveWorkspace()
   return useQuery<ImpactPayload>({
     queryKey: ['impact', type, target, ws],
@@ -168,6 +168,32 @@ export function useExplain(): UseMutationResult<ExplainResponse, Error, ExplainR
       })
       if (!res.ok) throw new Error(`explain → ${res.status}`)
       return res.json() as Promise<ExplainResponse>
+    },
+  })
+}
+
+/* ------------------------------------------------- workspace report export */
+
+export interface ReportBundle {
+  filename: string
+  markdown: string
+  bytes: number
+}
+
+/**
+ * Exports the server-assembled Markdown workspace report and triggers a
+ * browser download. Mutation state drives the topbar button spinner.
+ */
+export function useReportExport(): UseMutationResult<ReportBundle, Error, void> {
+  const ws = useActiveWorkspace()
+  return useMutation<ReportBundle, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch(`/api/ferrix/report?ws=${encodeURIComponent(ws)}`)
+      if (!res.ok) throw new Error(`report → ${res.status}`)
+      const bundle = (await res.json()) as ReportBundle
+      const { downloadText } = await import('./patch')
+      downloadText(bundle.filename, bundle.markdown)
+      return bundle
     },
   })
 }

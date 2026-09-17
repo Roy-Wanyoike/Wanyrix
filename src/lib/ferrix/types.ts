@@ -127,6 +127,8 @@ export interface BlastEntry {
 export interface ImpactCatalog {
   addDeps: { id: string; version: string }[]
   splitCandidates: string[]
+  /** version-upgrade scenarios (round 9) — id = crate name, from/to are semver */
+  upgrades: { id: string; from: string; to: string }[]
 }
 
 /** GET /api/ferrix/graph */
@@ -197,7 +199,29 @@ export interface SplitImpact {
   measurementStatus: MeasurementStatus
 }
 
-export type ImpactPayload = AddDepImpact | EditFileImpact | SplitImpact
+export interface UpgradeImpact {
+  kind: 'upgrade-dep'
+  crate: string
+  from: string
+  to: string
+  semver: 'major' | 'minor' | 'patch'
+  /** true when this upgrade collapses an in-tree duplicate version (de-dup win) */
+  duplicateBefore: boolean
+  /** crates recompiled by the version bump */
+  recompileCrates: number
+  /** negative values mean the build gets FASTER (de-dup / perf fix) */
+  cleanDelta: number
+  incrementalDelta: number
+  ciDelta: number
+  breaking: { title: string; detail: string }[]
+  /** copy-paste migration snippets with honest framing (no fabricated diffs) */
+  migrations: { code: string; note: string }[]
+  notes: string[]
+  suggestions: string[]
+  measurementStatus: MeasurementStatus
+}
+
+export type ImpactPayload = AddDepImpact | EditFileImpact | SplitImpact | UpgradeImpact
 
 // ---------------------------------------------------------------------------
 // Diagnostics (borrow checker + async flow)

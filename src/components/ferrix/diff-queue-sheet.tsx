@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils'
 
 const SOURCE_LABEL: Record<DiffEntry['source'], string> = {
   'simulator:add-dep': 'impact simulator · add dependency',
+  'simulator:upgrade-dep': 'impact simulator · version upgrade',
   'simulator:edit-file': 'impact simulator · file edit',
   'simulator:split-crate': 'impact simulator · crate split',
   finding: 'doctor finding · remediation',

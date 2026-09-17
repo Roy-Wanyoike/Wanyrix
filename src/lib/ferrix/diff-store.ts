@@ -13,6 +13,7 @@ import { persist } from 'zustand/middleware'
 
 export type DiffSource =
   | 'simulator:add-dep'
+  | 'simulator:upgrade-dep'
   | 'simulator:edit-file'
   | 'simulator:split-crate'
   | 'finding'

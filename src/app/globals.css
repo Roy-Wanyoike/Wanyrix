@@ -132,7 +132,8 @@ html:not(.dark) {
   --color-amber-300: oklch(0.555 0.163 48.998);
   --color-amber-400: oklch(0.628 0.188 61.4);
   --color-amber-500: oklch(0.666 0.179 58.318);
-  /* emerald: 200/300/400/500 → 600/700 family */
+  /* emerald: 100/200/300/400/500 → 600/700 family (100 added round 9 — de-dup callout body) */
+  --color-emerald-100: oklch(0.508 0.118 165.612);
   --color-emerald-200: oklch(0.596 0.145 163.225);
   --color-emerald-300: oklch(0.508 0.118 165.612);
   --color-emerald-400: oklch(0.596 0.145 163.225);
@@ -140,7 +141,8 @@ html:not(.dark) {
   /* orange: 300/500 → 600/700 family */
   --color-orange-300: oklch(0.553 0.195 38.402);
   --color-orange-500: oklch(0.646 0.222 41.116);
-  /* red: 300/400/500 → 600/700 family (50 stays — light tint bg) */
+  /* red: 200/300/400/500 → 600/700 family (50 stays — light tint bg; 200 added round 9 — breaking-change titles) */
+  --color-red-200: oklch(0.505 0.213 27.518);
   --color-red-300: oklch(0.505 0.213 27.518);
   --color-red-400: oklch(0.577 0.245 27.325);
   --color-red-500: oklch(0.577 0.245 27.325);
@@ -321,3 +323,21 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover {
     @apply bg-background text-foreground;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * prefers-reduced-motion (round 9 a11y pass) — kills CSS animations,
+ * transitions and smooth scrolling for users who opt out. Framer Motion
+ * components additionally check useReducedMotion() in JS.
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* round-9 palette: red-200 + emerald-100 (rebuild trigger) */

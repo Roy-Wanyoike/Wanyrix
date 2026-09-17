@@ -11,11 +11,12 @@ export async function GET(req: NextRequest) {
     | 'add-dep'
     | 'edit-file'
     | 'split-crate'
+    | 'upgrade-dep'
     | string
   const target = req.nextUrl.searchParams.get('target') ?? ''
   const ws = req.nextUrl.searchParams.get('ws') ?? 'helios-platform'
 
-  if (type !== 'add-dep' && type !== 'edit-file' && type !== 'split-crate') {
+  if (type !== 'add-dep' && type !== 'edit-file' && type !== 'split-crate' && type !== 'upgrade-dep') {
     return NextResponse.json({ error: `unknown type '${type}'` }, { status: 400 })
   }
 
