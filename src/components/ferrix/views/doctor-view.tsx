@@ -34,6 +34,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useDoctor } from '@/lib/ferrix/hooks'
 import { useToast } from '@/hooks/use-toast'
 import { FindingSheet } from '../finding-sheet'
+import { SccacheSimulator } from '../sccache-simulator'
 import type {
   ConfidenceClass,
   CriticalPathSegment,
@@ -604,6 +605,9 @@ export default function DoctorView({ onNavigate }: ViewProps) {
           linking includes codegen
         </p>
       </Panel>
+
+      {/* ------------------------------------------------ 4b) sccache simulator */}
+      <SccacheSimulator report={report} onNavigate={() => onNavigate?.('experiments')} />
 
       {/* ------------------------------------------------ 5) findings */}
       <div className="flex flex-wrap items-center justify-between gap-3">
