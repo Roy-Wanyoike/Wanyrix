@@ -17,6 +17,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useGraph, useImpact } from '@/lib/ferrix/hooks'
+import { useDiffQueueStore } from '@/lib/ferrix/diff-store'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import type { AddDepImpact, BlastEntry, EditFileImpact, ImpactPayload, SplitImpact } from '@/lib/ferrix/types'
 import { cn } from '@/lib/utils'
 import { ExplainDialog } from '../explain-dialog'
@@ -160,6 +162,8 @@ function CatalogCard({
 function AddDepReport({ query }: { query: QueryLike<ImpactPayload> }) {
   const [pending, setPending] = useState<string | null>(null)
   const { toast } = useToast()
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const enqueueDiff = useDiffQueueStore((s) => s.enqueue)
   const d = query.data && query.data.kind === 'add-dep' ? (query.data as AddDepImpact) : undefined
 
   if (query.isPending || (query.data === undefined && !query.isError)) {
@@ -277,7 +281,23 @@ function AddDepReport({ query }: { query: QueryLike<ImpactPayload> }) {
             <Button
               size="sm"
               onClick={() => {
-                toast({ title: 'Diff queued for review (demo)', description: pending ?? undefined })
+                if (!pending) return
+                enqueueDiff({
+                  id: `diff-${Date.now()}`,
+                  workspace: activeWs,
+                  at: Date.now(),
+                  source: 'simulator:add-dep',
+                  kind: 'config',
+                  title: `Dependency change — ${d.crate} ${d.version}`,
+                  target: `${d.crate} ${d.version} · Cargo.toml`,
+                  suggestion: pending,
+                  estimate: `+${d.cleanDelta}s clean · +${d.ciDelta}s CI per build`,
+                  status: 'pending',
+                })
+                toast({
+                  title: 'Diff queued for review',
+                  description: 'Open Pending diffs in the topbar to inspect or export it (Gate 19).',
+                })
                 setPending(null)
               }}
             >

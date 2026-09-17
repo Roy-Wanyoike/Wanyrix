@@ -6,9 +6,11 @@ import {
   Check,
   Database,
   ExternalLink,
+  FileDiff,
   FlaskConical,
   GitPullRequest,
   HardDrive,
+  History,
   LayoutDashboard,
   ListChecks,
   Microscope,
@@ -48,11 +50,15 @@ export function CommandPalette({
   setOpen,
   onNavigate,
   onRunScan,
+  onOpenDiffs,
+  pendingDiffs,
 }: {
   open: boolean
   setOpen: (o: boolean) => void
   onNavigate: (v: ViewId) => void
   onRunScan: () => void
+  onOpenDiffs: () => void
+  pendingDiffs: number
 }) {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -124,6 +130,30 @@ export function CommandPalette({
             <RefreshCw className="size-4 text-amber-400" />
             <span>Run full scan</span>
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">cargo + git telemetry</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setOpen(false)
+              onOpenDiffs()
+            }}
+            className="gap-2.5"
+          >
+            <FileDiff className="size-4 text-amber-400" />
+            <span>Open pending diffs</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+              {pendingDiffs > 0 ? `${pendingDiffs} awaiting review` : 'review queue'}
+            </span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setOpen(false)
+              onNavigate('doctor')
+            }}
+            className="gap-2.5"
+          >
+            <History className="size-4 text-teal-300" />
+            <span>View scan history</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">Build Doctor</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {

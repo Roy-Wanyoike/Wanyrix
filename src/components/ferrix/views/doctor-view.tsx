@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Boxes,
@@ -32,8 +32,11 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useDoctor } from '@/lib/ferrix/hooks'
+import { useScanStore } from '@/lib/ferrix/scan-store'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import { useToast } from '@/hooks/use-toast'
 import { FindingSheet } from '../finding-sheet'
+import { ScanHistoryPanel } from '../scan-history'
 import { SccacheSimulator } from '../sccache-simulator'
 import type {
   ConfidenceClass,
@@ -144,13 +147,21 @@ function ScanTerminal({
   onDone,
 }: {
   report: DoctorReport
-  onDone: (done: boolean) => void
+  onDone: (done: boolean, durationMs: number) => void
 }) {
   const [revealed, setRevealed] = useState(1) // the $ command line is visible immediately
   const [done, setDone] = useState(false)
   const total = 1 + report.phases.length + 2 // cmd + phases + 2 summary lines
 
+  /* keep the latest callback without restarting the reveal timers (issue #25 pattern) */
+  const onDoneRef = useRef(onDone)
   useEffect(() => {
+    onDoneRef.current = onDone
+  }, [onDone])
+  const mountedAt = useRef(0)
+
+  useEffect(() => {
+    mountedAt.current = performance.now()
     let count = 1
     let doneTimer: ReturnType<typeof setTimeout> | undefined
     const iv = setInterval(() => {
@@ -160,7 +171,7 @@ function ScanTerminal({
         clearInterval(iv)
         doneTimer = setTimeout(() => {
           setDone(true)
-          onDone(true)
+          onDoneRef.current(true, performance.now() - mountedAt.current)
         }, 480)
       }
     }, 380)
@@ -168,7 +179,7 @@ function ScanTerminal({
       clearInterval(iv)
       if (doneTimer) clearTimeout(doneTimer)
     }
-  }, [total, onDone])
+  }, [total])
 
   const lines = [
     { text: 'ferrix doctor --profile dev', tone: 'cmd' as const },
@@ -344,11 +355,22 @@ function FindingCard({
 export default function DoctorView({ onNavigate }: ViewProps) {
   const { data: report, isLoading, isError, error, refetch } = useDoctor()
   const { toast } = useToast()
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const scanTick = useScanStore((s) => s.scanTick)
+  const lastTrigger = useScanStore((s) => s.lastTrigger)
+  const bumpScan = useScanStore((s) => s.bumpScan)
+  const addScanEntry = useScanStore((s) => s.addEntry)
 
   const [mode, setMode] = useState<'human' | 'json'>('human')
-  const [runId, setRunId] = useState(0)
-  const [scanDone, setScanDone] = useState(false)
   const [selected, setSelected] = useState<Finding | null>(null)
+
+  /* every run goes through the global scan event (issue #37): runId = scanTick.
+     The doctor button bumps it with trigger 'manual'; the topbar / ⌘K bump it
+     with their own triggers. ScanTerminal remounts on every runId change. */
+  const runId = scanTick
+  const [doneRun, setDoneRun] = useState(-1)
+  const scanDone = doneRun === runId
+  const mountedAtTick = useRef(scanTick)
 
   /* findings grouped by section, in curated data order */
   const groups = useMemo(() => {
@@ -369,10 +391,28 @@ export default function DoctorView({ onNavigate }: ViewProps) {
   /* recomputed on every runId replay (ScanTerminal builds its own copy) */
   const json = report ? JSON.stringify(report, null, 2) : ''
 
-  const startScan = () => {
-    setScanDone(false)
-    setRunId((r) => r + 1) // remounts ScanTerminal → replay
-    setMode('human') // a fresh run is watched in the terminal, not in JSON
+  /* scan completion → record a history entry (issue #37); figures from the payload.
+     Trigger label: 'manual' for the auto-run on view mount, otherwise whatever
+     control bumped the scan event that produced this run. */
+  const handleScanDone = (done: boolean, durationMs: number) => {
+    if (!done) return
+    setDoneRun(runId)
+    if (report) {
+      addScanEntry(activeWs, {
+        id: `scan-${Date.now()}`,
+        workspace: activeWs,
+        at: Date.now(),
+        durationMs,
+        findings: report.findings.length,
+        critical: report.findings.filter((f) => f.severity === 'critical').length,
+        warning: report.findings.filter((f) => f.severity === 'warning').length,
+        info: report.findings.filter((f) => f.severity === 'info').length,
+        buildTime: report.buildTime,
+        estimatedFrom: report.estimatedRange[0],
+        estimatedTo: report.estimatedRange[1],
+        trigger: scanTick === mountedAtTick.current ? 'manual' : lastTrigger,
+      })
+    }
   }
 
   const copyJson = () => {
@@ -475,7 +515,15 @@ export default function DoctorView({ onNavigate }: ViewProps) {
               <ClipboardCopy className="size-4" />
               <span className="hidden sm:inline">Copy report (md)</span>
             </Button>
-            <Button size="sm" onClick={startScan} disabled={!scanDone} className="gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setMode('human') // a fresh run is watched in the terminal, not in JSON
+                bumpScan('manual') // runId = scanTick → ScanTerminal remounts and replays
+              }}
+              disabled={!scanDone}
+              className="gap-2"
+            >
               <RefreshCw className={`size-4 ${!scanDone ? 'animate-spin' : ''}`} />
               Run ferrix doctor
             </Button>
@@ -484,9 +532,12 @@ export default function DoctorView({ onNavigate }: ViewProps) {
       />
 
       {/* ------------------------------------------------ 2) terminal / json */}
-      {mode === 'human' ? (
-        <ScanTerminal key={runId} report={report} onDone={setScanDone} />
-      ) : (
+      {/* the terminal always runs (so a scan is recorded even while JSON mode is
+          on); it is simply hidden while the JSON report is being viewed */}
+      <div className={mode === 'json' ? 'hidden' : undefined}>
+        <ScanTerminal key={runId} report={report} onDone={handleScanDone} />
+      </div>
+      {mode === 'json' && (
         <div className="space-y-2">
           <Panel
             title={<span className="font-mono">ferrix doctor --json</span>}
@@ -561,6 +612,9 @@ export default function DoctorView({ onNavigate }: ViewProps) {
       </div>
 
       {/* ------------------------------------------------ 4) critical path */}
+      <ScanHistoryPanel currentBuildTime={report.buildTime} />
+
+      {/* ------------------------------------------------ 5) critical path chart */}
       <Panel title="Critical path" subtitle={`what the ${report.buildTime}s is made of`}>
         <div className="h-[264px] w-full">
           <ResponsiveContainer width="100%" height="100%">

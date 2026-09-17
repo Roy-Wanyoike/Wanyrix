@@ -23,6 +23,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { useToast } from '@/hooks/use-toast'
+import { useDiffQueueStore } from '@/lib/ferrix/diff-store'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import type { Finding, RemediationKind } from '@/lib/ferrix/types'
 import { ConfidenceBadge, CountUp, MeasurementBadge, SeverityBadge } from './shared'
 import { ExplainDialog } from './explain-dialog'
@@ -51,6 +54,11 @@ export function FindingSheet({
   onNavigate?: (view: 'graph' | 'experiments') => void
 }) {
   const RemMeta = finding ? REMEDIATION_META[finding.remediationKind] : null
+  const { toast } = useToast()
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const enqueueDiff = useDiffQueueStore((s) => s.enqueue)
+  /* remediations that translate into a reviewable proposed change */
+  const queueable = finding !== null && finding.remediationKind !== 'experiment' && finding.remediationKind !== 'architecture'
 
   return (
     <Sheet open={finding !== null} onOpenChange={onOpenChange}>
@@ -203,6 +211,38 @@ export function FindingSheet({
                 <ChevronRight className="size-3" aria-hidden />
               </Button>
               <div className="flex items-center gap-2">
+                {queueable && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={() => {
+                      if (!finding) return
+                      enqueueDiff({
+                        id: `diff-${Date.now()}`,
+                        workspace: activeWs,
+                        at: Date.now(),
+                        source: 'finding',
+                        kind: finding.remediationKind,
+                        title: finding.title,
+                        target: finding.affected[0] ?? finding.id,
+                        suggestion: finding.recommendation,
+                        estimate:
+                          finding.impactSeconds !== undefined
+                            ? `−${finding.impactSeconds}s per affected build`
+                            : undefined,
+                        status: 'pending',
+                      })
+                      toast({
+                        title: 'Diff queued for review',
+                        description: `${finding.id} remediation is in the Pending-diffs queue (Gate 19).`,
+                      })
+                    }}
+                  >
+                    <FileDiff className="size-3.5" aria-hidden />
+                    Queue as diff
+                  </Button>
+                )}
                 {finding.experimentEligible && (
                   <Button
                     size="sm"
