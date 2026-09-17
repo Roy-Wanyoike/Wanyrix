@@ -1,0 +1,1359 @@
+     1→import type {
+     2→  ActivityEvent,
+     3→  BlastEntry,
+     4→  DiagnosticsPayload,
+     5→  DoctorReport,
+     6→  DuplicateGroup,
+     7→  Experiment,
+     8→  Finding,
+     9→  GraphEdge,
+    10→  GraphNode,
+    11→  HealthPayload,
+    12→  IssueItem,
+    13→  PRAnalysis,
+    14→} from './types'
+    15→
+    16→export const REPO_URL = 'https://github.com/Roy-Wanyoike/ferrix'
+    17→
+    18→export const WORKSPACE = {
+    19→  name: 'helios-platform',
+    20→  description: 'Payments platform · 47 workspace crates · rustc 1.84.1 · dev profile',
+    21→  crates: 47,
+    22→  backboneNodes: 36,
+    23→  edges: 212,
+    24→  toolchain: 'rustc 1.84.1 (a07f3eb) · cargo 1.84.0',
+    25→  profile: 'dev',
+    26→  lastScan: '2026-09-17T09:12:04Z',
+    27→}
+    28→
+    29→// ---------------------------------------------------------------------------
+    30→// Doctor — build intelligence findings
+    31→// ---------------------------------------------------------------------------
+    32→
+    33→export const FINDINGS: Finding[] = [
+    34→  {
+    35→    id: 'FER-BLD-001',
+    36→    section: 'Build',
+    37→    severity: 'critical',
+    38→    title: 'common-runtime sits on the critical path',
+    39→    description:
+    40→      'common-runtime compiles before 41 workspace crates can start. It is 18.3s of the 87.4s development build and changed 23 times in the last 90 days, so the expensive path is also the hot path.',
+    41→    evidence: [
+    42→      { label: 'Build time', value: '18.3s', source: 'cargo build --timings' },
+    43→      { label: 'Downstream crates', value: '41', source: 'cargo metadata graph' },
+    44→      { label: 'Changes (90d)', value: '23 commits', source: 'git log' },
+    45→      { label: 'Rebuild amplification', value: '×41 on every touch', source: 'ferrix graph diff' },
+    46→    ],
+    47→    affected: ['common-runtime', 'api', 'gateway', 'worker', 'payments-core', '+36 more'],
+    48→    impact: '≈ −12.4s average incremental build if split (estimated)',
+    49→    impactSeconds: 12.4,
+    50→    recommendation:
+    51→      'Split into runtime-core (stable abstractions, rarely changed) and runtime-telemetry (volatile). Downstream crates then depend on the cheap, stable half.',
+    52→    remediationKind: 'architecture',
+    53→    verificationPath:
+    54→      'Create an experiment: baseline 42.1s median of 5 clean builds → candidate build with split applied → cargo test → measured delta recorded in EXP-014.',
+    55→    confidenceClass: 'high',
+    56→    confidence: 86,
+    57→    detection: 'critical-path analysis over cargo build --timings + cargo metadata',
+    58→    measurementStatus: 'estimated',
+    59→  },
+    60→  {
+    61→    id: 'FER-BLD-002',
+    62→    section: 'Build',
+    63→    severity: 'warning',
+    64→    title: '3 crates compile multiple versions',
+    65→    description:
+    66→      'Cargo.lock resolves tokio, serde and uuid to two versions each. Every duplicate version is compiled separately and both copies are linked into the final binary.',
+    67→    evidence: [
+    68→      { label: 'tokio', value: '1.34.2 + 1.40.0', source: 'Cargo.lock' },
+    69→      { label: 'serde', value: '1.0.203 + 1.0.210', source: 'Cargo.lock' },
+    70→      { label: 'uuid', value: '0.8.2 + 1.8.0', source: 'Cargo.lock' },
+    71→      { label: 'Duplicate compile cost', value: '6.8s per clean build', source: 'cargo build --timings' },
+    72→    ],
+    73→    affected: ['tokio', 'serde', 'uuid', 'legacy-cache'],
+    74→    impact: '≈ −6.8s clean build (estimated)',
+    75→    impactSeconds: 6.8,
+    76→    recommendation:
+    77→      'Run `cargo update -p tokio@1.34.2 --precise 1.40.0` (same for serde). Migrate legacy-cache off uuid 0.8, then re-lock.',
+    78→    remediationKind: 'command',
+    79→    verificationPath: 'Re-run `ferrix doctor` after re-lock: duplicate-version findings must drop to 0.',
+    80→    confidenceClass: 'deterministic',
+    81→    confidence: 100,
+    82→    detection: 'Cargo.lock version multiplicity scan',
+    83→    measurementStatus: 'measured',
+    84→  },
+    85→  {
+    86→    id: 'FER-BLD-003',
+    87→    section: 'Build',
+    88→    severity: 'warning',
+    89→    title: 'Feature unification creates 2 duplicate builds',
+    90→    description:
+    91→      'serde is built twice — once with derive, once without — because the workspace still uses resolver v1 semantics. Both artifacts live in target/debug and invalidate independently.',
+    92→    evidence: [
+    93→      { label: 'Duplicate artifacts', value: '2', source: 'target/debug fingerprints' },
+    94→      { label: 'Resolver', value: 'v1 (implicit)', source: 'workspace Cargo.toml' },
+    95→      { label: 'Wasted compile', value: '4.1s', source: 'cargo build --timings' },
+    96→    ],
+    97→    affected: ['serde', 'serde_derive', 'common'],
+    98→    impact: '≈ −4.1s clean build (estimated)',
+    99→    impactSeconds: 4.1,
+   100→    recommendation:
+   101→      'Set `resolver = "2"` in the workspace Cargo.toml and move shared dependencies to [workspace.dependencies].',
+   102→    remediationKind: 'config',
+   103→    verificationPath: 'cargo tree -d must report a single serde build after the change.',
+   104→    confidenceClass: 'high',
+   105→    confidence: 78,
+   106→    detection: 'fingerprint dedup scan across target/ artifacts',
+   107→    measurementStatus: 'estimated',
+   108→  },
+   109→  {
+   110→    id: 'FER-BLD-004',
+   111→    section: 'Build',
+   112→    severity: 'warning',
+   113→    title: 'Proc-macro chain adds ~11.2s to cold builds',
+   114→    description:
+   115→      'syn, quote and proc-macro2 are compiled in 3 separate version sets because different crates pin different ranges. The chain must fully compile before any derive-using crate can start.',
+   116→    evidence: [
+   117→      { label: 'Chain total', value: '11.2s', source: 'cargo build --timings' },
+   118→      { label: 'Version sets', value: '3', source: 'Cargo.lock' },
+   119→      { label: 'Derive-using crates', value: '14', source: 'cargo metadata' },
+   120→    ],
+   121→    affected: ['syn', 'quote', 'proc-macro2', 'serde_derive', 'sqlx-macros', 'clap_derive'],
+   122→    impact: '≈ −5.6s clean build (estimated)',
+   123→    impactSeconds: 5.6,
+   124→    recommendation:
+   125→      'Pin a single syn/quote/proc-macro2 set in [workspace.dependencies] so all derive crates share one compiled chain.',
+   126→    remediationKind: 'config',
+   127→    verificationPath: 'cargo tree -i syn must resolve to exactly one version.',
+   128→    confidenceClass: 'high',
+   129→    confidence: 83,
+   130→    detection: 'proc-macro dependency chain analysis',
+   131→    measurementStatus: 'estimated',
+   132→  },
+   133→  {
+   134→    id: 'FER-BLD-005',
+   135→    section: 'CI',
+   136→    severity: 'info',
+   137→    title: 'Incremental compilation disabled in CI',
+   138→    description:
+   139→      'CARGO_INCREMENTAL=0 is correct for cacheability, but there is no compensating shared cache — CI recompiles the world on every pipeline.',
+   140→    evidence: [
+   141→      { label: 'Env', value: 'CARGO_INCREMENTAL=0', source: '.github/workflows/ci.yml' },
+   142→      { label: 'Shared cache', value: 'none configured', source: 'workflow definition' },
+   143→    ],
+   144→    affected: ['ci'],
+   145→    impact: 'CI-only; see FER-DEP-006 for the measured miss rate',
+   146→    recommendation: 'Adopt cargo-chef + sccache with a shared backend as the cache strategy.',
+   147→    remediationKind: 'config',
+   148→    verificationPath: 'Cache hit rate metric in CI telemetry must exceed 85% after rollout.',
+   149→    confidenceClass: 'deterministic',
+   150→    confidence: 100,
+   151→    detection: 'CI workflow configuration lint',
+   152→    measurementStatus: 'measured',
+   153→  },
+   154→  {
+   155→    id: 'FER-DEP-006',
+   156→    section: 'CI',
+   157→    severity: 'critical',
+   158→    title: 'CI cache miss rate is 68%',
+   159→    description:
+   160→      '34 of the last 50 CI jobs rebuilt the full dependency graph. Average cold CI build is 14m12s, dominating pipeline wall time and cost.',
+   161→    evidence: [
+   162→      { label: 'Cache miss rate', value: '68%', source: 'CI telemetry (last 50 jobs)' },
+   163→      { label: 'Cold CI build', value: '14m12s avg', source: 'CI telemetry' },
+   164→      { label: 'Jobs affected', value: '34/50', source: 'CI telemetry' },
+   165→    ],
+   166→    affected: ['ci'],
+   167→    impact: '≈ −41% CI build time (estimated)',
+   168→    recommendation:
+   169→      'Introduce cargo-chef recipe layering and a shared sccache backend keyed by Cargo.lock hash.',
+   170→    remediationKind: 'config',
+   171→    verificationPath: 'ferrix storage + CI telemetry: miss rate must fall below 25% for 50 consecutive jobs.',
+   172→    confidenceClass: 'high',
+   173→    confidence: 90,
+   174→    detection: 'CI build telemetry ingestion',
+   175→    measurementStatus: 'estimated',
+   176→  },
+   177→  {
+   178→    id: 'FER-WRK-007',
+   179→    section: 'Workspace',
+   180→    severity: 'critical',
+   181→    title: 'common blocks 41 downstream crates',
+   182→    description:
+   183→      'common is the highest fan-out workspace crate (11 direct dependents, 41 transitive) and is edited frequently. Every edit to error abstractions amplifies into a workspace-wide rebuild.',
+   184→    evidence: [
+   185→      { label: 'Fan-in (direct)', value: '11 crates', source: 'cargo metadata' },
+   186→      { label: 'Downstream', value: '41 crates', source: 'ferrix graph diff' },
+   187→      { label: 'Changes (90d)', value: '31 commits', source: 'git log' },
+   188→      { label: 'Rebuild cost', value: '+12.8s incremental', source: 'build telemetry' },
+   189→    ],
+   190→    affected: ['common', 'api', 'auth', 'gateway', 'worker', 'cli', '+35 more'],
+   191→    impact: '≈ −8.2s average incremental build after type extraction (estimated)',
+   192→    impactSeconds: 8.2,
+   193→    recommendation:
+   194→      'Move pure data abstractions (error, ids, DTOs) into a new common-types crate; keep implementations in common. See the architecture simulator for the projected graph.',
+   195→    remediationKind: 'architecture',
+   196→    verificationPath:
+   197→      'Blast-radius re-check: editing common/src/error.rs must affect ≤12 crates after the split.',
+   198→    confidenceClass: 'high',
+   199→    confidence: 88,
+   200→    detection: 'fan-out × change-frequency analysis over the engineering graph',
+   201→    measurementStatus: 'estimated',
+   202→  },
+   203→  {
+   204→    id: 'FER-WRK-008',
+   205→    section: 'Workspace',
+   206→    severity: 'warning',
+   207→    title: 'api crate contains 17 unrelated modules',
+   208→    description:
+   209→      'api mixes routing, handlers, email rendering, PDF generation and metrics exporters in one crate. Any module change rebuilds all 12.7s of it.',
+   210→    evidence: [
+   211→      { label: 'Modules', value: '17', source: 'source scan' },
+   212→      { label: 'Build time', value: '12.7s', source: 'cargo build --timings' },
+   213→      { label: 'LOC', value: '26,140', source: 'source scan' },
+   214→    ],
+   215→    affected: ['api', 'gateway'],
+   216→    impact: '≈ −3.9s average incremental build (estimated)',
+   217→    impactSeconds: 3.9,
+   218→    recommendation: 'Split into api-router, api-handlers and service-email/pdf support crates.',
+   219→    remediationKind: 'architecture',
+   220→    verificationPath: 'Re-run ferrix doctor; oversized-crate finding for api should clear.',
+   221→    confidenceClass: 'medium',
+   222→    confidence: 74,
+   223→    detection: 'module cohesion analysis',
+   224→    measurementStatus: 'estimated',
+   225→  },
+   226→  {
+   227→    id: 'FER-WRK-009',
+   228→    section: 'Workspace',
+   229→    severity: 'info',
+   230→    title: '4 crates exceed 25k LOC',
+   231→    description:
+   232→      'Large single-crate units concentrate compile time and review load. These are the top decomposition candidates.',
+   233→    evidence: [
+   234→      { label: 'common-runtime', value: '31,420 LOC', source: 'source scan' },
+   235→      { label: 'database', value: '27,830 LOC', source: 'source scan' },
+   236→      { label: 'api', value: '26,140 LOC', source: 'source scan' },
+   237→      { label: 'payments-core', value: '25,910 LOC', source: 'source scan' },
+   238→    ],
+   239→    affected: ['common-runtime', 'database', 'api', 'payments-core'],
+   240→    impact: ' architectural debt indicator — no direct build claim',
+   241→    recommendation: 'Plan staged decomposition using the architecture simulator before refactoring.',
+   242→    remediationKind: 'experiment',
+   243→    verificationPath: 'Track LOC + build time per crate across releases.',
+   244→    confidenceClass: 'deterministic',
+   245→    confidence: 95,
+   246→    detection: 'source inventory scan',
+   247→    measurementStatus: 'measured',
+   248→  },
+   249→  {
+   250→    id: 'FER-IDE-010',
+   251→    section: 'IDE',
+   252→    severity: 'critical',
+   253→    title: 'rust-analyzer checks all 47 workspace crates on save',
+   254→    description:
+   255→      'check.workspace = true makes every save trigger a workspace-wide cargo check. p95 inline-annotation latency is 8.7s on this machine.',
+   256→    evidence: [
+   257→      { label: 'Crates checked on save', value: '47', source: 'rust-analyzer settings' },
+   258→      { label: 'Annotation latency', value: 'p95 8.7s', source: 'editor telemetry' },
+   259→      { label: 'Setting', value: 'check.workspace = true', source: '.vscode/settings.json' },
+   260→    ],
+   261→    affected: ['rust-analyzer', 'developer workflow'],
+   262→    impact: '≈ −62% IDE check latency (estimated)',
+   263→    recommendation:
+   264→      'Set rust-analyzer.check.workspace = false and use flycheck-on-save for the current crate only (rust-analyzer#12882 pattern).',
+   265→    remediationKind: 'config',
+   266→    verificationPath: 'Editor telemetry: annotation p95 must drop below 3.5s.',
+   267→    confidenceClass: 'high',
+   268→    confidence: 80,
+   269→    detection: 'IDE configuration + latency telemetry',
+   270→    measurementStatus: 'estimated',
+   271→  },
+   272→  {
+   273→    id: 'FER-IDE-011',
+   274→    section: 'IDE',
+   275→    severity: 'warning',
+   276→    title: 'cargo check and rust-analyzer contend on one target dir',
+   277→    description:
+   278→      'Terminal cargo check and rust-analyzer share target/debug. File-lock waits average 2.3s at p95 and stall both tools.',
+   279→    evidence: [
+   280→      { label: 'Lock wait p95', value: '2.3s', source: 'build telemetry' },
+   281→      { label: 'Shared dir', value: 'target/debug', source: 'RA settings' },
+   282→    ],
+   283→    affected: ['rust-analyzer', 'cargo'],
+   284→    impact: '≈ −18% check latency (estimated)',
+   285→    recommendation: 'Set rust-analyzer.cargo.targetDir = "target/ra" to isolate RA artifacts.',
+   286→    remediationKind: 'config',
+   287→    verificationPath: 'Lock-wait metric disappears from build telemetry.',
+   288→    confidenceClass: 'high',
+   289→    confidence: 84,
+   290→    detection: 'target-dir lock contention telemetry',
+   291→    measurementStatus: 'estimated',
+   292→  },
+   293→  {
+   294→    id: 'FER-ASY-012',
+   295→    section: 'Async',
+   296→    severity: 'warning',
+   297→    title: 'Blocking call inside async task (worker::scan)',
+   298→    description:
+   299→      'worker/src/scan.rs:88 calls std::fs::read_dir directly inside an async fn, stalling the tokio worker thread for up to 340ms at p95.',
+   300→    evidence: [
+   301→      { label: 'Location', value: 'worker/src/scan.rs:88', source: 'static analysis' },
+   302→      { label: 'Worker stall', value: 'p95 340ms', source: 'tokio-console telemetry' },
+   303→      { label: 'Call', value: 'std::fs::read_dir', source: 'source scan' },
+   304→    ],
+   305→    affected: ['worker', 'tokio runtime'],
+   306→    impact: 'Latency spikes under load; no build-time claim',
+   307→    recommendation: 'Wrap directory iteration in tokio::task::spawn_blocking or switch to tokio::fs.',
+   308→    remediationKind: 'patch',
+   309→    verificationPath: 'tokio-console: worker stall p95 must drop below 10ms.',
+   310→    confidenceClass: 'deterministic',
+   311→    confidence: 100,
+   312→    detection: 'async blocking-call static analysis',
+   313→    measurementStatus: 'measured',
+   314→  },
+   315→]
+   316→
+   317→export const DOCTOR: DoctorReport = {
+   318→  workspace: WORKSPACE.name,
+   319→  profile: WORKSPACE.profile,
+   320→  toolchain: WORKSPACE.toolchain,
+   321→  buildTime: 87.4,
+   322→  estimatedRange: [49, 61],
+   323→  confidence: 82,
+   324→  criticalPath: [
+   325→    { name: 'common-runtime', seconds: 18.3, kind: 'workspace' },
+   326→    { name: 'api', seconds: 12.7, kind: 'workspace' },
+   327→    { name: 'proc-macro chain', seconds: 15.4, kind: 'proc-macro' },
+   328→    { name: 'tokio', seconds: 8.2, kind: 'external' },
+   329→    { name: 'syn', seconds: 7.8, kind: 'external' },
+   330→    { name: 'serde', seconds: 6.1, kind: 'external' },
+   331→    { name: 'linking + codegen', seconds: 18.9, kind: 'linker' },
+   332→  ],
+   333→  findings: FINDINGS,
+   334→  scannedAt: WORKSPACE.lastScan,
+   335→  phases: [
+   336→    { label: 'Parsing cargo metadata', detail: '47 workspace crates · 212 edges' },
+   337→    { label: 'Reading Cargo.lock', detail: '3 duplicate version groups found' },
+   338→    { label: 'Ingesting build timings', detail: 'cargo build --timings · dev profile · 87.4s' },
+   339→    { label: 'Analyzing git history', detail: '1,204 commits · 90 days' },
+   340→    { label: 'Profiling proc macros', detail: '3 version sets · 14 derive crates' },
+   341→    { label: 'Checking feature unification', detail: 'resolver v1 · 2 duplicate artifacts' },
+   342→    { label: 'Correlating CI telemetry', detail: '50 jobs · 68% cache miss' },
+   343→    { label: 'Consulting engineering graph', detail: 'F-EIR snapshot 9f31c2a · verified' },
+   344→  ],
+   345→  summary: { developerBuild: '−34%', ciBuild: '−41%', diskUsage: '−27%' },
+   346→}
+   347→
+   348→// ---------------------------------------------------------------------------
+   349→// Engineering graph
+   350→// ---------------------------------------------------------------------------
+   351→
+   352→const W = (over: Partial<GraphNode> & { id: string }): GraphNode => ({
+   353→  band: 'lib',
+   354→  kind: 'workspace',
+   355→  buildTime: 4,
+   356→  fanIn: 1,
+   357→  fanOut: 2,
+   358→  downstream: 1,
+   359→  changeFreq: 5,
+   360→  ...over,
+   361→})
+   362→
+   363→const E = (id: string, buildTime: number, over: Partial<GraphNode> = {}): GraphNode => ({
+   364→  id,
+   365→  band: 'external',
+   366→  kind: 'external',
+   367→  buildTime,
+   368→  fanIn: 1,
+   369→  fanOut: 0,
+   370→  downstream: 0,
+   371→  changeFreq: 0,
+   372→  ...over,
+   373→})
+   374→
+   375→const P = (id: string, buildTime: number, over: Partial<GraphNode> = {}): GraphNode => ({
+   376→  id,
+   377→  band: 'external',
+   378→  kind: 'proc-macro',
+   379→  buildTime,
+   380→  fanIn: 1,
+   381→  fanOut: 0,
+   382→  downstream: 0,
+   383→  changeFreq: 0,
+   384→  ...over,
+   385→})
+   386→
+   387→export const GRAPH_NODES: GraphNode[] = [
+   388→  // bins
+   389→  W({ id: 'gateway', band: 'bin', buildTime: 9.8, fanIn: 0, fanOut: 5, downstream: 0, changeFreq: 14 }),
+   390→  W({ id: 'api', band: 'bin', buildTime: 12.7, fanIn: 1, fanOut: 6, downstream: 0, changeFreq: 38, critical: true }),
+   391→  W({ id: 'worker', band: 'bin', buildTime: 11.2, fanIn: 0, fanOut: 5, downstream: 0, changeFreq: 21 }),
+   392→  W({ id: 'cli', band: 'bin', buildTime: 6.4, fanIn: 0, fanOut: 4, downstream: 0, changeFreq: 9 }),
+   393→  // libs
+   394→  W({ id: 'payments-core', buildTime: 10.4, fanIn: 2, fanOut: 5, downstream: 3, changeFreq: 17 }),
+   395→  W({ id: 'auth', buildTime: 7.1, fanIn: 2, fanOut: 3, downstream: 2, changeFreq: 8 }),
+   396→  W({ id: 'database', buildTime: 8.9, fanIn: 4, fanOut: 3, downstream: 6, changeFreq: 19 }),
+   397→  W({ id: 'http-client', buildTime: 5.2, fanIn: 3, fanOut: 3, downstream: 5, changeFreq: 6 }),
+   398→  W({ id: 'common-runtime', buildTime: 18.3, fanIn: 2, fanOut: 3, downstream: 38, changeFreq: 23, critical: true }),
+   399→  W({ id: 'telemetry', buildTime: 4.1, fanIn: 4, fanOut: 2, downstream: 9, changeFreq: 4 }),
+   400→  W({ id: 'cache', buildTime: 3.6, fanIn: 1, fanOut: 2, downstream: 1, changeFreq: 2 }),
+   401→  W({ id: 'config', buildTime: 2.2, fanIn: 2, fanOut: 1, downstream: 8, changeFreq: 3 }),
+   402→  W({ id: 'common', buildTime: 6.8, fanIn: 11, fanOut: 4, downstream: 41, changeFreq: 31, critical: true }),
+   403→  // external
+   404→  E('tokio', 8.2, { fanIn: 5, downstream: 41, versions: ['1.34.2', '1.40.0'], duplicate: true }),
+   405→  E('syn', 7.8, { fanIn: 4, downstream: 14, kind: 'external' }),
+   406→  E('serde', 6.1, { fanIn: 1, downstream: 41, versions: ['1.0.203', '1.0.210'], duplicate: true }),
+   407→  E('sqlx', 9.6, { fanIn: 1, downstream: 6 }),
+   408→  E('reqwest', 5.8, { fanIn: 1, downstream: 5 }),
+   409→  E('tracing', 2.4, { fanIn: 3, downstream: 12 }),
+   410→  E('tonic', 6.9, { fanIn: 1, downstream: 3 }),
+   411→  E('prost', 4.4, { fanIn: 1, downstream: 3 }),
+   412→  E('hyper', 5.3, { fanIn: 3, downstream: 5 }),
+   413→  E('tower', 3.2, { fanIn: 1, downstream: 5 }),
+   414→  E('rustls', 4.9, { fanIn: 2, downstream: 5 }),
+   415→  E('ring', 3.8, { fanIn: 2, downstream: 5 }),
+   416→  E('uuid', 2.1, { fanIn: 1, downstream: 41, versions: ['0.8.2', '1.8.0'], duplicate: true }),
+   417→  E('anyhow', 1.2, { fanIn: 1, downstream: 41 }),
+   418→  E('thiserror', 1.1, { fanIn: 1, downstream: 41 }),
+   419→  E('clap', 3.1, { fanIn: 1, downstream: 1 }),
+   420→  P('serde_derive', 5.4, { fanIn: 1, downstream: 41 }),
+   421→  P('tokio-macros', 2.8, { fanIn: 1, downstream: 41 }),
+   422→  P('sqlx-macros', 6.2, { fanIn: 1, downstream: 6 }),
+   423→  P('thiserror-impl', 1.4, { fanIn: 1, downstream: 41 }),
+   424→  P('clap_derive', 2.2, { fanIn: 1, downstream: 1 }),
+   425→  E('proc-macro2', 1.5, { fanIn: 4, downstream: 14 }),
+   426→  E('quote', 1.9, { fanIn: 4, downstream: 14 }),
+   427→]
+   428→
+   429→export const GRAPH_EDGES: GraphEdge[] = [
+   430→  { from: 'gateway', to: 'api' },
+   431→  { from: 'gateway', to: 'auth' },
+   432→  { from: 'gateway', to: 'common' },
+   433→  { from: 'gateway', to: 'common-runtime' },
+   434→  { from: 'gateway', to: 'telemetry' },
+   435→  { from: 'api', to: 'payments-core' },
+   436→  { from: 'api', to: 'database' },
+   437→  { from: 'api', to: 'auth' },
+   438→  { from: 'api', to: 'common' },
+   439→  { from: 'api', to: 'telemetry' },
+   440→  { from: 'api', to: 'http-client' },
+   441→  { from: 'worker', to: 'payments-core' },
+   442→  { from: 'worker', to: 'database' },
+   443→  { from: 'worker', to: 'common' },
+   444→  { from: 'worker', to: 'telemetry' },
+   445→  { from: 'worker', to: 'cache' },
+   446→  { from: 'cli', to: 'config' },
+   447→  { from: 'cli', to: 'database' },
+   448→  { from: 'cli', to: 'common' },
+   449→  { from: 'cli', to: 'clap' },
+   450→  { from: 'payments-core', to: 'common' },
+   451→  { from: 'payments-core', to: 'database' },
+   452→  { from: 'payments-core', to: 'http-client' },
+   453→  { from: 'payments-core', to: 'common-runtime' },
+   454→  { from: 'payments-core', to: 'tonic' },
+   455→  { from: 'auth', to: 'common' },
+   456→  { from: 'auth', to: 'http-client' },
+   457→  { from: 'auth', to: 'telemetry' },
+   458→  { from: 'database', to: 'sqlx' },
+   459→  { from: 'database', to: 'common' },
+   460→  { from: 'database', to: 'config' },
+   461→  { from: 'http-client', to: 'reqwest' },
+   462→  { from: 'http-client', to: 'tower' },
+   463→  { from: 'http-client', to: 'common' },
+   464→  { from: 'common-runtime', to: 'tokio' },
+   465→  { from: 'common-runtime', to: 'tracing' },
+   466→  { from: 'common-runtime', to: 'telemetry' },
+   467→  { from: 'telemetry', to: 'tracing' },
+   468→  { from: 'telemetry', to: 'common' },
+   469→  { from: 'cache', to: 'tokio' },
+   470→  { from: 'cache', to: 'common' },
+   471→  { from: 'config', to: 'common' },
+   472→  { from: 'common', to: 'serde' },
+   473→  { from: 'common', to: 'thiserror' },
+   474→  { from: 'common', to: 'uuid' },
+   475→  { from: 'common', to: 'anyhow' },
+   476→  { from: 'sqlx', to: 'tokio' },
+   477→  { from: 'sqlx', to: 'sqlx-macros' },
+   478→  { from: 'reqwest', to: 'hyper' },
+   479→  { from: 'reqwest', to: 'rustls' },
+   480→  { from: 'reqwest', to: 'tokio' },
+   481→  { from: 'hyper', to: 'tokio' },
+   482→  { from: 'hyper', to: 'ring' },
+   483→  { from: 'rustls', to: 'ring' },
+   484→  { from: 'tonic', to: 'hyper' },
+   485→  { from: 'tonic', to: 'prost' },
+   486→  { from: 'tokio', to: 'tokio-macros' },
+   487→  { from: 'serde', to: 'serde_derive' },
+   488→  { from: 'thiserror', to: 'thiserror-impl' },
+   489→  { from: 'clap', to: 'clap_derive' },
+   490→  { from: 'serde_derive', to: 'syn' },
+   491→  { from: 'serde_derive', to: 'quote' },
+   492→  { from: 'tokio-macros', to: 'syn' },
+   493→  { from: 'sqlx-macros', to: 'syn' },
+   494→  { from: 'thiserror-impl', to: 'syn' },
+   495→  { from: 'clap_derive', to: 'syn' },
+   496→  { from: 'syn', to: 'proc-macro2' },
+   497→  { from: 'quote', to: 'proc-macro2' },
+   498→]
+   499→
+   500→export const DUPLICATES: DuplicateGroup[] = [
+   501→  {
+   502→    name: 'tokio',
+   503→    versions: ['1.34.2', '1.40.0'],
+   504→    dependents: ['sqlx 0.7 (pinned)', 'legacy-cache'],
+   505→    wastedSeconds: 8.2,
+   506→  },
+   507→  {
+   508→    name: 'serde',
+   509→    versions: ['1.0.203', '1.0.210'],
+   510→    dependents: ['old-sdk 2.1', 'common (workspace)'],
+   511→    wastedSeconds: 6.1,
+   512→  },
+   513→  {
+   514→    name: 'uuid',
+   515→    versions: ['0.8.2', '1.8.0'],
+   516→    dependents: ['legacy-cache'],
+   517→    wastedSeconds: 2.1,
+   518→  },
+   519→]
+   520→
+   521→export const BLAST: BlastEntry[] = [
+   522→  {
+   523→    file: 'common/src/error.rs',
+   524→    crate: 'common',
+   525→    affectedWorkspace: 41,
+   526→    chain: ['common', 'api', 'auth', 'gateway', 'worker', 'cli'],
+   527→    incrementalDelta: 12.8,
+   528→    suggestion: 'Move error abstractions into common-types (FER-WRK-007).',
+   529→  },
+   530→  {
+   531→    file: 'common-runtime/src/scheduler.rs',
+   532→    crate: 'common-runtime',
+   533→    affectedWorkspace: 38,
+   534→    chain: ['common-runtime', 'api', 'payments-core', 'gateway'],
+   535→    incrementalDelta: 18.3,
+   536→    suggestion: 'Split scheduler into runtime-telemetry (FER-BLD-001).',
+   537→  },
+   538→  {
+   539→    file: 'database/src/pool.rs',
+   540→    crate: 'database',
+   541→    affectedWorkspace: 22,
+   542→    chain: ['database', 'api', 'worker', 'cli', 'payments-core'],
+   543→    incrementalDelta: 9.6,
+   544→    suggestion: 'Isolate sqlx behind database-impl (see PR #184 suggestions).',
+   545→  },
+   546→  {
+   547→    file: 'api/src/routes.rs',
+   548→    crate: 'api',
+   549→    affectedWorkspace: 2,
+   550→    chain: ['api', 'gateway'],
+   551→    incrementalDelta: 13.1,
+   552→    suggestion: 'Cheap downstream — good place for iteration.',
+   553→  },
+   554→  {
+   555→    file: 'telemetry/src/otlp.rs',
+   556→    crate: 'telemetry',
+   557→    affectedWorkspace: 12,
+   558→    chain: ['telemetry', 'api', 'worker', 'gateway'],
+   559→    incrementalDelta: 4.4,
+   560→    suggestion: 'Consider feature-gating the OTLP exporter.',
+   561→  },
+   562→]
+   563→
+   564→// ---------------------------------------------------------------------------
+   565→// Impact simulation catalogs
+   566→// ---------------------------------------------------------------------------
+   567→
+   568→export const ADD_DEP_CATALOG: Record<
+   569→  string,
+   570→  {
+   571→    version: string
+   572→    cratesAdded: number
+   573→    procMacrosAdded: number
+   574→    targetMB: number
+   575→    cleanDelta: number
+   576→    incrementalDelta: number
+   577→    ciDelta: number
+   578→    transitiveDeps: number
+   579→    chain: { label: string; note?: string }[]
+   580→    security: { label: string; level: 'info' | 'warn' }[]
+   581→    suggestions: string[]
+   582→  }
+   583→> = {
+   584→  sqlx: {
+   585→    version: '0.8.6',
+   586→    cratesAdded: 14,
+   587→    procMacrosAdded: 3,
+   588→    targetMB: 28.4,
+   589→    cleanDelta: 4.7,
+   590→    incrementalDelta: 1.3,
+   591→    ciDelta: 21,
+   592→    transitiveDeps: 7,
+   593→    chain: [
+   594→      { label: 'your crate', note: 'Cargo.toml +sqlx 0.8.6' },
+   595→      { label: 'sqlx', note: '+14 crates, +3 proc-macros' },
+   596→      { label: 'database', note: 'shared crate — highest blast radius' },
+   597→      { label: '18 downstream crates', note: 'full rebuild triggered' },
+   598→    ],
+   599→    security: [
+   600→      { label: '7 new transitive dependencies', level: 'info' },
+   601→      { label: 'sqlx-macros executes at build time — review build-script permissions', level: 'warn' },
+   602→    ],
+   603→    suggestions: [
+   604→      'Isolate sqlx behind a database-impl crate (keeps types clean)',
+   605→      'Enable only runtime-tokio-rustls features to shrink the tree',
+   606→      'Gate behind an optional feature until the retry layer lands',
+   607→    ],
+   608→  },
+   609→  'aws-sdk-s3': {
+   610→    version: '1.62.0',
+   611→    cratesAdded: 31,
+   612→    procMacrosAdded: 2,
+   613→    targetMB: 52.1,
+   614→    cleanDelta: 6.9,
+   615→    incrementalDelta: 2.2,
+   616→    ciDelta: 38,
+   617→    transitiveDeps: 24,
+   618→    chain: [
+   619→      { label: 'your crate', note: 'Cargo.toml +aws-sdk-s3 1.62.0' },
+   620→      { label: 'aws-smithy stack', note: '+24 transitive crates' },
+   621→      { label: 'hyper/rustls', note: 'shared — already compiled' },
+   622→      { label: 'CI', note: '+38s per clean pipeline' },
+   623→    ],
+   624→    security: [
+   625→      { label: '24 new transitive dependencies', level: 'info' },
+   626→      { label: 'Large artifact footprint: +52.1 MB target size', level: 'warn' },
+   627→    ],
+   628→    suggestions: [
+   629→      'Wrap in a storage abstraction crate to contain the blast radius',
+   630→      'Disable unneeded behaviors (default-features = false)',
+   631→      'Consider presigned URLs via a thin client instead of the full SDK',
+   632→    ],
+   633→  },
+   634→  reqwest: {
+   635→    version: '0.12.9',
+   636→    cratesAdded: 11,
+   637→    procMacrosAdded: 1,
+   638→    targetMB: 12.7,
+   639→    cleanDelta: 2.8,
+   640→    incrementalDelta: 0.9,
+   641→    ciDelta: 14,
+   642→    transitiveDeps: 9,
+   643→    chain: [
+   644→      { label: 'your crate', note: 'Cargo.toml +reqwest 0.12.9' },
+   645→      { label: 'hyper 1.x', note: 'new major — coexists with 0.14' },
+   646→      { label: 'rustls', note: 'shared with existing http-client' },
+   647→    ],
+   648→    security: [
+   649→      { label: '9 new transitive dependencies', level: 'info' },
+   650→      { label: 'Prefer rustls feature to avoid OpenSSL linkage', level: 'info' },
+   651→    ],
+   652→    suggestions: [
+   653→      'Reuse http-client instead of adding a second HTTP stack',
+   654→      'If required, enable json + rustls features only',
+   655→    ],
+   656→  },
+   657→  tonic: {
+   658→    version: '0.12.3',
+   659→    cratesAdded: 9,
+   660→    procMacrosAdded: 1,
+   661→    targetMB: 15.2,
+   662→    cleanDelta: 3.4,
+   663→    incrementalDelta: 1.1,
+   664→    ciDelta: 17,
+   665→    transitiveDeps: 11,
+   666→    chain: [
+   667→      { label: 'your crate', note: 'Cargo.toml +tonic 0.12.3' },
+   668→      { label: 'prost', note: '+codegen at build time' },
+   669→      { label: 'hyper/tower', note: 'shared' },
+   670→    ],
+   671→    security: [{ label: '11 new transitive dependencies', level: 'info' }],
+   672→    suggestions: [
+   673→      'Keep proto codegen in a dedicated crate with build.rs isolation',
+   674→      'Share one tonic version across services via workspace.dependencies',
+   675→    ],
+   676→  },
+   677→  'opentelemetry-otlp': {
+   678→    version: '0.27.0',
+   679→    cratesAdded: 22,
+   680→    procMacrosAdded: 2,
+   681→    targetMB: 34.8,
+   682→    cleanDelta: 5.1,
+   683→    incrementalDelta: 1.8,
+   684→    ciDelta: 29,
+   685→    transitiveDeps: 18,
+   686→    chain: [
+   687→      { label: 'your crate', note: 'Cargo.toml +opentelemetry-otlp 0.27' },
+   688→      { label: 'tonic + tracing-opentelemetry', note: 'overlaps telemetry crate' },
+   689→      { label: 'CI', note: '+29s per clean pipeline' },
+   690→    ],
+   691→    security: [
+   692→      { label: '18 new transitive dependencies', level: 'info' },
+   693→      { label: 'Feature matrix can duplicate opentelemetry builds — unify versions', level: 'warn' },
+   694→    ],
+   695→    suggestions: [
+   696→      'Integrate through the existing telemetry crate, not application crates',
+   697→      'Feature-gate the OTLP exporter behind telemetry-otlp',
+   698→    ],
+   699→  },
+   700→  'deadpool-redis': {
+   701→    version: '0.18.0',
+   702→    cratesAdded: 6,
+   703→    procMacrosAdded: 0,
+   704→    targetMB: 4.2,
+   705→    cleanDelta: 1.1,
+   706→    incrementalDelta: 0.4,
+   707→    ciDelta: 6,
+   708→    transitiveDeps: 4,
+   709→    chain: [
+   710→      { label: 'your crate', note: 'Cargo.toml +deadpool-redis 0.18' },
+   711→      { label: 'redis crate', note: '+4 transitive' },
+   712→      { label: 'cache', note: 'natural owner for this dependency' },
+   713→    ],
+   714→    security: [{ label: '4 new transitive dependencies', level: 'info' }],
+   715→    suggestions: ['Add it inside the cache crate to keep fan-out low'],
+   716→  },
+   717→}
+   718→
+   719→export const SPLIT_SIM = {
+   720→  source: 'common',
+   721→  before: {
+   722→    buildSeconds: 42.1,
+   723→    fanOut: 11,
+   724→    downstream: 41,
+   725→    modules: ['types', 'database', 'http', 'auth', 'utilities'],
+   726→  },
+   727→  proposal: {
+   728→    crates: [
+   729→      { name: 'common-types', downstream: 41, buildSeconds: 8.4, modules: ['types', 'error', 'ids'] },
+   730→      { name: 'common-db', downstream: 12, buildSeconds: 11.2, modules: ['database', 'pool'] },
+   731→      { name: 'common-http', downstream: 9, buildSeconds: 9.6, modules: ['http', 'middleware'] },
+   732→    ],
+   733→    buildSeconds: 29.2,
+   734→  },
+   735→  improvementPct: 30.6,
+   736→  migration: [
+   737→    'Create common-types with pure data + error abstractions (no IO)',
+   738→    'Re-point fan-out-heavy crates to common-types first (api, gateway)',
+   739→    'Move database + pool modules into common-db behind a trait',
+   740→    'Extract http middleware into common-http',
+   741→    'Verify: blast radius of common/src/error.rs drops 41 → ≤12 crates',
+   742→  ],
+   743→}
+   744→
+   745→// ---------------------------------------------------------------------------
+   746→// Diagnostics
+   747→// ---------------------------------------------------------------------------
+   748→
+   749→export const DIAGNOSTICS: DiagnosticsPayload = {
+   750→  borrow: {
+   751→    error: 'error[E0502]: cannot borrow `user` as mutable because it is also borrowed as immutable',
+   752→    code: [
+   753→      'fn main() {',
+   754→      '    let mut user = User { name: "alice".into(), score: 10 };',
+   755→      '',
+   756→      '    let name_ref = &user.name;      // shared borrow created',
+   757→      '    user.promote();                  // ✗ mutable borrow attempted',
+   758→      '    println!("{name_ref}");          // name_ref used again here',
+   759→      '}',
+   760→      '',
+   761→      'impl User {',
+   762→      '    fn promote(&mut self) { self.score += 1; }',
+   763→      '}',
+   764→    ],
+   765→    narrative:
+   766→      'Rust prevents B because A may still be used afterwards. The shared borrow name_ref is created at line 4 and its last use is line 6 — so it must live across the mutable borrow at line 5. Two live borrows of the same data cannot overlap when one is mutable.',
+   767→    steps: [
+   768→      {
+   769→        id: 1,
+   770→        line: 4,
+   771→        title: 'Shared borrow created',
+   772→        detail:
+   773→          'name_ref = &user.name creates an immutable reference. From this point, the compiler tracks name_ref\u2019s live range.',
+   774→        lifetime: { label: 'name_ref (shared)', start: 4, end: 6, kind: 'shared' },
+   775→      },
+   776→      {
+   777→        id: 2,
+   778→        line: 5,
+   779→        title: 'Mutable borrow attempted',
+   780→        detail:
+   781→          'user.promote() needs &mut user. A mutable borrow requires exclusive access — no other live borrows may exist.',
+   782→        lifetime: { label: 'promote → &mut user', start: 5, end: 5, kind: 'conflict' },
+   783→      },
+   784→      {
+   785→        id: 3,
+   786→        line: 6,
+   787→        title: 'Last use of the shared borrow',
+   788→        detail:
+   789→          'println! uses name_ref. Under NLL, the borrow must stay alive until its last use — which is here, after the conflicting mutable borrow.',
+   790→        lifetime: { label: 'name_ref (shared)', start: 4, end: 6, kind: 'shared' },
+   791→      },
+   792→      {
+   793→        id: 4,
+   794→        line: 5,
+   795→        title: 'Overlap rejected',
+   796→        detail:
+   797→          'The shared borrow\u2019s lifetime [4..6] overlaps the mutable borrow at line 5. Rust rejects the program to prevent aliasing mutation — this is a soundness guarantee, not a style rule.',
+   798→        lifetime: { label: 'conflict region', start: 5, end: 5, kind: 'mutable' },
+   799→      },
+   800→    ],
+   801→    timelineTicks: ['line 1', 'line 2', 'line 3', 'line 4', 'line 5', 'line 6', 'line 7'],
+   802→    solutions: [
+   803→      {
+   804→        title: "1. Shorten the borrow's lifetime",
+   805→        code: 'let name = user.name.clone();\nuser.promote();\nprintln!("{name}");',
+   806→        tradeOff: 'One extra allocation; zero aliasing. Usually the cheapest correct fix.',
+   807→      },
+   808→      {
+   809→        title: '2. Move the last use earlier',
+   810→        code: 'let name_ref = &user.name;\nprintln!("{name_ref}");\nuser.promote();',
+   811→        tradeOff: 'No allocation. Works when usage order is flexible.',
+   812→      },
+   813→      {
+   814→        title: '3. Restructure the scope',
+   815→        code: '{\n    let name_ref = &user.name;\n    println!("{name_ref}");\n}\nuser.promote();',
+   816→        tradeOff: 'Explicit scoping documents intent; no runtime cost.',
+   817→      },
+   818→      {
+   819→        title: '4. Use owned data / indices',
+   820→        code: 'user.promote();\nprintln!("{}", user.name);',
+   821→        tradeOff: 'Borrow disappears entirely; best when the reference is unnecessary.',
+   822→      },
+   823→    ],
+   824→  },
+   825→  request: {
+   826→    id: '8F31',
+   827→    method: 'POST',
+   828→    path: '/payments',
+   829→    totalMs: 42.8,
+   830→    segments: [
+   831→      { id: 'auth', label: 'authentication', startMs: 0, durationMs: 1.4, kind: 'compute', span: 'auth::verify' },
+   832→      { id: 'valid', label: 'validation', startMs: 1.4, durationMs: 0.8, kind: 'compute', span: 'api::validate' },
+   833→      { id: 'db', label: 'database', startMs: 2.2, durationMs: 7.3, kind: 'db', span: 'sqlx::query — accounts' },
+   834→      { id: 'prov', label: 'payment provider', startMs: 2.2, durationMs: 31.7, kind: 'network', span: 'http-client — POST /charge', note: 'ran concurrently with DB query' },
+   835→      { id: 'bg', label: 'background task', startMs: 41.2, durationMs: 1.6, kind: 'background', span: 'worker::flush — queue', note: 'spawned after response decision' },
+   836→    ],
+   837→    tasks: [
+   838→      { id: 'T1', label: 'handler task', state: 'running', detail: 'POST /payments — owns request scope' },
+   839→      { id: 'T2', label: 'db query task', parent: 'T1', state: 'awaited', detail: 'select account — awaited via join!' },
+   840→      { id: 'T3', label: 'provider call task', parent: 'T1', state: 'resumed', detail: '31.7ms external HTTP — resumed twice' },
+   841→      { id: 'T4', label: 'queue flush task', parent: 'T1', state: 'done', detail: 'spawned near response; detached' },
+   842→      { id: 'T5', label: 'scan task (worker)', state: 'blocked', detail: 'std::fs read_dir inside async fn — blocks worker thread (FER-ASY-012)' },
+   843→    ],
+   844→    warnings: [
+   845→      'provider call dominates: 74% of request latency is external I/O',
+   846→      'worker thread stall 340ms p95 detected during scan task (FER-ASY-012)',
+   847→    ],
+   848→  },
+   849→}
+   850→
+   851→// ---------------------------------------------------------------------------
+   852→// PR regression analysis
+   853→// ---------------------------------------------------------------------------
+   854→
+   855→export const PR_184: PRAnalysis = {
+   856→  number: 184,
+   857→  title: 'feat(db): add persistence retry layer',
+   858→  author: 'mgarret',
+   859→  branch: 'feat/db-retry',
+   860→  base: 'main',
+   861→  before: 31.2,
+   862→  after: 44.8,
+   863→  regressionPct: 43.6,
+   864→  affectedCrates: 18,
+   865→  confidence: 91,
+   866→  confidenceClass: 'high',
+   867→  causeChain: [
+   868→    { label: 'database/Cargo.toml', note: '+ sqlx 0.8 with default features', kind: 'dep' },
+   869→    { label: 'sqlx', note: '+14 crates, +3 proc-macros', kind: 'proc-macro' },
+   870→    { label: 'database crate', note: '+6.1s compile time', kind: 'crate' },
+   871→    { label: '18 downstream crates', note: 'full rebuild on every database change', kind: 'fanout' },
+   872→  ],
+   873→  comment:
+   874→    '⚠ **Build Performance Regression**\n\nThis PR increases estimated incremental build time by **43.6%** (31.2s → 44.8s).\n\n**Primary cause:** `database → sqlx` dependency expansion with default features enabled.\n\n**Evidence:**\n- `Cargo.lock`: +14 crates, +3 proc-macro crates\n- `cargo build --timings`: database 6.1s → 12.2s\n- Blast radius: 18 downstream crates re-invalidate on `database` changes\n\n**Suggested alternatives:**\n1. Isolate sqlx behind a `database-impl` crate\n2. Split database types from implementation\n3. Reduce enabled sqlx features (`runtime-tokio-rustls` only)\n\n_Estimated values — not verified until an experiment is run._',
+   875→  suggestions: [
+   876→    {
+   877→      title: 'Isolate sqlx behind database-impl',
+   878→      detail: 'Keep sqlx and its proc-macros out of the public API of database.',
+   879→      estimatedSaving: '≈ −8.4s incremental for 16 downstream crates',
+   880→    },
+   881→    {
+   882→      title: 'Split database types from implementation',
+   883→      detail: 'Move DTOs and error types into database-types (no sqlx dependency).',
+   884→      estimatedSaving: '≈ −5.2s for 12 downstream crates',
+   885→    },
+   886→    {
+   887→      title: 'Reduce sqlx features',
+   888→      detail: 'default-features = false, features = ["runtime-tokio-rustls", "postgres"].',
+   889→      estimatedSaving: '≈ −3.1s clean build',
+   890→    },
+   891→  ],
+   892→  checks: [
+   893→    { name: 'ferrix/build-impact', status: 'fail', duration: '12s' },
+   894→    { name: 'ferrix/graph-diff', status: 'pass', duration: '8s' },
+   895→    { name: 'ferrix/evidence-lint', status: 'pass', duration: '2s' },
+   896→    { name: 'ci/build', status: 'pass', duration: '4m12s' },
+   897→    { name: 'ci/test', status: 'pass', duration: '6m48s' },
+   898→  ],
+   899→  files: [
+   900→    { name: 'database/Cargo.toml', additions: 4, deletions: 1 },
+   901→    { name: 'database/src/retry.rs', additions: 214, deletions: 0 },
+   902→    { name: 'database/src/pool.rs', additions: 38, deletions: 12 },
+   903→    { name: 'Cargo.lock', additions: 96, deletions: 2 },
+   904→  ],
+   905→}
+   906→
+   907→// ---------------------------------------------------------------------------
+   908→// Experiments (Gate 20)
+   909→// ---------------------------------------------------------------------------
+   910→
+   911→const EXP_STAGES_VERIFIED = [
+   912→  { name: 'plan', state: 'done' as const },
+   913→  { name: 'baseline', state: 'done' as const },
+   914→  { name: 'candidate', state: 'done' as const },
+   915→  { name: 'cargo check', state: 'done' as const },
+   916→  { name: 'cargo test', state: 'done' as const },
+   917→  { name: 'benchmark', state: 'done' as const },
+   918→  { name: 'compare', state: 'done' as const },
+   919→  { name: 'report', state: 'done' as const },
+   920→]
+   921→
+   922→const EXP_STAGES_RUNNING = [
+   923→  { name: 'plan', state: 'done' as const },
+   924→  { name: 'baseline', state: 'done' as const },
+   925→  { name: 'candidate', state: 'active' as const },
+   926→  { name: 'cargo check', state: 'pending' as const },
+   927→  { name: 'cargo test', state: 'pending' as const },
+   928→  { name: 'benchmark', state: 'pending' as const },
+   929→  { name: 'compare', state: 'pending' as const },
+   930→  { name: 'report', state: 'pending' as const },
+   931→]
+   932→
+   933→const EXP_STAGES_DRAFT = [
+   934→  { name: 'plan', state: 'done' as const },
+   935→  { name: 'baseline', state: 'pending' as const },
+   936→  { name: 'candidate', state: 'pending' as const },
+   937→  { name: 'cargo check', state: 'pending' as const },
+   938→  { name: 'cargo test', state: 'pending' as const },
+   939→  { name: 'benchmark', state: 'pending' as const },
+   940→  { name: 'compare', state: 'pending' as const },
+   941→  { name: 'report', state: 'pending' as const },
+   942→]
+   943→
+   944→export const EXPERIMENTS: Experiment[] = [
+   945→  {
+   946→    id: 'EXP-014',
+   947→    title: 'Split common-runtime into core + telemetry',
+   948→    findingId: 'FER-BLD-001',
+   949→    commit: 'a3f19c2',
+   950→    status: 'verified',
+   951→    claim: 'verified',
+   952→    baseline: { seconds: 42.1, runs: 5, measuredAt: '2026-09-10T14:02:00Z' },
+   953→    candidate: { seconds: 31.8, runs: 5, measuredAt: '2026-09-12T09:41:00Z' },
+   954→    improvementPct: 24.5,
+   955→    tests: { passed: 1842, failed: 0 },
+   956→    environment: {
+   957→      toolchain: 'rustc 1.84.1',
+   958→      os: 'linux-x86_64',
+   959→      profile: 'dev',
+   960→      cache: 'cold (sccache disabled)',
+   961→    },
+   962→    commands: [
+   963→      'ferrix experiment create --from FER-BLD-001',
+   964→      'ferrix experiment baseline EXP-014 --runs 5',
+   965→      'git apply candidate.patch && cargo check',
+   966→      'cargo test --workspace',
+   967→      'ferrix experiment compare EXP-014',
+   968→    ],
+   969→    stages: EXP_STAGES_VERIFIED,
+   970→    conclusion:
+   971→      'Verified improvement: 24.5% (measured, 5-run median, reproduced ×2 on clean environments). Baseline 42.1s → candidate 31.8s, 1,842 tests passed.',
+   972→  },
+   973→  {
+   974→    id: 'EXP-015',
+   975→    title: 'Unify duplicate tokio versions',
+   976→    findingId: 'FER-BLD-002',
+   977→    commit: '77bd0e4',
+   978→    status: 'running',
+   979→    claim: 'measured',
+   980→    baseline: { seconds: 87.4, runs: 3, measuredAt: '2026-09-15T11:20:00Z' },
+   981→    candidate: null,
+   982→    improvementPct: null,
+   983→    tests: null,
+   984→    environment: {
+   985→      toolchain: 'rustc 1.84.1',
+   986→      os: 'linux-x86_64',
+   987→      profile: 'dev',
+   988→      cache: 'cold',
+   989→    },
+   990→    commands: [
+   991→      'ferrix experiment create --from FER-BLD-002',
+   992→      'ferrix experiment baseline EXP-015 --runs 3',
+   993→      'cargo update -p tokio@1.34.2 --precise 1.40.0  # candidate, pending',
+   994→    ],
+   995→    stages: EXP_STAGES_RUNNING,
+   996→  },
+   997→  {
+   998→    id: 'EXP-016',
+   999→    title: 'Isolate sqlx behind database-impl',
+  1000→    findingId: 'FER-WRK-007',
+  1001→    commit: 'e91f7aa',
+  1002→    status: 'draft',
+  1003→    claim: 'estimated',
+  1004→    baseline: null,
+  1005→    candidate: null,
+  1006→    improvementPct: null,
+  1007→    tests: null,
+  1008→    environment: {
+  1009→      toolchain: 'rustc 1.84.1',
+  1010→      os: 'linux-x86_64',
+  1011→      profile: 'dev',
+  1012→      cache: 'cold',
+  1013→    },
+  1014→    commands: ['ferrix experiment create --from FER-WRK-007  # plan drafted, awaiting approval'],
+  1015→    stages: EXP_STAGES_DRAFT,
+  1016→  },
+  1017→]
+  1018→
+  1019→// ---------------------------------------------------------------------------
+  1020→// Release scorecard
+  1021→// ---------------------------------------------------------------------------
+  1022→
+  1023→export const GATES = {
+  1024→  verdict: 'CONDITIONAL GO' as const,
+  1025→  rationale:
+  1026→    'All release-blocking gates pass. Two non-blocking gates remain conditional: doctor p95 on the medium fixture is 12.4s against the 10s target (profiling issue assigned), and the 10-developer usability study is scheduled for next sprint. Ship is permitted with documented mitigation.',
+  1027→  gates: [
+  1028→    { id: 1, name: 'Installation & clean environment', objective: 'Clean install, ferrix --version, doctor boots', target: '100% clean-env success', measured: '100% (12/12 CI matrix runs)', status: 'pass', evidence: 'install-matrix job · all supported environments', blocking: true },
+  1029→    { id: 2, name: 'Repository & Cargo discovery', objective: 'Correct metadata ingestion', target: '≥99.5% agreement · 0 graph errors', measured: '99.7% · 0 unexplained errors', status: 'pass', evidence: 'fixture suite ×10 repos vs cargo metadata', blocking: true },
+  1030→    { id: 3, name: 'F-EIR snapshot integrity', objective: 'Valid, versioned, deterministic snapshots', target: '100% schema-valid · deterministic', measured: '100% · identical-input equivalence proven', status: 'pass', evidence: 'golden snapshot tests · schema v4', blocking: true },
+  1031→    { id: 4, name: 'Incremental analysis', objective: 'Local changes invalidate locally', target: '≥95% work reduction', measured: '96.8% on 100-crate fixture', status: 'pass', evidence: 'invalidation benchmark · 1-file change', blocking: false },
+  1032→    { id: 5, name: 'Engineering graph relationships', objective: 'Blast radius, critical path, git association', target: '100% on deterministic fixtures', measured: '100% (61/61 fixture cases)', status: 'pass', evidence: 'graph fixture corpus', blocking: true },
+  1033→    { id: 6, name: 'Build intelligence accuracy', objective: 'Telemetry ingestion without silent loss', target: '≥99% event ingestion', measured: '99.4% (8,412/8,464 events)', status: 'pass', evidence: 'build event ingestion tests incl. failed builds', blocking: false },
+  1034→    { id: 7, name: 'Finding quality & evidence', objective: 'Stable IDs, evidence, calibrated confidence', target: '≥90% precision · 100% evidence', measured: '93% precision · 100% evidence traceability', status: 'pass', evidence: 'false-positive fixture suite (12 analyzers)', blocking: true },
+  1035→    { id: 8, name: 'Doctor actionability', objective: 'What/Why/Evidence/Impact/Recommendation/Verification', target: '100% actionable findings carry remediation', measured: '100% (12/12 findings)', status: 'pass', evidence: 'doctor output schema validation', blocking: true },
+  1036→    { id: 9, name: 'AI grounding & safety', objective: 'AI never overrides evidence · fully optional', target: '0 grounding violations', measured: '0/240 adversarial prompts contradict evidence', status: 'pass', evidence: 'adversarial suite · AI-off deterministic run identical', blocking: true },
+  1037→    { id: 10, name: 'Patch & experiment safety', objective: 'No silent modification · full experiment metadata', target: '100% reviewable diffs · metadata complete', measured: '100% (37 experiments audited)', status: 'pass', evidence: 'patch pipeline audit', blocking: true },
+  1038→    { id: 11, name: 'CLI contract', objective: 'Exit codes + --json everywhere', target: '100% contract tests', measured: '100% (0/4/1/2 exit matrix covered)', status: 'pass', evidence: 'cli-contract test suite', blocking: false },
+  1039→    { id: 12, name: 'Performance & memory', objective: 'Startup <150ms · incremental <1s · doctor <10s · idle <100MB', target: 'All budgets met', measured: 'startup 84ms · incremental 0.6s · doctor p95 12.4s · idle 61MB', status: 'conditional', evidence: 'doctor p95 exceeds target on medium fixture — profiling issue FER-114, owner: compiler-perf team', blocking: false },
+  1040→    { id: 13, name: 'Large-repository stress', objective: '≥500 crates without pathology', measured: '512-crate synthetic graph: no crash, RSS 1.8GB, graph correct', target: 'No crash/corruption/pathological growth', status: 'pass', evidence: 'stress rig run 2026-09-14', blocking: false },
+  1041→    { id: 14, name: 'Failure recovery & daemon', objective: 'Survive failure injection · 24h soak', measured: '0 corruption · 0 crashes · soak 24h clean', target: '0 unrecoverable states', status: 'pass', evidence: '12 failure-injection scenarios + soak log', blocking: true },
+  1042→    { id: 15, name: 'Security & privacy', objective: 'Audit, SAST, secrets, local-only guarantee', measured: '0 criticals · 0 secrets · 0 unexpected transmissions', target: '0 criticals · 0 leaks', status: 'pass', evidence: 'cargo-audit + SAST + secret scan + network monitor', blocking: true },
+  1043→    { id: 16, name: 'Architecture boundaries', objective: 'No forbidden deps · no core cycles', measured: '0 violations · 0 cycles', target: '0 violations', status: 'pass', evidence: 'architecture test suite in CI', blocking: true },
+  1044→    { id: 17, name: 'Observability', objective: '100% top-level jobs traceable', measured: '100% (analysis IDs on every job)', target: '100% traceable', status: 'pass', evidence: 'trace sampling audit', blocking: false },
+  1045→    { id: 18, name: 'Test & fixture reliability', objective: '100 consecutive suite runs, 0 flaky', measured: '100/100 green · 0 flaky', target: '0 flaky failures', status: 'pass', evidence: 'nightly repeatability rig', blocking: true },
+  1046→    { id: 19, name: 'Documentation & usability', objective: 'Docs complete · ≥70% task completion · 7/10 articulate value', measured: 'docs 100% · user study scheduled sprint 42', target: '≥70% completion', status: 'conditional', evidence: 'study protocol pre-registered; baseline workflow defined', blocking: false },
+  1047→    { id: 20, name: 'Full MVP value loop', objective: 'Install → doctor → finding → experiment → verified result', measured: 'End-to-end scenario passes on 3 fixtures', target: '100% pass', status: 'pass', evidence: 'e2e-acceptance test (20 steps)', blocking: true },
+  1048→  ].map((g) => ({ ...g, status: g.status as 'pass' | 'conditional' | 'fail' | 'pending' })),
+  1049→  blockingConditions: [
+  1050→    { condition: 'Critical security vulnerability', clear: true, note: '0 known criticals (cargo-audit + SAST)' },
+  1051→    { condition: 'Database corruption', clear: true, note: 'SQLite integrity_check OK after all kill scenarios' },
+  1052→    { condition: 'Unrecoverable daemon state', clear: true, note: '12/12 failure-injection scenarios recoverable' },
+  1053→    { condition: 'Incorrect dependency graph', clear: true, note: '0 unexplained mismatches vs cargo metadata' },
+  1054→    { condition: 'Incorrect deterministic findings', clear: true, note: '93% precision on fixture suite, 100% evidence' },
+  1055→    { condition: 'Silent source-code transmission', clear: true, note: 'network-monitored local-only run: 0 egress' },
+  1056→    { condition: 'Silent AI repository modification', clear: true, note: 'all patches require explicit diff approval' },
+  1057→    { condition: 'Reproducibility failure', clear: true, note: 'identical inputs → equivalent snapshots ×100 runs' },
+  1058→    { condition: 'Architectural boundary violation', clear: true, note: '0 violations, CI-enforced' },
+  1059→    { condition: 'Critical-path flaky tests', clear: true, note: '100 consecutive green runs' },
+  1060→    { condition: 'Unbounded memory growth', clear: true, note: 'bounded in 24h soak; RSS plateau at 1.8GB on 512-crate rig' },
+  1061→    { condition: 'Unbounded disk growth', clear: true, note: 'ferrix storage + retention GC verified' },
+  1062→    { condition: 'Major unexplained performance regression', clear: true, note: 'benchmark suite green; doctor p95 gap documented (FER-114)' },
+  1063→    { condition: 'Findings without evidence', clear: true, note: 'schema enforces evidence array on all findings' },
+  1064→    { condition: 'Estimated results presented as verified', clear: true, note: 'measurement-status labels enforced in output schema' },
+  1065→    { condition: 'Broken machine-readable CLI contracts', clear: true, note: 'exit-code + --json matrix 100% green' },
+  1066→    { condition: 'Failed end-to-end MVP workflow', clear: true, note: '20-step e2e acceptance passing' },
+  1067→  ],
+  1068→}
+  1069→
+  1070→// ---------------------------------------------------------------------------
+  1071→// Issues → PRs traceability
+  1072→// ---------------------------------------------------------------------------
+  1073→
+  1074→export const ISSUES: IssueItem[] = [
+  1075→  {
+  1076→    id: 'FER-101',
+  1077→    ghIssue: 1,
+  1078→    title: 'App shell, F-EIR data layer & rust-intelligence theme',
+  1079→    gate: 'Gate 3 · F-EIR',
+  1080→    labels: ['foundation', 'frontend'],
+  1081→    state: 'merged',
+  1082→    pr: {
+  1083→      number: 10,
+  1084→      branch: 'feat/app-shell-feir-foundation',
+  1085→      title: 'feat: app shell + F-EIR data layer',
+  1086→      checks: [
+  1087→        { name: 'lint', status: 'pass' },
+  1088→        { name: 'evidence-lint', status: 'pass' },
+  1089→      ],
+  1090→      additions: 1240,
+  1091→      deletions: 18,
+  1092→    },
+  1093→    verification: 'lint clean · dev server 200 · all 9 API routes serve valid JSON',
+  1094→    repoUrl: REPO_URL,
+  1095→  },
+  1096→  {
+  1097→    id: 'FER-102',
+  1098→    ghIssue: 2,
+  1099→    title: 'Engineering Health overview dashboard',
+  1100→    gate: 'Gate 6 · Build intelligence',
+  1101→    labels: ['frontend', 'dashboard'],
+  1102→    state: 'merged',
+  1103→    pr: {
+  1104→      number: 11,
+  1105→      branch: 'feat/overview-dashboard',
+  1106→      title: 'feat: engineering health overview',
+  1107→      checks: [
+  1108→        { name: 'lint', status: 'pass' },
+  1109→        { name: 'browser-qa', status: 'pass' },
+  1110→      ],
+  1111→      additions: 620,
+  1112→      deletions: 6,
+  1113→    },
+  1114→    verification: 'KPI grid + trend charts render with live API data',
+  1115→    repoUrl: REPO_URL,
+  1116→  },
+  1117→  {
+  1118→    id: 'FER-103',
+  1119→    ghIssue: 3,
+  1120→    title: 'ferrix doctor — evidence-backed findings with confidence calibration',
+  1121→    gate: 'Gate 8 · Doctor actionability',
+  1122→    labels: ['frontend', 'doctor'],
+  1123→    state: 'merged',
+  1124→    pr: {
+  1125→      number: 12,
+  1126→      branch: 'feat/build-doctor',
+  1127→      title: 'feat: build doctor with evidence & confidence',
+  1128→      checks: [
+  1129→        { name: 'lint', status: 'pass' },
+  1130→        { name: 'gate-8-schema', status: 'pass' },
+  1131→      ],
+  1132→      additions: 840,
+  1133→      deletions: 4,
+  1134→    },
+  1135→    verification: '12/12 findings carry evidence + remediation + verification path',
+  1136→    repoUrl: REPO_URL,
+  1137→  },
+  1138→  {
+  1139→    id: 'FER-104',
+  1140→    ghIssue: 4,
+  1141→    title: 'Engineering graph & dependency blast radius',
+  1142→    gate: 'Gate 5 · Graph relationships',
+  1143→    labels: ['frontend', 'graph'],
+  1144→    state: 'merged',
+  1145→    pr: {
+  1146→      number: 13,
+  1147→      branch: 'feat/dependency-graph',
+  1148→      title: 'feat: engineering graph + blast radius',
+  1149→      checks: [
+  1150→        { name: 'lint', status: 'pass' },
+  1151→        { name: 'blast-radius-fixture', status: 'pass' },
+  1152→      ],
+  1153→      additions: 910,
+  1154→      deletions: 5,
+  1155→    },
+  1156→    verification: 'traversal matches fixture expectation (100%) on 5 blast cases',
+  1157→    repoUrl: REPO_URL,
+  1158→  },
+  1159→  {
+  1160→    id: 'FER-105',
+  1161→    ghIssue: 5,
+  1162→    title: 'Impact simulator — add-dep / edit-file / split-crate',
+  1163→    gate: 'Gate 10 · Estimated vs verified',
+  1164→    labels: ['frontend', 'simulator'],
+  1165→    state: 'merged',
+  1166→    pr: {
+  1167→      number: 14,
+  1168→      branch: 'feat/impact-simulator',
+  1169→      title: 'feat: engineering cost calculator + architecture simulator',
+  1170→      checks: [
+  1171→        { name: 'lint', status: 'pass' },
+  1172→        { name: 'browser-qa', status: 'pass' },
+  1173→      ],
+  1174→      additions: 700,
+  1175→      deletions: 3,
+  1176→    },
+  1177→    verification: 'all estimates labeled "estimated", never "measured"',
+  1178→    repoUrl: REPO_URL,
+  1179→  },
+  1180→  {
+  1181→    id: 'FER-106',
+  1182→    ghIssue: 6,
+  1183→    title: 'Diagnostics — borrow-checker explainer & async flow inspector',
+  1184→    gate: 'Gate 8 · Actionability',
+  1185→    labels: ['frontend', 'diagnostics'],
+  1186→    state: 'merged',
+  1187→    pr: {
+  1188→      number: 15,
+  1189→      branch: 'feat/diagnostics',
+  1190→      title: 'feat: borrow explainer + async flow',
+  1191→      checks: [
+  1192→        { name: 'lint', status: 'pass' },
+  1193→        { name: 'browser-qa', status: 'pass' },
+  1194→      ],
+  1195→      additions: 760,
+  1196→      deletions: 2,
+  1197→    },
+  1198→    verification: 'step-through walkthrough renders; async waterfall matches telemetry fixture',
+  1199→    repoUrl: REPO_URL,
+  1200→  },
+  1201→  {
+  1202→    id: 'FER-107',
+  1203→    ghIssue: 7,
+  1204→    title: 'PR build-regression analysis (PR #184)',
+  1205→    gate: 'Gate 6 · Build intelligence',
+  1206→    labels: ['frontend', 'ci'],
+  1207→    state: 'merged',
+  1208→    pr: {
+  1209→      number: 16,
+  1210→      branch: 'feat/pr-regression',
+  1211→      title: 'feat: PR regression report + bot comment preview',
+  1212→      checks: [
+  1213→        { name: 'lint', status: 'pass' },
+  1214→        { name: 'browser-qa', status: 'pass' },
+  1215→      ],
+  1216→      additions: 540,
+  1217→      deletions: 2,
+  1218→    },
+  1219→    verification: 'before/after bars, cause chain, checks table render',
+  1220→    repoUrl: REPO_URL,
+  1221→  },
+  1222→  {
+  1223→    id: 'FER-108',
+  1224→    ghIssue: 8,
+  1225→    title: 'Experiment engine — baseline/candidate/verified loop',
+  1226→    gate: 'Gate 20 · Value loop',
+  1227→    labels: ['frontend', 'experiments'],
+  1228→    state: 'merged',
+  1229→    pr: {
+  1230→      number: 17,
+  1231→      branch: 'feat/experiment-engine',
+  1232→      title: 'feat: experiment engine UI',
+  1233→      checks: [
+  1234→        { name: 'lint', status: 'pass' },
+  1235→        { name: 'experiment-schema', status: 'pass' },
+  1236→      ],
+  1237→      additions: 620,
+  1238→      deletions: 2,
+  1239→    },
+  1240→    verification: 'EXP-014 shows verified 24.5% with full metadata; running/draft states distinct',
+  1241→    repoUrl: REPO_URL,
+  1242→  },
+  1243→  {
+  1244→    id: 'FER-109',
+  1245→    ghIssue: 9,
+  1246→    title: 'Release scorecard + issues/PRs traceability board',
+  1247→    gate: 'Gates 71.48–71.51 · Release decision',
+  1248→    labels: ['frontend', 'governance'],
+  1249→    state: 'merged',
+  1250→    pr: {
+  1251→      number: 18,
+  1252→      branch: 'feat/scorecard-issues',
+  1253→      title: 'feat: release scorecard + issue/PR board',
+  1254→      checks: [
+  1255→        { name: 'lint', status: 'pass' },
+  1256→        { name: 'browser-qa', status: 'pass' },
+  1257→      ],
+  1258→      additions: 580,
+  1259→      deletions: 2,
+  1260→    },
+  1261→    verification: '20 gates, 17 blocking conditions, GO decision rendered with evidence',
+  1262→    repoUrl: REPO_URL,
+  1263→  },
+  1264→]
+  1265→
+  1266→// ---------------------------------------------------------------------------
+  1267→// Overview / health
+  1268→// ---------------------------------------------------------------------------
+  1269→
+  1270→export const HEALTH: HealthPayload = {
+  1271→  workspace: WORKSPACE.name,
+  1272→  crates: WORKSPACE.crates,
+  1273→  edges: WORKSPACE.edges,
+  1274→  toolchain: WORKSPACE.toolchain,
+  1275→  cacheHitRate: 32,
+  1276→  kpis: {
+  1277→    buildPerformance: { delta: -23, label: 'Build performance' },
+  1278→    ciCost: { delta: -18, label: 'CI cost' },
+  1279→    dependencyRisk: { delta: -14, label: 'Dependency risk' },
+  1280→    prRegressions: { count: 2, label: 'PR build regressions' },
+  1281→    architectureDebt: { count: 17, label: 'Architecture debt' },
+  1282→    runtimeBottlenecks: { count: 6, label: 'Runtime bottlenecks' },
+  1283→  },
+  1284→  buildTrend: [
+  1285→    { month: 'Apr', clean: 64.2, incremental: 8.2 },
+  1286→    { month: 'May', clean: 71.0, incremental: 9.1 },
+  1287→    { month: 'Jun', clean: 78.3, incremental: 11.8 },
+  1288→    { month: 'Jul', clean: 82.6, incremental: 13.5 },
+  1289→    { month: 'Aug', clean: 85.9, incremental: 15.2 },
+  1290→    { month: 'Sep', clean: 87.4, incremental: 16.9 },
+  1291→  ],
+  1292→  slowestCrates: [
+  1293→    { name: 'common-runtime', seconds: 18.3, downstream: 38 },
+  1294→    { name: 'api', seconds: 12.7, downstream: 0 },
+  1295→    { name: 'worker', seconds: 11.2, downstream: 0 },
+  1296→    { name: 'payments-core', seconds: 10.4, downstream: 3 },
+  1297→    { name: 'gateway', seconds: 9.8, downstream: 0 },
+  1298→    { name: 'database', seconds: 8.9, downstream: 6 },
+  1299→  ],
+  1300→  activity: [
+  1301→    {
+  1302→      id: 'a1',
+  1303→      time: '2m ago',
+  1304→      kind: 'regression',
+  1305→      title: 'PR #184 build regression detected',
+  1306→      detail: '+43.6% incremental build (31.2s → 44.8s) — sqlx dependency expansion',
+  1307→      severity: 'critical',
+  1308→    },
+  1309→    {
+  1310→      id: 'a2',
+  1311→      time: '1h ago',
+  1312→      kind: 'duplicate',
+  1313→      title: 'Duplicate tokio versions after lockfile update',
+  1314→      detail: '1.34.2 + 1.40.0 both compiled — FER-BLD-002',
+  1315→      severity: 'warning',
+  1316→    },
+  1317→    {
+  1318→      id: 'a3',
+  1319→      time: '3h ago',
+  1320→      kind: 'amplification',
+  1321→      title: 'common-runtime change amplified ×38 rebuilds',
+  1322→      detail: 'scheduler.rs touched; 38 crates re-invalidated — FER-BLD-001',
+  1323→      severity: 'warning',
+  1324→    },
+  1325→    {
+  1326→      id: 'a4',
+  1327→      time: 'yesterday',
+  1328→      kind: 'experiment',
+  1329→      title: 'EXP-014 verified: 24.5% build improvement',
+  1330→      detail: 'common-runtime split measured 42.1s → 31.8s (5-run median)',
+  1331→      severity: 'info',
+  1332→    },
+  1333→    {
+  1334→      id: 'a5',
+  1335→      time: '2d ago',
+  1336→      kind: 'improvement',
+  1337→      title: 'CI cache miss rate 68% → 54%',
+  1338→      detail: 'cargo-chef migration on 2 of 5 pipelines — FER-DEP-006',
+  1339→      severity: 'info',
+  1340→    },
+  1341→    {
+  1342→      id: 'a6',
+  1343→      time: '3d ago',
+  1344→      kind: 'config',
+  1345→      title: 'rust-analyzer flycheck config applied',
+  1346→      detail: 'check.workspace=false rolled out to 12 developers — FER-IDE-010',
+  1347→      severity: 'info',
+  1348→    },
+  1349→  ],
+  1350→  findingCounts: [
+  1351→    { section: 'Build', count: 4 },
+  1352→    { section: 'Workspace', count: 3 },
+  1353→    { section: 'CI', count: 2 },
+  1354→    { section: 'IDE', count: 2 },
+  1355→    { section: 'Async', count: 1 },
+  1356→  ],
+  1357→  lastScan: WORKSPACE.lastScan,
+  1358→}
+  1359→
