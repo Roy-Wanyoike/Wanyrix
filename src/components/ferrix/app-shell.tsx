@@ -31,7 +31,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import type { ViewId } from '@/lib/ferrix/types'
+import { useWorkspaces } from '@/lib/ferrix/hooks'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
+import type { ViewId, WorkspaceSummary } from '@/lib/ferrix/types'
+
+const WS_ACCENT: Record<WorkspaceSummary['accent'], string> = {
+  primary: 'bg-primary',
+  emerald: 'bg-emerald-400',
+  zinc: 'bg-zinc-400',
+}
 
 const NAV: {
   group: string
@@ -64,7 +72,7 @@ const NAV: {
 ]
 
 const TITLES: Record<ViewId, { title: string; sub: string }> = {
-  overview: { title: 'Engineering Health', sub: 'helios-platform · continuously analyzed' },
+  overview: { title: 'Engineering Health', sub: 'continuously analyzed' },
   doctor: { title: 'Build Doctor', sub: 'ferrix doctor · evidence-backed findings' },
   graph: { title: 'Engineering Graph', sub: 'dependency backbone · blast radius' },
   diagnostics: { title: 'Diagnostics', sub: 'borrow-checker explainer · async flow' },
@@ -90,6 +98,13 @@ export function AppShell({
   const [uptime, setUptime] = useState(22320) // 6h 12m in seconds — engine process age
   const [paletteOpen, setPaletteOpen] = useState(false)
 
+  /* workspace registry + active selection (issue #34) */
+  const workspacesQuery = useWorkspaces()
+  const workspaces = workspacesQuery.data?.workspaces ?? []
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const setActiveWs = useWorkspaceStore((s) => s.setActive)
+  const activeSummary = workspaces.find((w) => w.id === activeWs)
+
   useEffect(() => {
     const update = () => {
       setClock(
@@ -108,7 +123,18 @@ export function AppShell({
     queryClient.invalidateQueries()
     toast({
       title: 'Scan re-triggered',
-      description: 'Ferrix engine is re-collecting cargo + git telemetry for helios-platform.',
+      description: `Ferrix engine is re-collecting cargo + git telemetry for ${activeSummary?.name ?? 'the active workspace'}.`,
+    })
+  }
+
+  const switchWorkspace = (id: string) => {
+    if (id === activeWs) return
+    setActiveWs(id)
+    queryClient.invalidateQueries()
+    const ws = workspaces.find((w) => w.id === id)
+    toast({
+      title: `Workspace → ${ws?.name ?? id}`,
+      description: `${ws?.crates ?? '?'} crates · ${ws?.edges ?? '?'} edges · re-querying scoped surfaces`,
     })
   }
 
@@ -196,14 +222,45 @@ export function AppShell({
                 </kbd>
               </button>
 
-              <Select defaultValue="helios">
-                <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Workspace">
-                  <SelectValue />
+              <Select
+                value={activeWs}
+                onValueChange={switchWorkspace}
+                disabled={workspaces.length === 0}
+              >
+                <SelectTrigger
+                  className="h-8 w-[168px] gap-1.5 text-xs"
+                  aria-label="Workspace"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      className={`size-1.5 shrink-0 rounded-full ${WS_ACCENT[activeSummary?.accent ?? 'primary'] ?? 'bg-primary'}`}
+                      aria-hidden
+                    />
+                    <SelectValue>{activeSummary?.name}</SelectValue>
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="helios">helios-platform</SelectItem>
-                  <SelectItem value="vertex">vertex-db</SelectItem>
-                  <SelectItem value="ironmq">iron-mq</SelectItem>
+                  {workspaces.map((w) => (
+                    <SelectItem key={w.id} value={w.id} className="text-xs">
+                      <span className="flex items-center gap-2">
+                        <span className={`size-1.5 rounded-full ${WS_ACCENT[w.accent]}`} aria-hidden />
+                        {w.name}
+                        <span className="ml-1 font-mono text-[10px] text-muted-foreground">
+                          {w.crates} crates
+                        </span>
+                        {w.status === 'live' ? (
+                          <span className="ml-auto flex items-center gap-1 font-mono text-[9px] uppercase text-emerald-300">
+                            <span className="size-1 animate-pulse rounded-full bg-emerald-400" aria-hidden />
+                            live
+                          </span>
+                        ) : (
+                          <span className="ml-auto font-mono text-[9px] uppercase text-muted-foreground">
+                            archived
+                          </span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
 
@@ -259,8 +316,8 @@ export function AppShell({
         <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/70 bg-sidebar/60 px-4 py-2 font-mono text-[10.5px] text-muted-foreground sm:px-6">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="text-foreground/80">FERRIX ENGINE v0.4.2</span>
-            <span>47 crates indexed</span>
-            <span>212 edges</span>
+            <span>{activeSummary ? `${activeSummary.crates} crates indexed` : 'indexing…'}</span>
+            {activeSummary && <span>{activeSummary.edges} edges</span>}
             <span>graph updated 2m ago</span>
           </div>
           <div className="flex items-center gap-3">

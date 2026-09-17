@@ -7,9 +7,11 @@ import {
   CircleDashed,
   Copy,
   Database,
+  FlaskConical,
   Loader2,
   Play,
   RotateCcw,
+  Stethoscope,
   TriangleAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -455,12 +457,13 @@ function LoadingState() {
   )
 }
 
-export default function ExperimentsView(_: ViewProps) {
+export default function ExperimentsView({ onNavigate }: ViewProps) {
   const { data, isLoading, isError, refetch } = useExperiments()
 
   const verified = data?.experiments.find((e) => e.id === 'EXP-014')
   const running = data?.experiments.find((e) => e.id === 'EXP-015')
   const draft = data?.experiments.find((e) => e.id === 'EXP-016')
+  const empty = data !== undefined && data.experiments.length === 0
 
   return (
     <div className="space-y-5">
@@ -488,7 +491,31 @@ export default function ExperimentsView(_: ViewProps) {
         </Panel>
       )}
 
-      {data && (
+      {data && empty && (
+        <Panel
+          title={
+            <span className="flex items-center gap-2">
+              <FlaskConical className="size-4 text-primary" aria-hidden />
+              No experiments recorded for {data.workspace}
+            </span>
+          }
+          subtitle="the verification loop starts from a doctor finding"
+        >
+          <div className="flex flex-col items-start gap-3">
+            <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+              Ferrix never claims an improvement without a measured baseline/candidate pair. Run{' '}
+              <span className="font-mono text-foreground/85">ferrix doctor</span> for this workspace, pick a finding
+              marked experiment-eligible, and the engine will scaffold the experiment with full metadata (Gate 20).
+            </p>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onNavigate?.('doctor')}>
+              <Stethoscope className="size-3.5" aria-hidden />
+              Open Build Doctor
+            </Button>
+          </div>
+        </Panel>
+      )}
+
+      {data && !empty && (
         <div className="space-y-4" aria-label="Experiments">
           {verified && <VerifiedCard experiment={verified} />}
           {running && <RunningCard experiment={running} />}
@@ -496,7 +523,7 @@ export default function ExperimentsView(_: ViewProps) {
         </div>
       )}
 
-      {data && (
+      {data && !empty && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Database className="size-3.5 shrink-0 text-primary/80" aria-hidden />
           Experiments persist baseline, candidate, environment, commands, tests and measurements — 100% metadata

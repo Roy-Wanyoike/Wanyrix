@@ -53,6 +53,8 @@ export interface Finding {
   confidence: number
   detection: string
   measurementStatus: MeasurementStatus
+  /** true when the finding is a good candidate for a ferrix experiment */
+  experimentEligible?: boolean
 }
 
 export interface CriticalPathSegment {
@@ -74,6 +76,10 @@ export interface DoctorReport {
   scannedAt: string
   phases: { label: string; detail: string }[]
   summary: { developerBuild: string; ciBuild: string; diskUsage: string }
+  /** workspace-specific explanation for the summary card (payload-driven copy) */
+  criticalPathExplanation?: string
+  /** footnote under the critical-path chart */
+  criticalPathCaption?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -117,6 +123,12 @@ export interface BlastEntry {
   suggestion: string
 }
 
+/** Simulator catalogs — served per workspace so the UI never hardcodes crates. */
+export interface ImpactCatalog {
+  addDeps: { id: string; version: string }[]
+  splitCandidates: string[]
+}
+
 /** GET /api/ferrix/graph */
 export interface GraphPayload {
   nodes: GraphNode[]
@@ -124,6 +136,8 @@ export interface GraphPayload {
   duplicates: DuplicateGroup[]
   blast: BlastEntry[]
   meta: { workspaceCrates: number; totalEdges: number; lastScan: string }
+  /** optional per-workspace simulator catalogs (issue #34) */
+  catalog?: ImpactCatalog
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +310,7 @@ export interface Experiment {
 
 /** GET /api/ferrix/experiments */
 export interface ExperimentsPayload {
+  workspace: string
   experiments: Experiment[]
 }
 
@@ -416,6 +431,8 @@ export interface HealthPayload {
   activity: ActivityEvent[]
   findingCounts: { section: FindingSection; count: number }[]
   lastScan: string
+  /** workspace-specific headline insight for the overview strip */
+  insight?: { text: string; question: string }
 }
 
 // ---------------------------------------------------------------------------

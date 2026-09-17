@@ -1,18 +1,7 @@
-import { NextResponse } from 'next/server'
-import { GRAPH_NODES, GRAPH_EDGES, DUPLICATES, BLAST, WORKSPACE } from '@/lib/ferrix/data'
-import type { GraphPayload } from '@/lib/ferrix/types'
+import { NextRequest, NextResponse } from 'next/server'
+import { getGraphPayload } from '@/lib/ferrix/data'
 
-export async function GET() {
-  const payload: GraphPayload = {
-    nodes: GRAPH_NODES,
-    edges: GRAPH_EDGES,
-    duplicates: DUPLICATES,
-    blast: BLAST,
-    meta: {
-      workspaceCrates: WORKSPACE.crates,
-      totalEdges: WORKSPACE.edges,
-      lastScan: WORKSPACE.lastScan,
-    },
-  }
-  return NextResponse.json(payload)
+export async function GET(req: NextRequest) {
+  const ws = req.nextUrl.searchParams.get('ws') ?? 'helios-platform'
+  return NextResponse.json(getGraphPayload(ws))
 }

@@ -36,15 +36,7 @@ interface QueryLike<T> {
   refetch: () => void
 }
 
-/** Hardcoded selector list (labels only — all figures come from the API). */
-const ADD_DEP_OPTIONS: { id: string; version: string }[] = [
-  { id: 'sqlx', version: '0.8.6' },
-  { id: 'aws-sdk-s3', version: '1.62.0' },
-  { id: 'reqwest', version: '0.12.9' },
-  { id: 'tonic', version: '0.12.3' },
-  { id: 'opentelemetry-otlp', version: '0.27.0' },
-  { id: 'deadpool-redis', version: '0.18.0' },
-]
+// the add-dep catalog is served per workspace via the graph payload (issue #34)
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{children}</h3>
@@ -596,17 +588,20 @@ function SplitReport({
 
 export default function SimulatorView({ onNavigate }: ViewProps) {
   const [mode, setMode] = useState<Mode>('add-dep')
-  const [target, setTarget] = useState('sqlx')
+  const [target, setTarget] = useState('')
   const [file, setFile] = useState('')
 
   const graph = useGraph()
   const blast: BlastEntry[] = useMemo(() => graph.data?.blast ?? [], [graph.data])
-  // The radio list defaults to the first catalog file; `file` only holds an
-  // explicit user choice, so the effective target is derived during render.
+  // Catalogs are payload-driven per workspace; defaults derive during render
+  // so a workspace switch never shows stale selections.
+  const addDepOptions = graph.data?.catalog?.addDeps ?? []
+  const activeTarget = target || addDepOptions[0]?.id || ''
+  const splitSource = graph.data?.catalog?.splitCandidates[0] ?? ''
   const activeFile = file || blast[0]?.file || ''
-  const addDepQuery = useImpact('add-dep', target)
+  const addDepQuery = useImpact('add-dep', activeTarget)
   const editFileQuery = useImpact('edit-file', activeFile)
-  const splitQuery = useImpact('split-crate', 'common')
+  const splitQuery = useImpact('split-crate', splitSource)
 
   return (
     <div className="space-y-5">
@@ -628,12 +623,14 @@ export default function SimulatorView({ onNavigate }: ViewProps) {
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="space-y-2 lg:col-span-1" role="radiogroup" aria-label="Dependency catalog">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Catalog</p>
-              {ADD_DEP_OPTIONS.map((opt) => (
+              {graph.isPending &&
+                Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+              {addDepOptions.map((opt) => (
                 <CatalogCard
                   key={opt.id}
                   id={opt.id}
                   version={opt.version}
-                  active={target === opt.id}
+                  active={activeTarget === opt.id}
                   onSelect={() => setTarget(opt.id)}
                 />
               ))}
