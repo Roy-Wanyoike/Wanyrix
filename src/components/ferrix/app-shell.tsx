@@ -7,6 +7,7 @@ import {
   Calculator,
   FlaskConical,
   GitPullRequest,
+  HardDrive,
   LayoutDashboard,
   ListChecks,
   Microscope,
@@ -18,6 +19,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FerrixLogo } from './logo'
+import { CommandPalette } from './command-palette'
+import { StorageDialog } from './storage-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -84,16 +87,22 @@ export function AppShell({
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [clock, setClock] = useState<string>('')
+  const [uptime, setUptime] = useState(22320) // 6h 12m in seconds — engine process age
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   useEffect(() => {
-    const update = () =>
+    const update = () => {
       setClock(
         new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' local',
       )
+      setUptime((u) => u + 1)
+    }
     update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
   }, [])
+
+  const uptimeLabel = `${Math.floor(uptime / 3600)}h ${String(Math.floor((uptime % 3600) / 60)).padStart(2, '0')}m ${String(uptime % 60).padStart(2, '0')}s`
 
   const runScan = () => {
     queryClient.invalidateQueries()
@@ -104,7 +113,7 @@ export function AppShell({
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background bg-grid">
       {/* ---------------- sidebar ---------------- */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-border/70 bg-sidebar lg:flex">
         <div className="flex items-center gap-2.5 px-4 py-4">
@@ -128,12 +137,15 @@ export function AppShell({
                       onClick={() => onNavigate(item.id)}
                       aria-current={activeView === item.id ? 'page' : undefined}
                       className={cn(
-                        'group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors',
+                        'group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-all duration-150',
                         activeView === item.id
                           ? 'bg-primary/12 text-foreground ring-1 ring-primary/25'
-                          : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
+                          : 'text-muted-foreground hover:translate-x-0.5 hover:bg-sidebar-accent hover:text-foreground',
                       )}
                     >
+                      {activeView === item.id && (
+                        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
+                      )}
                       <span className={cn(activeView === item.id ? 'text-primary' : 'opacity-70')}>
                         {item.icon}
                       </span>
@@ -171,19 +183,18 @@ export function AppShell({
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-              <div className="relative hidden md:block">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  placeholder="Search crates, findings, PRs…"
-                  className="h-8 w-52 rounded-md border border-input bg-card pl-8 pr-2 text-xs outline-none placeholder:text-muted-foreground/70 focus:ring-1 focus:ring-ring"
-                  aria-label="Search"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      toast({ title: 'Search', description: 'Fuzzy search over the engineering graph lands next sprint.' })
-                    }
-                  }}
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="relative hidden h-8 w-52 items-center gap-2 rounded-md border border-input bg-card pl-8 pr-2 text-left text-xs text-muted-foreground/80 transition-colors hover:border-primary/30 hover:text-foreground md:flex"
+                aria-label="Open command palette (Ctrl+K)"
+              >
+                <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" />
+                <span className="flex-1 truncate">Search crates, findings, PRs…</span>
+                <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">
+                  ⌘K
+                </kbd>
+              </button>
 
               <Select defaultValue="helios">
                 <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Workspace">
@@ -253,14 +264,26 @@ export function AppShell({
             <span>graph updated 2m ago</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5">
+            <StorageDialog>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded px-1 transition-colors hover:text-foreground"
+                aria-label="Open storage report"
+              >
+                <HardDrive className="size-3" />
+                storage 1.22 GB
+              </button>
+            </StorageDialog>
+            <span className="hidden items-center gap-1.5 sm:flex">
               <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-              engine live
+              engine live · up {uptimeLabel}
             </span>
             <span className="hidden sm:inline">reasoning: connected</span>
             <span>{clock}</span>
           </div>
         </footer>
+
+        <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} onNavigate={onNavigate} onRunScan={runScan} />
       </div>
     </div>
   )

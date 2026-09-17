@@ -364,6 +364,26 @@ export interface IssuesPayload {
 }
 
 // ---------------------------------------------------------------------------
+// Local storage report (Gate 71.10 — bounded, inspectable disk usage)
+// ---------------------------------------------------------------------------
+
+export interface StorageRow {
+  label: string
+  sizeMB: number
+  note: string
+  reclaimable: boolean
+}
+
+/** GET /api/ferrix/storage */
+export interface StoragePayload {
+  rows: StorageRow[]
+  totalMB: number
+  lastGc: string
+  retention: string
+  bound: string
+}
+
+// ---------------------------------------------------------------------------
 // Overview / health
 // ---------------------------------------------------------------------------
 

@@ -322,6 +322,9 @@ export function Terminal({
           </motion.p>
         ))}
         {footer}
+        <p className="flex items-center gap-1 text-primary" aria-hidden="true">
+          <span className="inline-block h-3.5 w-2 animate-pulse bg-primary/80" />
+        </p>
       </div>
     </div>
   )
