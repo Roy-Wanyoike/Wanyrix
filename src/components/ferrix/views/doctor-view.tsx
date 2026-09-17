@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Boxes,
+  ChevronRight,
   ClipboardCopy,
   Copy,
   FileDiff,
@@ -32,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useDoctor } from '@/lib/ferrix/hooks'
 import { useToast } from '@/hooks/use-toast'
+import { FindingSheet } from '../finding-sheet'
 import type {
   ConfidenceClass,
   CriticalPathSegment,
@@ -195,11 +197,11 @@ function ScanTerminal({
 function FindingCard({
   finding: f,
   index,
-  onNavigate,
+  onOpen,
 }: {
   finding: Finding
   index: number
-  onNavigate?: ViewProps['onNavigate']
+  onOpen: (f: Finding) => void
 }) {
   const RemIcon = REMEDIATION_META[f.remediationKind].icon
   const realEntities = f.affected.filter((a) => !a.startsWith('+'))
@@ -213,13 +215,26 @@ function FindingCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, delay: index * 0.05 }}
     >
-      <Card className="gap-3 border-border/80 p-4 transition-colors hover:border-primary/30">
+      <Card
+        role="button"
+        tabIndex={0}
+        aria-label={`Open detail drawer for ${f.id}`}
+        onClick={() => onOpen(f)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onOpen(f)
+          }
+        }}
+        className="group cursor-pointer gap-3 border-border/80 p-4 transition-all hover:border-primary/40 hover:shadow-[0_0_0_1px_oklch(0.72_0.17_55/25%),0_8px_24px_-12px_oklch(0_0_0/60%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+      >
         {/* badges row */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[11px] text-muted-foreground">{f.id}</span>
+          <span className="font-mono text-[11px] text-muted-foreground transition-colors group-hover:text-primary">{f.id}</span>
           <SeverityBadge severity={f.severity} />
           <MeasurementBadge status={f.measurementStatus} />
           <ConfidenceBadge level={f.confidenceClass} />
+          <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
         </div>
 
         <div>
@@ -293,7 +308,11 @@ function FindingCard({
               detector: {f.detection}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
             <ExplainDialog
               kind="issue"
               context={JSON.stringify(f)}
@@ -301,7 +320,14 @@ function FindingCard({
               label="Explain with AI"
             />
             {EXPERIMENT_FINDINGS.has(f.id) && (
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.('experiments')}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpen(f) // routes to the drawer — experiment CTA lives there too
+                }}
+              >
                 Create experiment
               </Button>
             )}
@@ -321,6 +347,7 @@ export default function DoctorView({ onNavigate }: ViewProps) {
   const [mode, setMode] = useState<'human' | 'json'>('human')
   const [runId, setRunId] = useState(0)
   const [scanDone, setScanDone] = useState(false)
+  const [selected, setSelected] = useState<Finding | null>(null)
 
   /* findings grouped by section, in curated data order */
   const groups = useMemo(() => {
@@ -600,10 +627,13 @@ export default function DoctorView({ onNavigate }: ViewProps) {
             <div className="h-px flex-1 bg-border/60" />
           </div>
           {group.findings.map((f, i) => (
-            <FindingCard key={f.id} finding={f} index={i} onNavigate={onNavigate} />
+            <FindingCard key={f.id} finding={f} index={i} onOpen={setSelected} />
           ))}
         </section>
       ))}
+
+      {/* finding drill-down drawer (issue #25) */}
+      <FindingSheet finding={selected} onOpenChange={(o) => !o && setSelected(null)} onNavigate={onNavigate} />
 
       {/* ------------------------------------------------ 6) bottom estimates */}
       <div className="grid gap-4 sm:grid-cols-3">
