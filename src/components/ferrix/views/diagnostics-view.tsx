@@ -7,6 +7,7 @@ import {
   Braces,
   Check,
   GitBranch,
+  Info,
   RotateCw,
   Scale,
   ShieldCheck,
@@ -25,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { ExplainDialog } from '../explain-dialog'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import { CountUp, Panel, SectionHeading } from '../shared'
 import type { ViewProps } from '../view-types'
 
@@ -479,6 +481,7 @@ function DiagnosticsSkeleton() {
 }
 
 export default function DiagnosticsView({ onNavigate }: ViewProps) {
+  const activeWorkspace = useWorkspaceStore((s) => s.active)
   const { data, isPending, isError, error, refetch } = useDiagnostics()
 
   return (
@@ -488,6 +491,15 @@ export default function DiagnosticsView({ onNavigate }: ViewProps) {
         title="Diagnostics"
         description="Explain the concept, not just generate a fix — compile-time and runtime understanding side by side."
       />
+
+      {activeWorkspace !== 'helios-platform' && (
+        <p className="flex items-start gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-[11.5px] leading-snug text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-primary/70" aria-hidden />
+          Diagnostic scenarios are indexed for{' '}
+          <span className="font-mono text-foreground/85">helios-platform</span> — findings referenced here (e.g.
+          FER-ASY-012) belong to that workspace.
+        </p>
+      )}
 
       {isPending && <DiagnosticsSkeleton />}
 

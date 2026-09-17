@@ -82,7 +82,7 @@ const REMEDIATION_META: Record<RemediationKind, { icon: LucideIcon; label: strin
 
 const SECTION_ORDER: FindingSection[] = ['Build', 'Workspace', 'IDE', 'CI', 'Async']
 
-const EXPERIMENT_FINDINGS = new Set(['FER-BLD-001', 'FER-WRK-007'])
+// experiment eligibility is payload-driven (Finding.experimentEligible, issue #34)
 
 /** Confidence calibration (Gate 13) — derive the class from the numeric score. */
 function confidenceClass(score: number): ConfidenceClass {
@@ -320,7 +320,7 @@ function FindingCard({
               question="Why does this finding matter for our Rust team and how do I verify the fix?"
               label="Explain with AI"
             />
-            {EXPERIMENT_FINDINGS.has(f.id) && (
+            {f.experimentEligible && (
               <Button
                 size="sm"
                 variant="outline"
@@ -547,7 +547,7 @@ export default function DoctorView({ onNavigate }: ViewProps) {
         <Card className="gap-2 p-4">
           <p className="text-xs font-medium text-muted-foreground">Critical-path explanation</p>
           <p className="text-[13px] leading-relaxed">
-            common-runtime blocks 41 crates; split proposal verified in EXP-014
+            {report.criticalPathExplanation ?? 'Open the critical-path chart to inspect what the build time is made of.'}
           </p>
           <Button
             size="sm"
@@ -601,8 +601,7 @@ export default function DoctorView({ onNavigate }: ViewProps) {
           </ResponsiveContainer>
         </div>
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-          proc-macro chain = syn + quote + proc-macro2 compiled in 3 version sets (FER-BLD-004) ·
-          linking includes codegen
+          {report.criticalPathCaption ?? 'Linking includes codegen · figures from cargo build --timings'}
         </p>
       </Panel>
 

@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import {
   Calculator,
+  Check,
+  Database,
   ExternalLink,
   FlaskConical,
   GitPullRequest,
@@ -25,6 +27,8 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { REPO_URL } from '@/lib/ferrix/data'
+import { useWorkspaces } from '@/lib/ferrix/hooks'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import type { ViewId } from '@/lib/ferrix/types'
 
 const NAV_ITEMS: { id: ViewId; label: string; icon: React.ElementType; hint: string }[] = [
@@ -61,6 +65,10 @@ export function CommandPalette({
     return () => document.removeEventListener('keydown', down)
   }, [open, setOpen])
 
+  const { data: wsData } = useWorkspaces()
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const setActiveWs = useWorkspaceStore((s) => s.setActive)
+
   const go = (v: ViewId) => {
     setOpen(false)
     onNavigate(v)
@@ -77,6 +85,30 @@ export function CommandPalette({
               <item.icon className="size-4 text-primary" />
               <span>{item.label}</span>
               <span className="ml-auto font-mono text-[10px] text-muted-foreground">{item.hint}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="Switch workspace">
+          {(wsData?.workspaces ?? []).map((w) => (
+            <CommandItem
+              key={w.id}
+              value={`workspace ${w.name}`}
+              disabled={w.id === activeWs}
+              onSelect={() => {
+                setOpen(false)
+                setActiveWs(w.id)
+              }}
+              className="gap-2.5"
+            >
+              <Database className={`size-4 ${w.accent === 'emerald' ? 'text-emerald-400' : 'text-primary'}`} />
+              <span>{w.name}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {w.crates} crates · {w.findings} findings
+              </span>
+              {w.id === activeWs && (
+                <Check className="ml-auto size-3.5 text-emerald-400" aria-label="active" />
+              )}
             </CommandItem>
           ))}
         </CommandGroup>

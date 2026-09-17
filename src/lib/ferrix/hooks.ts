@@ -13,7 +13,9 @@ import type {
   IssuesPayload,
   ExperimentsPayload,
   StoragePayload,
+  WorkspacesPayload,
 } from './types'
+import { useWorkspaceStore } from './workspace-store'
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -21,16 +23,41 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/** The active workspace id — every scoped hook folds it into key + URL. */
+function useActiveWorkspace(): string {
+  return useWorkspaceStore((s) => s.active)
+}
+
+export function useWorkspaces() {
+  return useQuery<WorkspacesPayload>({
+    queryKey: ['workspaces'],
+    queryFn: () => getJson('/api/ferrix/workspaces'),
+    staleTime: Infinity,
+  })
+}
+
 export function useHealth() {
-  return useQuery<HealthPayload>({ queryKey: ['health'], queryFn: () => getJson('/api/ferrix/health') })
+  const ws = useActiveWorkspace()
+  return useQuery<HealthPayload>({
+    queryKey: ['health', ws],
+    queryFn: () => getJson(`/api/ferrix/health?ws=${encodeURIComponent(ws)}`),
+  })
 }
 
 export function useDoctor() {
-  return useQuery<DoctorReport>({ queryKey: ['doctor'], queryFn: () => getJson('/api/ferrix/doctor') })
+  const ws = useActiveWorkspace()
+  return useQuery<DoctorReport>({
+    queryKey: ['doctor', ws],
+    queryFn: () => getJson(`/api/ferrix/doctor?ws=${encodeURIComponent(ws)}`),
+  })
 }
 
 export function useGraph() {
-  return useQuery<GraphPayload>({ queryKey: ['graph'], queryFn: () => getJson('/api/ferrix/graph') })
+  const ws = useActiveWorkspace()
+  return useQuery<GraphPayload>({
+    queryKey: ['graph', ws],
+    queryFn: () => getJson(`/api/ferrix/graph?ws=${encodeURIComponent(ws)}`),
+  })
 }
 
 export function useDiagnostics() {
@@ -41,17 +68,22 @@ export function useDiagnostics() {
 }
 
 export function useImpact(type: 'add-dep' | 'edit-file' | 'split-crate', target: string) {
+  const ws = useActiveWorkspace()
   return useQuery<ImpactPayload>({
-    queryKey: ['impact', type, target],
-    queryFn: () => getJson(`/api/ferrix/impact?type=${encodeURIComponent(type)}&target=${encodeURIComponent(target)}`),
+    queryKey: ['impact', type, target, ws],
+    queryFn: () =>
+      getJson(
+        `/api/ferrix/impact?type=${encodeURIComponent(type)}&target=${encodeURIComponent(target)}&ws=${encodeURIComponent(ws)}`,
+      ),
     enabled: type === 'split-crate' || target.length > 0,
   })
 }
 
 export function useExperiments() {
+  const ws = useActiveWorkspace()
   return useQuery<ExperimentsPayload>({
-    queryKey: ['experiments'],
-    queryFn: () => getJson('/api/ferrix/experiments'),
+    queryKey: ['experiments', ws],
+    queryFn: () => getJson(`/api/ferrix/experiments?ws=${encodeURIComponent(ws)}`),
   })
 }
 

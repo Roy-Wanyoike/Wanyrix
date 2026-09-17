@@ -11,6 +11,13 @@ import type {
   HealthPayload,
   IssueItem,
   PRAnalysis,
+  AddDepImpact,
+  EditFileImpact,
+  ExperimentsPayload,
+  GraphPayload,
+  SplitImpact,
+  WorkspaceSummary,
+  WorkspacesPayload,
 } from './types'
 
 export const REPO_URL = 'https://github.com/Roy-Wanyoike/ferrix'
@@ -56,6 +63,7 @@ export const FINDINGS: Finding[] = [
     confidence: 86,
     detection: 'critical-path analysis over cargo build --timings + cargo metadata',
     measurementStatus: 'estimated',
+    experimentEligible: true,
   },
   {
     id: 'FER-BLD-002',
@@ -199,6 +207,7 @@ export const FINDINGS: Finding[] = [
     confidence: 88,
     detection: 'fan-out × change-frequency analysis over the engineering graph',
     measurementStatus: 'estimated',
+    experimentEligible: true,
   },
   {
     id: 'FER-WRK-008',
@@ -343,6 +352,9 @@ export const DOCTOR: DoctorReport = {
     { label: 'Consulting engineering graph', detail: 'F-EIR snapshot 9f31c2a · verified' },
   ],
   summary: { developerBuild: '−34%', ciBuild: '−41%', diskUsage: '−27%' },
+  criticalPathExplanation: 'common-runtime blocks 41 crates; split proposal verified in EXP-014',
+  criticalPathCaption:
+    'proc-macro chain = syn + quote + proc-macro2 compiled in 3 version sets (FER-BLD-004) · linking includes codegen',
 }
 
 // ---------------------------------------------------------------------------
@@ -1439,4 +1451,734 @@ export const HEALTH: HealthPayload = {
     { section: 'Async', count: 1 },
   ],
   lastScan: WORKSPACE.lastScan,
+  insight: {
+    text: 'Average PR now causes 4.7× more compilation work than six months ago.',
+    question: 'Why has compilation work per PR grown?',
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Workspace registry + second workspace (atlas-consortium) — issue #34
+// ---------------------------------------------------------------------------
+
+export const WORKSPACE_ATLAS = {
+  name: 'atlas-consortium',
+  description: 'Data infrastructure consortium · 23 workspace crates · rustc 1.83.0 · dev profile',
+  crates: 23,
+  backboneNodes: 24,
+  edges: 96,
+  toolchain: 'rustc 1.83.0 (9b1d2c4) · cargo 1.83.0',
+  profile: 'dev',
+  lastScan: '2026-09-17T08:41:37Z',
+}
+
+export const WORKSPACES: WorkspaceSummary[] = [
+  {
+    id: 'helios-platform',
+    name: 'helios-platform',
+    description: 'Payments platform · continuously analyzed',
+    crates: WORKSPACE.crates,
+    edges: WORKSPACE.edges,
+    toolchain: WORKSPACE.toolchain,
+    accent: 'primary',
+    status: 'live',
+    findings: FINDINGS.length,
+    lastScan: WORKSPACE.lastScan,
+  },
+  {
+    id: 'atlas-consortium',
+    name: 'atlas-consortium',
+    description: 'Data infrastructure · continuously analyzed',
+    crates: WORKSPACE_ATLAS.crates,
+    edges: WORKSPACE_ATLAS.edges,
+    toolchain: WORKSPACE_ATLAS.toolchain,
+    accent: 'emerald',
+    status: 'live',
+    findings: 7,
+    lastScan: WORKSPACE_ATLAS.lastScan,
+  },
+]
+
+export const WORKSPACES_DEFAULT = WORKSPACES[0].id
+
+// ------------------------------------------------------------- atlas: doctor
+
+const ATLAS_FINDINGS: Finding[] = [
+  {
+    id: 'ATL-BLD-001',
+    section: 'Build',
+    severity: 'critical',
+    title: 'atlas-store dominates the critical path',
+    description:
+      'atlas-store compiles 14.2s of the 52.8s dev build — its LSM tree modules changed 41 times in 90 days, so the most expensive crate is also the hottest.',
+    evidence: [
+      { label: 'Build share', value: '14.2s / 52.8s', source: 'cargo build --timings' },
+      { label: 'Downstream crates', value: '18', source: 'cargo metadata graph' },
+      { label: 'Changes (90d)', value: '41 commits', source: 'git log' },
+      { label: 'Rebuild amplification', value: '×18 on every touch', source: 'ferrix graph diff' },
+    ],
+    affected: ['atlas-store', 'atlas-query', 'atlas-ingest', '+9 more'],
+    impact: 'Median incremental build triples whenever atlas-store is touched',
+    impactSeconds: 9.6,
+    recommendation:
+      'Split atlas-store into atlas-store-core (SST + block abstractions) and atlas-store-lsm (volatile engine internals); downstream crates depend on the stable core.',
+    remediationKind: 'architecture',
+    verificationPath: 'Experiment: baseline 52.8s median of 5 → candidate with core split → blast radius 18 → ≤7.',
+    confidenceClass: 'high',
+    confidence: 86,
+    detection: 'critical-path analysis over cargo build --timings + git history',
+    measurementStatus: 'estimated',
+    experimentEligible: true,
+  },
+  {
+    id: 'ATL-BLD-002',
+    section: 'Build',
+    severity: 'warning',
+    title: 'Linking + codegen takes 24% of the build',
+    description:
+      '12.6s of the 52.8s build is linking + codegen. The debug info level is 2 across the workspace and split-dwarf is not enabled.',
+    evidence: [
+      { label: 'Link time', value: '12.6s', source: 'cargo build --timings' },
+      { label: 'Debug info', value: 'level 2 · no split-dwarf', source: 'cargo profile config' },
+      { label: 'Target dir', value: '3.9 GB', source: 'du -sh target' },
+    ],
+    affected: ['workspace profile', 'atlas-cli', 'atlas-store'],
+    impact: 'Every clean build pays 12.6s of link cost regardless of what changed',
+    impactSeconds: 4.8,
+    recommendation:
+      'Set debug = "line-tables-only" for the dev profile and enable split-debuginfo; re-measure link time after.',
+    remediationKind: 'config',
+    verificationPath: 'Compare cargo build --timings link segment before/after profile change.',
+    confidenceClass: 'high',
+    confidence: 91,
+    detection: 'profile config scan + timing segment analysis',
+    measurementStatus: 'measured',
+  },
+  {
+    id: 'ATL-DEP-003',
+    section: 'Dependencies',
+    severity: 'warning',
+    title: 'two versions of arrow compiled simultaneously',
+    description:
+      'arrow 53.3.0 (via parquet crate path) and 54.2.0 (via datafusion path) both compile — 5.2s + 4.1s per clean build and duplicated artifacts.',
+    evidence: [
+      { label: 'Versions', value: '53.3.0 · 54.2.0', source: 'cargo tree -d' },
+      { label: 'Wasted', value: '4.1s clean · +38 MB target', source: 'cargo build --timings' },
+      { label: 'Dependents', value: 'atlas-ingest · atlas-query', source: 'cargo tree' },
+    ],
+    affected: ['atlas-ingest', 'atlas-query', 'arrow-*'],
+    impact: 'Clean builds pay double compilation for one logical dependency',
+    impactSeconds: 4.1,
+    recommendation:
+      'Unify on arrow 54 via `cargo update arrow@53.3.0 --precise 54.2.0` after fixing the parquet import path.',
+    remediationKind: 'command',
+    verificationPath: 'cargo tree -d | grep arrow must list a single version set.',
+    confidenceClass: 'deterministic',
+    confidence: 100,
+    detection: 'duplicate version scan over Cargo.lock',
+    measurementStatus: 'measured',
+  },
+  {
+    id: 'ATL-DEP-004',
+    section: 'Dependencies',
+    severity: 'info',
+    title: 'feature unification pulls datafusion into atlas-cli',
+    description:
+      'resolver v1 unifies features across the workspace, so atlas-cli compiles datafusion features it never uses (+2.9s).',
+    evidence: [
+      { label: 'Resolver', value: 'v1', source: 'Cargo.toml [workspace]' },
+      { label: 'Extra cost', value: '+2.9s per clean build', source: 'feature graph diff' },
+    ],
+    affected: ['atlas-cli', 'datafusion'],
+    impact: 'CLI builds compile analytics features they do not use',
+    impactSeconds: 2.9,
+    recommendation: 'Adopt resolver = "2" in the workspace and enable datafusion features only where needed.',
+    remediationKind: 'config',
+    verificationPath: 'cargo tree -e features -i atlas-cli | grep datafusion must return empty after resolver v2.',
+    confidenceClass: 'high',
+    confidence: 88,
+    detection: 'feature-unification scan',
+    measurementStatus: 'estimated',
+  },
+  {
+    id: 'ATL-WRK-005',
+    section: 'Workspace',
+    severity: 'warning',
+    title: 'atlas-common is a change-amplifier',
+    description:
+      'atlas-common changed 28 times in 90 days and 18 crates depend on it — every touch re-invalidates 78% of the workspace.',
+    evidence: [
+      { label: 'Dependents', value: '18 crates', source: 'cargo metadata graph' },
+      { label: 'Changes (90d)', value: '28 commits', source: 'git log' },
+      { label: 'Fan-out', value: '11 direct', source: 'ferrix graph' },
+    ],
+    affected: ['atlas-common', '+17 more'],
+    impact: 'Highest churn × widest fan-out combination in the workspace',
+    impactSeconds: 6.2,
+    recommendation:
+      'Extract atlas-bytes + atlas-schema (stable) from atlas-common; keep glue code in atlas-common (volatile).',
+    remediationKind: 'architecture',
+    verificationPath: 'Experiment: blast radius of atlas-common/src/bytes.rs drops 18 → ≤5 crates.',
+    confidenceClass: 'high',
+    confidence: 84,
+    detection: 'change-frequency × fan-out correlation',
+    measurementStatus: 'estimated',
+    experimentEligible: true,
+  },
+  {
+    id: 'ATL-IDE-006',
+    section: 'IDE',
+    severity: 'info',
+    title: 'rust-analyzer check hangs on atlas-query tests',
+    description:
+      'flycheck runs cargo check --all-targets, compiling test binaries of atlas-query (9.1s) on every save — blocking diagnostics for 14 developers.',
+    evidence: [
+      { label: 'Flycheck time', value: 'p50 9.1s', source: 'rust-analyzer stats' },
+      { label: 'Developers affected', value: '14', source: 'IDE telemetry' },
+    ],
+    affected: ['atlas-query', 'rust-analyzer'],
+    impact: 'Slow in-IDE feedback loop during query-planner work',
+    recommendation: 'Set rust-analyzer check.invocationStrategy = once and exclude atlas-query tests from flycheck.',
+    remediationKind: 'config',
+    verificationPath: 'rust-analyzer flycheck p50 must drop below 4s.',
+    confidenceClass: 'medium',
+    confidence: 72,
+    detection: 'IDE telemetry sampling',
+    measurementStatus: 'measured',
+  },
+  {
+    id: 'ATL-ASY-007',
+    section: 'Async',
+    severity: 'warning',
+    title: 'blocking file IO inside atlas-ingest runtime worker',
+    description:
+      'atlas-ingest/src/writer.rs:112 calls std::fs::write on the tokio worker thread — p95 stall 210ms under ingest load.',
+    evidence: [
+      { label: 'Location', value: 'atlas-ingest/src/writer.rs:112', source: 'static analysis' },
+      { label: 'Worker stall', value: 'p95 210ms', source: 'tokio-console telemetry' },
+    ],
+    affected: ['atlas-ingest', 'tokio runtime'],
+    impact: 'Ingest latency spikes under load; no build-time claim',
+    recommendation: 'Wrap writer IO in tokio::task::spawn_blocking or move to tokio::fs.',
+    remediationKind: 'patch',
+    verificationPath: 'tokio-console: ingest writer stall p95 must drop below 10ms.',
+    confidenceClass: 'deterministic',
+    confidence: 100,
+    detection: 'async blocking-call static analysis',
+    measurementStatus: 'measured',
+  },
+]
+
+export const DOCTOR_ATLAS: DoctorReport = {
+  workspace: WORKSPACE_ATLAS.name,
+  profile: WORKSPACE_ATLAS.profile,
+  toolchain: WORKSPACE_ATLAS.toolchain,
+  buildTime: 52.8,
+  estimatedRange: [31, 40],
+  confidence: 78,
+  criticalPath: [
+    { name: 'atlas-store', seconds: 14.2, kind: 'workspace' },
+    { name: 'atlas-query', seconds: 9.6, kind: 'workspace' },
+    { name: 'proc-macro chain', seconds: 6.8, kind: 'proc-macro' },
+    { name: 'tokio', seconds: 4.4, kind: 'external' },
+    { name: 'arrow (×2)', seconds: 5.2, kind: 'external' },
+    { name: 'linking + codegen', seconds: 12.6, kind: 'linker' },
+  ],
+  findings: ATLAS_FINDINGS,
+  scannedAt: WORKSPACE_ATLAS.lastScan,
+  phases: [
+    { label: 'Parsing cargo metadata', detail: '23 workspace crates · 96 edges' },
+    { label: 'Reading Cargo.lock', detail: '2 duplicate version groups found' },
+    { label: 'Ingesting build timings', detail: 'cargo build --timings · dev profile · 52.8s' },
+    { label: 'Analyzing git history', detail: '861 commits · 90 days' },
+    { label: 'Profiling proc macros', detail: '1 version set · 6 derive crates' },
+    { label: 'Checking feature unification', detail: 'resolver v1 · datafusion pulled into atlas-cli' },
+    { label: 'Correlating CI telemetry', detail: '18 jobs · 41% cache miss' },
+    { label: 'Consulting engineering graph', detail: 'F-EIR snapshot c7d21ef · verified' },
+  ],
+  summary: { developerBuild: '−27%', ciBuild: '−33%', diskUsage: '−19%' },
+  criticalPathExplanation: 'atlas-store blocks 18 crates; the core/lsm split proposal is experiment-ready',
+  criticalPathCaption:
+    'arrow compiled twice (ATL-DEP-003) · linking includes codegen · dev profile debug level 2',
+}
+
+// --------------------------------------------------------------- atlas: graph
+
+const W_A = (over: Partial<GraphNode> & { id: string }): GraphNode => ({
+  band: 'lib',
+  kind: 'workspace',
+  buildTime: 3,
+  fanIn: 1,
+  fanOut: 2,
+  downstream: 1,
+  changeFreq: 5,
+  ...over,
+})
+
+const E_A = (id: string, buildTime: number, over: Partial<GraphNode> = {}): GraphNode => ({
+  id,
+  band: 'external',
+  kind: 'external',
+  buildTime,
+  fanIn: 1,
+  fanOut: 0,
+  downstream: 0,
+  changeFreq: 0,
+  ...over,
+})
+
+export const GRAPH_NODES_ATLAS: GraphNode[] = [
+  W_A({ id: 'atlas-cli', band: 'bin', buildTime: 2.1, fanIn: 0, fanOut: 3, downstream: 0, changeFreq: 6 }),
+  W_A({ id: 'atlas-server', band: 'bin', buildTime: 3.4, fanIn: 0, fanOut: 4, downstream: 0, changeFreq: 9 }),
+  W_A({ id: 'atlas-ingest', buildTime: 5.8, fanIn: 2, fanOut: 3, downstream: 6, changeFreq: 14 }),
+  W_A({ id: 'atlas-query', buildTime: 9.6, fanIn: 3, fanOut: 4, downstream: 8, changeFreq: 19, critical: true }),
+  W_A({ id: 'atlas-store', buildTime: 14.2, fanIn: 4, fanOut: 6, downstream: 18, changeFreq: 41, critical: true }),
+  W_A({ id: 'atlas-common', buildTime: 4.6, fanIn: 11, fanOut: 8, downstream: 18, changeFreq: 28, critical: true }),
+  W_A({ id: 'atlas-schema', buildTime: 2.2, fanIn: 9, fanOut: 0, downstream: 12, changeFreq: 3 }),
+  W_A({ id: 'atlas-bytes', buildTime: 1.4, fanIn: 7, fanOut: 0, downstream: 9, changeFreq: 2 }),
+  W_A({ id: 'atlas-parquet', buildTime: 3.7, fanIn: 2, fanOut: 2, downstream: 4, changeFreq: 7 }),
+  W_A({ id: 'atlas-lsm', buildTime: 6.1, fanIn: 2, fanOut: 2, downstream: 5, changeFreq: 22 }),
+  W_A({ id: 'atlas-sst', buildTime: 3.2, fanIn: 3, fanOut: 1, downstream: 4, changeFreq: 8 }),
+  W_A({ id: 'atlas-compaction', buildTime: 2.9, fanIn: 2, fanOut: 1, downstream: 2, changeFreq: 6 }),
+  W_A({ id: 'atlas-planner', buildTime: 4.8, fanIn: 2, fanOut: 2, downstream: 3, changeFreq: 12 }),
+  W_A({ id: 'atlas-exec', buildTime: 3.6, fanIn: 2, fanOut: 1, downstream: 2, changeFreq: 9 }),
+  W_A({ id: 'atlas-proto', kind: 'proc-macro', buildTime: 1.8, fanIn: 6, fanOut: 0, downstream: 10, changeFreq: 1 }),
+  W_A({ id: 'atlas-testkit', band: 'bin', buildTime: 1.9, fanIn: 0, fanOut: 2, downstream: 0, changeFreq: 4 }),
+  E_A('tokio', 4.4, { fanIn: 14, downstream: 16 }),
+  E_A('arrow', 5.2, { fanIn: 4, downstream: 6, duplicate: true, versions: ['53.3.0', '54.2.0'] }),
+  E_A('parquet', 3.9, { fanIn: 3, downstream: 4 }),
+  E_A('datafusion', 6.4, { fanIn: 2, downstream: 3 }),
+  E_A('serde', 2.1, { fanIn: 18, downstream: 21 }),
+  E_A('thiserror', 0.8, { fanIn: 12, downstream: 15 }),
+  E_A('prost', 1.6, { fanIn: 4, downstream: 8, kind: 'proc-macro' }),
+  E_A('clap', 1.2, { fanIn: 2, downstream: 2 }),
+]
+
+export const GRAPH_EDGES_ATLAS: GraphEdge[] = [
+  { from: 'atlas-common', to: 'atlas-schema' },
+  { from: 'atlas-common', to: 'atlas-bytes' },
+  { from: 'atlas-common', to: 'atlas-proto' },
+  { from: 'atlas-common', to: 'atlas-lsm' },
+  { from: 'atlas-common', to: 'atlas-sst' },
+  { from: 'atlas-common', to: 'atlas-planner' },
+  { from: 'atlas-common', to: 'atlas-ingest' },
+  { from: 'atlas-common', to: 'atlas-query' },
+  { from: 'atlas-lsm', to: 'atlas-store' },
+  { from: 'atlas-sst', to: 'atlas-lsm' },
+  { from: 'atlas-compaction', to: 'atlas-lsm' },
+  { from: 'atlas-store', to: 'atlas-query' },
+  { from: 'atlas-store', to: 'atlas-server' },
+  { from: 'atlas-store', to: 'atlas-ingest' },
+  { from: 'atlas-query', to: 'atlas-planner' },
+  { from: 'atlas-query', to: 'atlas-exec' },
+  { from: 'atlas-query', to: 'atlas-server' },
+  { from: 'atlas-planner', to: 'atlas-exec' },
+  { from: 'atlas-parquet', to: 'atlas-ingest' },
+  { from: 'atlas-parquet', to: 'atlas-query' },
+  { from: 'atlas-schema', to: 'atlas-ingest' },
+  { from: 'atlas-schema', to: 'atlas-query' },
+  { from: 'atlas-schema', to: 'atlas-parquet' },
+  { from: 'atlas-bytes', to: 'atlas-sst' },
+  { from: 'atlas-bytes', to: 'atlas-lsm' },
+  { from: 'atlas-proto', to: 'atlas-server' },
+  { from: 'atlas-ingest', to: 'atlas-server' },
+  { from: 'atlas-cli', to: 'atlas-query' },
+  { from: 'atlas-cli', to: 'atlas-store' },
+  { from: 'atlas-testkit', to: 'atlas-lsm' },
+  { from: 'atlas-testkit', to: 'atlas-planner' },
+  { from: 'tokio', to: 'atlas-store' },
+  { from: 'tokio', to: 'atlas-ingest' },
+  { from: 'tokio', to: 'atlas-server' },
+  { from: 'arrow', to: 'atlas-query' },
+  { from: 'arrow', to: 'parquet' },
+  { from: 'parquet', to: 'atlas-parquet' },
+  { from: 'datafusion', to: 'atlas-query' },
+  { from: 'datafusion', to: 'atlas-cli' },
+  { from: 'serde', to: 'atlas-common' },
+  { from: 'thiserror', to: 'atlas-common' },
+  { from: 'prost', to: 'atlas-proto' },
+  { from: 'clap', to: 'atlas-cli' },
+]
+
+export const DUPLICATES_ATLAS: DuplicateGroup[] = [
+  {
+    name: 'arrow',
+    versions: ['53.3.0', '54.2.0'],
+    dependents: ['atlas-ingest', 'atlas-query', 'atlas-parquet'],
+    wastedSeconds: 4.1,
+  },
+  {
+    name: 'bytes',
+    versions: ['1.8.0', '1.9.0'],
+    dependents: ['atlas-common', 'atlas-lsm', 'tokio', 'prost'],
+    wastedSeconds: 0.6,
+  },
+]
+
+export const BLAST_ATLAS: BlastEntry[] = [
+  {
+    file: 'atlas-common/src/bytes.rs',
+    crate: 'atlas-common',
+    affectedWorkspace: 18,
+    chain: ['atlas-common', 'atlas-lsm', 'atlas-store', 'atlas-query', 'atlas-server'],
+    incrementalDelta: 11.8,
+    suggestion: 'Extract atlas-bytes (stable) — expect fan-out to drop to ≤5 (ATL-WRK-005).',
+  },
+  {
+    file: 'atlas-store/src/lsm/memtable.rs',
+    crate: 'atlas-store',
+    affectedWorkspace: 12,
+    chain: ['atlas-store', 'atlas-query', 'atlas-server'],
+    incrementalDelta: 14.2,
+    suggestion: 'The memtable trait is volatile — isolate behind atlas-store-core.',
+  },
+  {
+    file: 'atlas-schema/src/record.rs',
+    crate: 'atlas-schema',
+    affectedWorkspace: 12,
+    chain: ['atlas-schema', 'atlas-common', 'atlas-query', 'atlas-ingest'],
+    incrementalDelta: 5.4,
+    suggestion: 'Schema derives churn — move procedural macros to atlas-proto and version the record wire format.',
+  },
+  {
+    file: 'atlas-ingest/src/writer.rs',
+    crate: 'atlas-ingest',
+    affectedWorkspace: 4,
+    chain: ['atlas-ingest', 'atlas-server'],
+    incrementalDelta: 2.8,
+    suggestion: 'Writer internals are self-contained — safe to iterate quickly (also see ATL-ASY-007).',
+  },
+]
+
+const ATLAS_ADD_DEP_CATALOG: Record<
+  string,
+  {
+    version: string
+    cratesAdded: number
+    procMacrosAdded: number
+    targetMB: number
+    cleanDelta: number
+    incrementalDelta: number
+    ciDelta: number
+    transitiveDeps: number
+    chain: { label: string; note?: string }[]
+    security: { label: string; level: 'info' | 'warn' }[]
+    suggestions: string[]
+  }
+> = {
+  axum: {
+    version: '0.8.1',
+    cratesAdded: 9,
+    procMacrosAdded: 2,
+    targetMB: 8.6,
+    cleanDelta: 3.1,
+    incrementalDelta: 0.8,
+    ciDelta: 12,
+    transitiveDeps: 11,
+    chain: [
+      { label: 'your crate', note: 'Cargo.toml +axum 0.8.1' },
+      { label: 'axum-core', note: '+9 crates, +2 proc-macros' },
+      { label: 'atlas-server', note: 'shared crate — highest blast radius' },
+      { label: '8 downstream crates', note: 'full rebuild triggered' },
+    ],
+    security: [
+      { label: '11 new transitive dependencies', level: 'info' },
+      { label: 'axum-macros executes at build time — review build-script permissions', level: 'warn' },
+    ],
+    suggestions: [
+      'Isolate axum behind an atlas-http crate (keeps handlers decoupled)',
+      'Enable only tokio-rustls features to shrink the tree',
+      'Keep extractor macros behind an optional feature',
+    ],
+  },
+  redb: {
+    version: '2.2.0',
+    cratesAdded: 4,
+    procMacrosAdded: 0,
+    targetMB: 3.2,
+    cleanDelta: 1.9,
+    incrementalDelta: 0.6,
+    ciDelta: 7,
+    transitiveDeps: 3,
+    chain: [
+      { label: 'your crate', note: 'Cargo.toml +redb 2.2.0' },
+      { label: 'redb', note: '+4 crates, pure rust' },
+      { label: 'atlas-store', note: 'engine crate — contained blast radius' },
+      { label: '5 downstream crates', note: 'rebuild triggered' },
+    ],
+    security: [
+      { label: '3 new transitive dependencies', level: 'info' },
+      { label: 'No build scripts detected', level: 'info' },
+    ],
+    suggestions: [
+      'Contained footprint — safe to adopt for the metadata store',
+      'Pin via workspace dependency so the version cannot fork',
+    ],
+  },
+  'tracing-appender': {
+    version: '0.2.3',
+    cratesAdded: 2,
+    procMacrosAdded: 0,
+    targetMB: 0.9,
+    cleanDelta: 0.4,
+    incrementalDelta: 0.1,
+    ciDelta: 2,
+    transitiveDeps: 2,
+    chain: [
+      { label: 'your crate', note: 'Cargo.toml +tracing-appender 0.2.3' },
+      { label: 'tracing stack', note: 'already compiled — zero marginal crates' },
+      { label: 'CI', note: '+2s per clean pipeline' },
+    ],
+    security: [{ label: '2 new transitive dependencies', level: 'info' }],
+    suggestions: ['Cheapest option in this catalog — already inside the tracing ecosystem'],
+  },
+  datafusion: {
+    version: '43.0.0',
+    cratesAdded: 38,
+    procMacrosAdded: 1,
+    targetMB: 61.7,
+    cleanDelta: 8.4,
+    incrementalDelta: 2.9,
+    ciDelta: 44,
+    transitiveDeps: 29,
+    chain: [
+      { label: 'your crate', note: 'Cargo.toml +datafusion 43.0.0' },
+      { label: 'arrow + parquet', note: '+29 transitive crates' },
+      { label: 'atlas-query', note: 'engine crate — widest fan-out' },
+      { label: 'CI', note: '+44s per clean pipeline' },
+    ],
+    security: [
+      { label: '29 new transitive dependencies', level: 'info' },
+      { label: 'Heavy artifact footprint: +61.7 MB target size', level: 'warn' },
+    ],
+    suggestions: [
+      'Adopt behind a query-engine trait to keep planners swappable',
+      'Disable unneeded languages/features (default-features = false)',
+      'Consider a sidecar process instead of an in-process dependency',
+    ],
+  },
+}
+
+const SPLIT_SIM_ATLAS = {
+  source: 'atlas-common',
+  before: {
+    buildSeconds: 24.6,
+    fanOut: 8,
+    downstream: 18,
+    modules: ['bytes', 'schema', 'proto', 'glue'],
+  },
+  proposal: {
+    crates: [
+      { name: 'atlas-bytes', downstream: 9, buildSeconds: 3.1, modules: ['bytes'] },
+      { name: 'atlas-schema', downstream: 12, buildSeconds: 6.4, modules: ['schema', 'proto'] },
+      { name: 'atlas-common', downstream: 4, buildSeconds: 8.9, modules: ['glue'] },
+    ],
+    buildSeconds: 18.4,
+  },
+  improvementPct: 25.2,
+  migration: [
+    'Create atlas-bytes with pure buffer abstractions (no IO)',
+    'Re-point atlas-lsm + atlas-sst to atlas-bytes first',
+    'Move schema + proto into atlas-schema behind a versioned wire format',
+    'Keep glue code in atlas-common (volatile, low fan-out)',
+    'Verify: blast radius of atlas-common drops 18 → ≤4 crates',
+  ],
+}
+
+// ------------------------------------------------------------- atlas: health
+
+export const HEALTH_ATLAS: HealthPayload = {
+  workspace: WORKSPACE_ATLAS.name,
+  crates: WORKSPACE_ATLAS.crates,
+  edges: WORKSPACE_ATLAS.edges,
+  toolchain: WORKSPACE_ATLAS.toolchain,
+  cacheHitRate: 59,
+  kpis: {
+    buildPerformance: { delta: -16, label: 'Build performance' },
+    ciCost: { delta: -9, label: 'CI cost' },
+    dependencyRisk: { delta: -22, label: 'Dependency risk' },
+    prRegressions: { count: 1, label: 'PR build regressions' },
+    architectureDebt: { count: 9, label: 'Architecture debt' },
+    runtimeBottlenecks: { count: 3, label: 'Runtime bottlenecks' },
+  },
+  buildTrend: [
+    { month: 'Apr', clean: 58.9, incremental: 6.1 },
+    { month: 'May', clean: 57.2, incremental: 6.4 },
+    { month: 'Jun', clean: 56.0, incremental: 7.8 },
+    { month: 'Jul', clean: 54.7, incremental: 9.2 },
+    { month: 'Aug', clean: 53.5, incremental: 10.6 },
+    { month: 'Sep', clean: 52.8, incremental: 12.1 },
+  ],
+  slowestCrates: [
+    { name: 'atlas-store', seconds: 14.2, downstream: 18 },
+    { name: 'atlas-query', seconds: 9.6, downstream: 8 },
+    { name: 'atlas-lsm', seconds: 6.1, downstream: 5 },
+    { name: 'atlas-planner', seconds: 4.8, downstream: 3 },
+    { name: 'atlas-common', seconds: 4.6, downstream: 18 },
+    { name: 'atlas-ingest', seconds: 5.8, downstream: 6 },
+  ],
+  activity: [
+    {
+      id: 'b1',
+      time: '1h ago',
+      kind: 'duplicate',
+      title: 'arrow version fork widened',
+      detail: '53.3.0 and 54.2.0 both compile — ATL-DEP-003',
+      severity: 'warning',
+    },
+    {
+      id: 'b2',
+      time: '5h ago',
+      kind: 'amplification',
+      title: 'atlas-common touch → 18-crate rebuild',
+      detail: 'PR #97 — 78% of workspace re-invalidated',
+      severity: 'warning',
+    },
+    {
+      id: 'b3',
+      time: '1d ago',
+      kind: 'experiment',
+      title: 'EXP-031 draft created',
+      detail: 'link-profile slimming (ATL-BLD-002) — awaiting baseline',
+      severity: 'info',
+    },
+    {
+      id: 'b4',
+      time: '2d ago',
+      kind: 'regression',
+      title: 'CI pipeline wall-clock +7%',
+      detail: 'datafusion feature pull-in (ATL-DEP-004)',
+      severity: 'critical',
+    },
+    {
+      id: 'b5',
+      time: '3d ago',
+      kind: 'improvement',
+      title: 'atlas-lsm build time −9%',
+      detail: 'memtable trait split landed — measured 6.7 → 6.1s',
+      severity: 'info',
+    },
+    {
+      id: 'b6',
+      time: '4d ago',
+      kind: 'config',
+      title: 'resolver v2 migration proposed',
+      detail: 'blocks ATL-DEP-004 — scheduled next sprint',
+      severity: 'info',
+    },
+  ],
+  findingCounts: [
+    { section: 'Build', count: 2 },
+    { section: 'Dependencies', count: 2 },
+    { section: 'Workspace', count: 1 },
+    { section: 'IDE', count: 1 },
+    { section: 'Async', count: 1 },
+  ],
+  lastScan: WORKSPACE_ATLAS.lastScan,
+  insight: {
+    text: 'Incremental builds doubled since the async-runtime migration — 6.1s → 12.1s in six months.',
+    question: 'Why did incremental builds regress while clean builds improved?',
+  },
+}
+
+// ----------------------------------------------------------------- selectors
+
+export function getWorkspaces(): WorkspacesPayload {
+  return { workspaces: WORKSPACES, default: WORKSPACES_DEFAULT }
+}
+
+export function getHealth(ws: string): HealthPayload {
+  return ws === 'atlas-consortium' ? HEALTH_ATLAS : HEALTH
+}
+
+export function getDoctor(ws: string): DoctorReport {
+  return ws === 'atlas-consortium' ? DOCTOR_ATLAS : DOCTOR
+}
+
+export function getGraphPayload(ws: string): GraphPayload {
+  if (ws === 'atlas-consortium') {
+    return {
+      nodes: GRAPH_NODES_ATLAS,
+      edges: GRAPH_EDGES_ATLAS,
+      duplicates: DUPLICATES_ATLAS,
+      blast: BLAST_ATLAS,
+      meta: {
+        workspaceCrates: WORKSPACE_ATLAS.crates,
+        totalEdges: WORKSPACE_ATLAS.edges,
+        lastScan: WORKSPACE_ATLAS.lastScan,
+      },
+      catalog: {
+        addDeps: Object.entries(ATLAS_ADD_DEP_CATALOG).map(([id, v]) => ({ id, version: v.version })),
+        splitCandidates: [SPLIT_SIM_ATLAS.source],
+      },
+    }
+  }
+  return {
+    nodes: GRAPH_NODES,
+    edges: GRAPH_EDGES,
+    duplicates: DUPLICATES,
+    blast: BLAST,
+    meta: {
+      workspaceCrates: WORKSPACE.crates,
+      totalEdges: WORKSPACE.edges,
+      lastScan: WORKSPACE.lastScan,
+    },
+    catalog: {
+      addDeps: Object.entries(ADD_DEP_CATALOG).map(([id, v]) => ({ id, version: v.version })),
+      splitCandidates: [SPLIT_SIM.source],
+    },
+  }
+}
+
+export function getImpact(
+  type: 'add-dep' | 'edit-file' | 'split-crate',
+  target: string,
+  ws: string,
+): AddDepImpact | EditFileImpact | SplitImpact | null {
+  const atlas = ws === 'atlas-consortium'
+  if (type === 'add-dep') {
+    const catalog = atlas ? ATLAS_ADD_DEP_CATALOG : ADD_DEP_CATALOG
+    const entry = catalog[target]
+    if (!entry) return null
+    return { kind: 'add-dep', crate: target, ...entry, measurementStatus: 'estimated' }
+  }
+  if (type === 'edit-file') {
+    const blast = atlas ? BLAST_ATLAS : BLAST
+    const entry = blast.find((b) => b.file === target)
+    if (!entry) return null
+    return {
+      kind: 'edit-file',
+      file: entry.file,
+      crate: entry.crate,
+      affectedWorkspace: entry.affectedWorkspace,
+      chain: entry.chain,
+      incrementalDelta: entry.incrementalDelta,
+      ciDelta: Math.round(entry.incrementalDelta * 1.6 * 10) / 10,
+      notes: [
+        `Blast radius: ${entry.affectedWorkspace} workspace crates re-invalidate`,
+        `Chain: ${entry.chain.join(' → ')}`,
+        'Estimates derived from build telemetry × graph traversal',
+      ],
+      suggestion: entry.suggestion,
+      measurementStatus: 'estimated',
+    }
+  }
+  if (type === 'split-crate') {
+    const sim = atlas ? SPLIT_SIM_ATLAS : SPLIT_SIM
+    return {
+      kind: 'split-crate',
+      source: sim.source,
+      before: sim.before,
+      proposal: sim.proposal,
+      improvementPct: sim.improvementPct,
+      migration: sim.migration,
+      measurementStatus: 'estimated',
+    }
+  }
+  return null
+}
+
+export function getExperiments(ws: string): ExperimentsPayload {
+  // experiments are workspace-scoped: only helios-platform has recorded runs
+  return { workspace: ws, experiments: ws === 'atlas-consortium' ? [] : EXPERIMENTS }
 }

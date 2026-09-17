@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
-import { DOCTOR } from '@/lib/ferrix/data'
+import { NextRequest, NextResponse } from 'next/server'
+import { getDoctor } from '@/lib/ferrix/data'
 
-export async function GET() {
-  return NextResponse.json(DOCTOR)
+export async function GET(req: NextRequest) {
+  const ws = req.nextUrl.searchParams.get('ws') ?? 'helios-platform'
+  return NextResponse.json(getDoctor(ws))
 }

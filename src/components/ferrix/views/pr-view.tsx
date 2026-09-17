@@ -25,6 +25,7 @@ import type { PRAnalysis } from '@/lib/ferrix/types'
 import { ExplainDialog } from '../explain-dialog'
 import { FerrixLogo } from '../logo'
 import { ConfidenceBadge, CountUp, MeasurementBadge, Panel, SectionHeading, StatusDot } from '../shared'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import type { ViewProps } from '../view-types'
 
 /* ----------------------------------------------------- comment markdown */
@@ -68,6 +69,7 @@ const CAUSE_ICON: Record<PRAnalysis['causeChain'][number]['kind'], { Icon: typeo
 export default function PRView({ onNavigate }: ViewProps) {
   const { toast } = useToast()
   const pr = PR_184
+  const activeWorkspace = useWorkspaceStore((s) => s.active)
 
   const totalAdditions = pr.files.reduce((acc, f) => acc + f.additions, 0)
   const totalDeletions = pr.files.reduce((acc, f) => acc + f.deletions, 0)
@@ -104,6 +106,16 @@ export default function PRView({ onNavigate }: ViewProps) {
         title="PR Analysis"
         description="Build regression triage — every number traces back to evidence, and every fix runs as an experiment first."
       />
+
+      {activeWorkspace !== 'helios-platform' && (
+        <p className="flex items-start gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-[11.5px] leading-snug text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-primary/70" aria-hidden />
+          PR telemetry is currently indexed for{' '}
+          <span className="font-mono text-foreground/85">helios-platform</span> — the regression guard for{' '}
+          <span className="font-mono text-foreground/85">{activeWorkspace}</span> lands with its first CI correlation
+          scan.
+        </p>
+      )}
 
       {/* 1 — header */}
       <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5">

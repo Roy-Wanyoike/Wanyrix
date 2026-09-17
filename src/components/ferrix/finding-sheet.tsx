@@ -35,7 +35,7 @@ const REMEDIATION_META: Record<RemediationKind, { icon: LucideIcon; label: strin
   patch: { icon: FileDiff, label: 'patch' },
 }
 
-const EXPERIMENT_FINDINGS = new Set(['FER-BLD-001', 'FER-WRK-007'])
+// experiment eligibility comes from the Finding payload (issue #34)
 
 /**
  * Evidence-first drill-down for a single FER-xxx finding (issue #25).
@@ -203,7 +203,7 @@ export function FindingSheet({
                 <ChevronRight className="size-3" aria-hidden />
               </Button>
               <div className="flex items-center gap-2">
-                {EXPERIMENT_FINDINGS.has(finding.id) && (
+                {finding.experimentEligible && (
                   <Button
                     size="sm"
                     variant="outline"

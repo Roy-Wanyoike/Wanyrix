@@ -270,17 +270,17 @@ export default function OverviewView({ onNavigate }: ViewProps) {
             </ResponsiveContainer>
           </div>
 
-          {/* insight strip */}
+          {/* insight strip — payload-driven copy (issue #34) */}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
             <p className="flex items-start gap-2 text-[12.5px] leading-snug text-amber-200">
               <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-400" />
-              Average PR now causes 4.7× more compilation work than six months ago.
+              {health.insight?.text ?? 'Build telemetry refreshed — open the Build Doctor for the latest evidence.'}
             </p>
             <div className="flex items-center gap-2">
               <ExplainDialog
                 kind="impact"
                 context={JSON.stringify({ buildTrend: health.buildTrend, kpis: health.kpis })}
-                question="Why is the workspace build time trending up and what does it cost us?"
+                question={health.insight?.question ?? 'Why is the workspace build time trending up and what does it cost us?'}
               />
               <Button
                 size="sm"
