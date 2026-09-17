@@ -1263,13 +1263,13 @@ export const ISSUES: IssueItem[] = [
   },
   {
     id: 'FER-110',
-    ghIssue: 10,
+    ghIssue: 19,
     title: 'Round 2 — ⌘K command palette, ferrix storage report, styling pass',
     gate: 'Gate 71.10 · Storage',
     labels: ['frontend', 'governance'],
     state: 'merged',
     pr: {
-      number: 19,
+      number: 20,
       branch: 'feat/round2-palette-storage-polish',
       title: 'feat: command palette + storage report + polish',
       checks: [
