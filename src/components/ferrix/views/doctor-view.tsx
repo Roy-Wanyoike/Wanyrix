@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Boxes,
+  ClipboardCopy,
   Copy,
   FileDiff,
   FlaskConical,
@@ -361,6 +362,49 @@ export default function DoctorView({ onNavigate }: ViewProps) {
     )
   }
 
+  /* human-readable markdown report — same facts as --json, Gate 11 equivalence */
+  const markdown = report
+    ? [
+        `# Ferrix Build Analysis — ${report.workspace}`,
+        '',
+        `Development build: **${report.buildTime}s** (measured · cargo build --timings)`,
+        `Estimated after fixes: **${report.estimatedRange[0]}–${report.estimatedRange[1]}s** (estimated, confidence ${report.confidence}%)`,
+        '',
+        '## Critical path',
+        ...report.criticalPath.map((s) => `- ${s.name}: ${s.seconds}s`),
+        '',
+        '## Findings',
+        ...(report.findings ?? []).flatMap((f) => [
+          `### ${f.id} · ${f.severity} · ${f.title} [${f.measurementStatus}]`,
+          f.description,
+          '',
+          '**Evidence**',
+          ...f.evidence.map((e) => `- ${e.label}: ${e.value} _(src: ${e.source})_`),
+          `- Impact: ${f.impact}`,
+          `- Recommendation: ${f.recommendation}`,
+          `- Verification: ${f.verificationPath}`,
+          '',
+        ]),
+        '---',
+        '_Estimated values — verified only via ferrix experiment (Gate 21)._',
+      ].join('\n')
+    : ''
+
+  const copyMarkdown = () => {
+    if (!navigator.clipboard) {
+      toast({ title: 'Copy failed', description: 'Clipboard is not available in this context.' })
+      return
+    }
+    navigator.clipboard.writeText(markdown).then(
+      () =>
+        toast({
+          title: 'Report copied as markdown',
+          description: 'Human/JSON outputs expose equivalent underlying facts (Gate 11).',
+        }),
+      () => toast({ title: 'Copy failed', description: 'Clipboard permission denied.' }),
+    )
+  }
+
   if (isLoading) return <LoadingSkeleton />
   if (isError || !report)
     return (
@@ -392,6 +436,17 @@ export default function DoctorView({ onNavigate }: ViewProps) {
                 --json
               </ToggleGroupItem>
             </ToggleGroup>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={copyMarkdown}
+              disabled={!scanDone}
+              title="Copy the human report as markdown (Gate 11)"
+            >
+              <ClipboardCopy className="size-4" />
+              <span className="hidden sm:inline">Copy report (md)</span>
+            </Button>
             <Button size="sm" onClick={startScan} disabled={!scanDone} className="gap-2">
               <RefreshCw className={`size-4 ${!scanDone ? 'animate-spin' : ''}`} />
               Run ferrix doctor

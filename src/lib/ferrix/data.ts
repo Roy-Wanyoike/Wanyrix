@@ -1261,6 +1261,27 @@ export const ISSUES: IssueItem[] = [
     verification: '20 gates, 17 blocking conditions, GO decision rendered with evidence',
     repoUrl: REPO_URL,
   },
+  {
+    id: 'FER-110',
+    ghIssue: 10,
+    title: 'Round 2 — ⌘K command palette, ferrix storage report, styling pass',
+    gate: 'Gate 71.10 · Storage',
+    labels: ['frontend', 'governance'],
+    state: 'merged',
+    pr: {
+      number: 19,
+      branch: 'feat/round2-palette-storage-polish',
+      title: 'feat: command palette + storage report + polish',
+      checks: [
+        { name: 'lint', status: 'pass' },
+        { name: 'browser-qa', status: 'pass' },
+      ],
+      additions: 640,
+      deletions: 24,
+    },
+    verification: '⌘K palette navigates all views · storage dialog bounded/inspectable · QA sweep error-free',
+    repoUrl: REPO_URL,
+  },
 ]
 
 // ---------------------------------------------------------------------------

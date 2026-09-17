@@ -12,6 +12,7 @@ import type {
   ImpactPayload,
   IssuesPayload,
   ExperimentsPayload,
+  StoragePayload,
 } from './types'
 
 async function getJson<T>(url: string): Promise<T> {
@@ -60,6 +61,10 @@ export function useGates() {
 
 export function useIssues() {
   return useQuery<IssuesPayload>({ queryKey: ['issues'], queryFn: () => getJson('/api/ferrix/issues') })
+}
+
+export function useStorage() {
+  return useQuery<StoragePayload>({ queryKey: ['storage'], queryFn: () => getJson('/api/ferrix/storage') })
 }
 
 export function useExplain(): UseMutationResult<ExplainResponse, Error, ExplainRequest> {
