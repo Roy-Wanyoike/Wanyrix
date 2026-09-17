@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Check,
   ClipboardCopy,
+  Download,
   FileDiff,
   Package,
   RotateCcw,
@@ -21,6 +22,13 @@ import {
 } from '@/components/ui/sheet'
 import { useToast } from '@/hooks/use-toast'
 import { useDiffQueueStore, type DiffEntry } from '@/lib/ferrix/diff-store'
+import {
+  buildPatchBundle,
+  buildUnifiedDiff,
+  bundleFilename,
+  downloadText,
+  patchFilename,
+} from '@/lib/ferrix/patch'
 import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import { cn } from '@/lib/utils'
 
@@ -79,6 +87,18 @@ function DiffBlock({ entry, index }: { entry: DiffEntry; index: number }) {
     )
   }
 
+  const downloadPatch = () => {
+    try {
+      downloadText(patchFilename(entry), buildUnifiedDiff(entry))
+      toast({
+        title: 'Patch downloaded',
+        description: `${patchFilename(entry)} — a unified diff of the proposal document. Review before applying (Gate 19).`,
+      })
+    } catch {
+      toast({ title: 'Download failed', description: 'Could not generate the patch in this context.' })
+    }
+  }
+
   return (
     <motion.li
       initial={{ opacity: 0, y: 8 }}
@@ -133,6 +153,16 @@ function DiffBlock({ entry, index }: { entry: DiffEntry; index: number }) {
         <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[11px]" onClick={copy}>
           {copied ? <Check className="size-3" /> : <ClipboardCopy className="size-3" />}
           Copy proposed change
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1.5 text-[11px]"
+          onClick={downloadPatch}
+          aria-label={`Download unified diff patch for ${entry.target}`}
+        >
+          <Download className="size-3" />
+          .patch
         </Button>
         {entry.status === 'pending' ? (
           <>
@@ -216,6 +246,28 @@ export function DiffQueueSheet({
               Reviewable proposed changes queued by Ferrix. Ferrix never modifies your repository
               silently — every patch is presented as a diff for human review (Gate 19).
             </SheetDescription>
+            {pending.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 h-7 w-fit gap-1.5 text-[11px]"
+                onClick={() => {
+                  try {
+                    downloadText(bundleFilename(activeWs), buildPatchBundle(pending))
+                    toast({
+                      title: `Bundle downloaded — ${pending.length} diff${pending.length === 1 ? '' : 's'}`,
+                      description:
+                        'One .patch file, one Index block per proposal. Review each block before applying (Gate 19).',
+                    })
+                  } catch {
+                    toast({ title: 'Download failed', description: 'Could not generate the bundle.' })
+                  }
+                }}
+              >
+                <Download className="size-3" />
+                Download all ({pending.length})
+              </Button>
+            )}
           </SheetHeader>
         </div>
 
@@ -276,7 +328,7 @@ export function DiffQueueSheet({
           <div className="border-t border-border/60 bg-card/60 px-5 py-2.5">
             <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
               <Package className="size-3 shrink-0" aria-hidden />
-              queue persists locally per workspace · applied/dismissed are review states only
+              queue persists locally per workspace · .patch = proposal document only · apply manually (Gate 19)
             </p>
           </div>
         )}
