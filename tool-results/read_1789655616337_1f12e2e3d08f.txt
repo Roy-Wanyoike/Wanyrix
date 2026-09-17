@@ -319,3 +319,36 @@
    319→- Every major view is now workspace-scoped: overview, doctor, graph, simulator, experiments (empty on atlas), diagnostics (round 7), PR analysis (round 8). Scope notes are gone — no view pretends to show another workspace's data
    320→- Risks/next: GitHub sync is the single largest outstanding obligation — next egress window: create issues for rounds 7+8 features (workspace diagnostics, storage mutation, patch cross-refs, PR #97 scoping, storage rebuild), open PR(s) from the two queued commits, then board rows FER-120..124; a11y contrast audit still pending; board row derivation could move server-side
    321→
+   322→---
+   323→Task ID: 19 (cron round 9)
+   324→Agent: Z.ai Code (lead, webDevReview cron)
+   325→Task: QA assessment → round-9: version-upgrade impact simulation, workspace Markdown report export, a11y/reduced-motion pass + light-mode contrast fix
+   326→
+   327→Work Log:
+   328→- Read worklog.md → project STABLE after round 8. QA sweep first: dev server alive, lint clean, fresh-session agent-browser 9-view cycle 0 console errors, workspace switch round-trip clean. GitHub egress STILL 403 (no token) → issue/PR pipeline remains deferred; 3 commits now queued on local main (rounds 7/8/9)
+   329→- Feature A — version-upgrade impact simulation (new 2nd simulator tab "Upgrade a dependency"):
+   330→  - New UpgradeImpact type: semver (major|minor|patch), duplicateBefore flag, recompileCrates, clean/incremental/ci deltas (NEGATIVE deltas allowed), breaking[], migrations[{code,note}], notes, suggestions
+   331→  - Catalogs: helios = tokio 1.40→1.41.1 (minor), serde patch, wasm-bindgen patch (cli pairing warning), hyper 0.14→1.5.2 MAJOR (3 breaking changes + 2 copyable migration snippets); atlas = bytes 1.8.0→1.9.0 (duplicateBefore: true, ciDelta −4s — THE de-dup win reversing the PR #97 regression), sqlx patch, prost patch
+   332→  - ImpactCatalog.upgrades served per workspace via graph payload; impact route + useImpact widened to 'upgrade-dep'; DiffSource gains 'simulator:upgrade-dep' (TS caught the missing label — fixed)
+   333→  - UI: UpgradeCatalogCard (from→to + semver badge color-coded major=red/minor=amber/patch=teal + CI delta preview, green when negative); UpgradeReport = version-transition graphic with animated pulse (useReducedMotion-aware), de-dup emerald callout tying to PR #97, tiles, breaking-change list, migration code blocks with copy buttons (Gate-19 toast), engine notes, suggestions → queue-as-diff (estimate strings flip to "de-dup win" framing for negatives)
+   334→  - ImpactTile now auto-renders negative values as emerald improvements with TrendingDown icon + glow
+   335→- Feature B — workspace Markdown report export:
+   336→  - New src/lib/ferrix/report.ts buildWorkspaceReport(ws): assembles full report from the SAME server getters as the API routes (health, doctor w/ findings sorted by severity incl. per-claim evidence + verification path, graph duplicates/blast, PR analysis, experiments table, gates verdict + all 20 gates, live storage state incl. sinceGcMin) + honesty-notes footer (Gate 11/19/21)
+   337→  - GET /api/ferrix/report?ws= returns {filename, markdown, bytes}; useReportExport mutation fetches + downloadText + toast (filename · KB · sections); topbar Report button (Loader2 spinner while pending, aria-label names the workspace) + ⌘K "Export workspace report"
+   338→  - VERIFIED: downloaded ferrix-report-atlas-consortium-2026-09-17.md (12.8 KB) — structure inspected, 7 findings w/ evidence, all 20 gates, storage table
+   339→- Feature C — a11y + styling (mandatory):
+   340→  - Contrast audit via agent-browser eval (WCAG ratio computation over p/span/button/td… on Overview/Doctor/Simulator/Scorecard/PR views): DARK 0 failures, LIGHT 0 failures on existing views
+   341→  - Skip-to-content link (first Tab stop, focus-visible styled, onClick explicitly focuses #main-content which gained tabIndex={-1}; plain anchor-default did NOT move focus — deterministic handler verified via keyboard Tab+Enter)
+   342→  - prefers-reduced-motion: global CSS kill-switch (animation/transition/scroll-behavior) + useReducedMotion() for the framer-motion version-transition pulse
+   343→  - LIGHT-MODE CONTRAST BUG found in my own new UI via screenshot QA: breaking-change titles (text-red-200/95) and de-dup callout body (text-emerald-100/80) were near-invisible on light tint backgrounds — the round-6 override block didn't cover red-200/emerald-100. FIXED by extending the block (red-200→#bf000f, emerald-100→#007956); measured 5.34:1 on the breaking titles; screenshot-verified
+   344→  - TURBOPACK QUIRK (round-9 flavor): globals.css edits can compile only PARTIALLY when two edits land close together — served chunk had emerald-100 but not red-200 until a further content change forced recompile; chunk URL never changes, so also re-verify with a FRESH probe in the correct theme (my first "stale CSS" diagnosis was wrong — the probe session had silently resolved DARK, where overrides legitimately don't apply; always assert isDark when probing theme-scoped CSS)
+   345→- Final QA: fresh session 9-view cycle in LIGHT and DARK, 0 console errors; atlas bytes de-dup + helios hyper breaking flows verified end-to-end (incl. queue-as-diff → Pending-diffs badge=1); report export via topbar AND palette (two files downloaded); skip-link keyboard flow verified; mobile 390px spot check; lint clean; tsc clean (src/ only — skills/ error is pre-existing and out of scope); dark restored
+   346→- Env notes: fresh agent-browser profiles default to DARK (no localStorage) — light-mode QA must explicitly toggle first; Radix tab switching still needs CDP ref clicks; view state (simulator tab) intentionally resets on workspace switch (AnimatePresence key=ws:view remount — by-design "no stale selections" semantics)
+   347→
+   348→Stage Summary:
+   349→- Status: STABLE + 1 local commit (964 insertions, 12 files); push + issues/PRs + board rows FER-123..125 still deferred until GitHub egress returns (round-7/8/9 commits queued in order)
+   350→- New capabilities: semver-aware version-upgrade cost simulation incl. negative-delta (de-dup WIN) scenarios that close the loop on PR #97; one-click full workspace report (Markdown, evidence-preserving, honesty-footnote); WCAG-clean both themes incl. new surfaces; keyboard skip path; reduced-motion respected
+   351→- Verification highlights: report parses + sections complete; negative tiles + de-dup callout render in both themes; contrast 5.34:1 after fix; 0 errors across both theme cycles
+   352→- Risks/notes: report storage section resets with dev-server restart (documented in footer); report experiments table is empty on atlas by design; upgrade catalog is fixture-sized (4 helios / 3 atlas scenarios)
+   353→- Next-phase suggestions: GitHub sync first priority when egress returns (3 commits → issues #45+#46+#47-equivalents → PRs → board rows FER-123..125); report could gain JSON flavor per CLI --json contract; finding-detail deep links FROM report IDs back into app; upgrade-dep could auto-suggest pairing with duplicates panel data; consider persisting simulator tab across workspace switches if users find the reset jarring
+   354→
