@@ -1,7 +1,7 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
-import { Database, HardDrive, History, Layers, ScrollText } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Database, HardDrive, History, Layers, ScrollText, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,27 +11,51 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Progress } from '@/components/ui/progress'
-import { useStorage } from '@/lib/ferrix/hooks'
+import { useReclaimCaches, useStorage } from '@/lib/ferrix/hooks'
+import type { StorageRow } from '@/lib/ferrix/types'
+import { cn } from '@/lib/utils'
 import { StatusDot } from './shared'
 import { useToast } from '@/hooks/use-toast'
 
 const ROW_ICONS = [Database, Layers, HardDrive, History, ScrollText]
 
+/** Accent per row family — mirrors the storage semantics (durable vs ephemeral). */
+function rowAccent(row: StorageRow): { bar: string; chip: string } {
+  if (row.label.startsWith('Database')) return { bar: 'from-amber-500/80 to-amber-400/50', chip: 'text-amber-300' }
+  if (row.label.startsWith('Indexes')) return { bar: 'from-zinc-400/80 to-zinc-300/40', chip: 'text-zinc-300' }
+  if (row.label.startsWith('Artifact')) return { bar: 'from-primary/80 to-primary/40', chip: 'text-primary' }
+  if (row.label.startsWith('Analysis')) return { bar: 'from-teal-500/80 to-teal-400/40', chip: 'text-teal-300' }
+  return { bar: 'from-violet-500/70 to-violet-400/40', chip: 'text-violet-300' }
+}
+
 /**
  * `ferrix storage` — Gate 71.10: storage must be bounded, inspectable and
- * safely reclaimable. Opened from the status footer chip.
+ * safely reclaimable. Opened from the status footer chip. The reclaim CTA is
+ * a REAL mutation: POST /api/ferrix/storage/reclaim frees the reclaimable
+ * rows server-side; regrowth is simulated and labeled.
  */
 export function StorageDialog({ children }: { children: React.ReactNode }) {
   const { data, isLoading, isError, refetch } = useStorage()
+  const reclaim = useReclaimCaches()
   const { toast } = useToast()
-  const queryClient = useQueryClient()
 
-  const reclaim = () => {
-    queryClient.invalidateQueries({ queryKey: ['storage'] })
-    toast({
-      title: 'Cache reclaimed',
-      description: '108 MB of safely reclaimable analysis cache + rotated logs removed. Indexes and snapshots preserved.',
+  const reclaimableMB = data ? Math.round(data.rows.filter((r) => r.reclaimable).reduce((s, r) => s + r.sizeMB, 0)) : 0
+  const nothingToReclaim = reclaimableMB < 1
+
+  const onReclaim = () => {
+    reclaim.mutate(undefined, {
+      onSuccess: (res) => {
+        toast({
+          title: `Reclaimed ${res.reclaimedMB} MB`,
+          description:
+            res.detail.length > 0
+              ? `${res.detail.join(' · ')}. Indexes and snapshots preserved.`
+              : 'Caches were already empty — they regrow as ferrix scans.',
+        })
+      },
+      onError: (err) => {
+        toast({ title: 'Reclaim failed', description: err.message })
+      },
     })
   }
 
@@ -72,6 +96,7 @@ export function StorageDialog({ children }: { children: React.ReactNode }) {
               {data.rows.map((row, i) => {
                 const Icon = ROW_ICONS[i % ROW_ICONS.length]
                 const pct = Math.round((row.sizeMB / data.totalMB) * 100)
+                const accent = rowAccent(row)
                 return (
                   <div key={row.label} className="space-y-1.5">
                     <div className="flex items-center gap-2">
@@ -86,7 +111,21 @@ export function StorageDialog({ children }: { children: React.ReactNode }) {
                         </span>
                       )}
                     </div>
-                    <Progress value={pct} className="h-1" />
+                    <div
+                      className="h-1.5 overflow-hidden rounded-full bg-muted/60"
+                      role="progressbar"
+                      aria-valuenow={pct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${row.label}: ${row.sizeMB} MB, ${pct}% of total storage`}
+                    >
+                      <motion.div
+                        className={cn('h-full rounded-full bg-gradient-to-r', accent.bar)}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.max(pct, 1)}%` }}
+                        transition={{ duration: 0.6, delay: i * 0.07, ease: 'easeOut' }}
+                      />
+                    </div>
                     <p className="pl-5 text-[10px] text-muted-foreground">
                       {row.note} · {pct}% of total
                     </p>
@@ -106,11 +145,32 @@ export function StorageDialog({ children }: { children: React.ReactNode }) {
               </p>
               <p>retention: {data.retention}</p>
               <p>last GC: {new Date(data.lastGc).toLocaleString()}</p>
+              {data.reclaimedTotalMB !== undefined && data.reclaimedTotalMB > 0 && (
+                <p className="flex items-center gap-1.5">
+                  <Sparkles className="size-3 shrink-0 text-teal-300" aria-hidden />
+                  cumulative reclaimed: {data.reclaimedTotalMB} MB · {data.sinceGcMin ?? 0} min since GC
+                </p>
+              )}
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={reclaim}>
-                Reclaim caches (safe)
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {nothingToReclaim
+                  ? 'nothing reclaimable — caches regrow as scans run'
+                  : `${reclaimableMB} MB safely reclaimable`}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={onReclaim}
+                disabled={reclaim.isPending || nothingToReclaim}
+              >
+                {reclaim.isPending
+                  ? 'Reclaiming…'
+                  : reclaimableMB > 0
+                    ? `Reclaim caches (${reclaimableMB} MB)`
+                    : 'Reclaim caches'}
               </Button>
             </div>
           </div>

@@ -234,6 +234,8 @@ export interface AsyncSegment {
   kind: 'compute' | 'db' | 'network' | 'background' | 'blocked'
   span: string
   note?: string
+  /** overlaps another segment's window — rendered with a concurrency cue */
+  concurrent?: boolean
 }
 
 export interface AsyncTask {
@@ -242,6 +244,8 @@ export interface AsyncTask {
   parent?: string
   state: 'running' | 'awaited' | 'resumed' | 'done' | 'blocked'
   detail: string
+  /** doctor finding this task relates to (deep link target) */
+  findingId?: string
 }
 
 /** GET /api/ferrix/diagnostics */
@@ -396,6 +400,10 @@ export interface StoragePayload {
   lastGc: string
   retention: string
   bound: string
+  /** cumulative MB reclaimed across all GC runs (server-tracked, simulated) */
+  reclaimedTotalMB?: number
+  /** minutes elapsed since the last GC — drives the regrowth note */
+  sinceGcMin?: number
 }
 
 // ---------------------------------------------------------------------------

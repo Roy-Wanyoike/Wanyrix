@@ -119,6 +119,14 @@ function DiffBlock({ entry, index }: { entry: DiffEntry; index: number }) {
           {KIND_LABEL[entry.kind] ?? entry.kind}
         </span>
         <span className="truncate font-mono text-[11px] text-muted-foreground">· {entry.target}</span>
+        {entry.findingId && (
+          <span
+            className="shrink-0 rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] tracking-wide text-primary/90"
+            title={`Queued from doctor finding ${entry.findingId}`}
+          >
+            {entry.findingId}
+          </span>
+        )}
         <span
           className={cn(
             'ml-auto shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide',

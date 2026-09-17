@@ -227,6 +227,7 @@ export function FindingSheet({
                         title: finding.title,
                         target: finding.affected[0] ?? finding.id,
                         suggestion: finding.recommendation,
+                        findingId: finding.id,
                         estimate:
                           finding.impactSeconds !== undefined
                             ? `−${finding.impactSeconds}s per affected build`

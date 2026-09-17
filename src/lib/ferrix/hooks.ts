@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQuery, UseMutationResult } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, UseMutationResult } from '@tanstack/react-query'
 import type {
   DiagnosticsPayload,
   DoctorReport,
@@ -61,9 +61,10 @@ export function useGraph() {
 }
 
 export function useDiagnostics() {
+  const ws = useActiveWorkspace()
   return useQuery<DiagnosticsPayload>({
-    queryKey: ['diagnostics'],
-    queryFn: () => getJson('/api/ferrix/diagnostics'),
+    queryKey: ['diagnostics', ws],
+    queryFn: () => getJson(`/api/ferrix/diagnostics?ws=${encodeURIComponent(ws)}`),
   })
 }
 
@@ -96,7 +97,34 @@ export function useIssues() {
 }
 
 export function useStorage() {
-  return useQuery<StoragePayload>({ queryKey: ['storage'], queryFn: () => getJson('/api/ferrix/storage') })
+  return useQuery<StoragePayload>({
+    queryKey: ['storage'],
+    queryFn: () => getJson('/api/ferrix/storage'),
+    // reclaimable rows regrow server-side — poll so the dialog shows it live
+    refetchInterval: 30_000,
+  })
+}
+
+export interface ReclaimResponse {
+  reclaimedMB: number
+  detail: string[]
+  storage: StoragePayload
+}
+
+export function useReclaimCaches(): UseMutationResult<ReclaimResponse, Error, void> {
+  const queryClient = useQueryClient()
+  return useMutation<ReclaimResponse, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch('/api/ferrix/storage/reclaim', { method: 'POST' })
+      if (!res.ok) throw new Error(`reclaim → ${res.status}`)
+      return res.json() as Promise<ReclaimResponse>
+    },
+    onSuccess: (data) => {
+      // seed the cache with the server's post-GC payload, then refetch
+      queryClient.setQueryData<StoragePayload>(['storage'], data.storage)
+      void queryClient.invalidateQueries({ queryKey: ['storage'] })
+    },
+  })
 }
 
 export function useExplain(): UseMutationResult<ExplainResponse, Error, ExplainRequest> {

@@ -30,6 +30,8 @@ export interface DiffEntry {
   suggestion: string // the exact recommended-change text from the payload
   estimate?: string // e.g. "−8.4s per clean build" — always an estimate
   status: DiffStatus
+  /** doctor finding id when the entry was queued from a finding remediation */
+  findingId?: string
 }
 
 const CAP = 50

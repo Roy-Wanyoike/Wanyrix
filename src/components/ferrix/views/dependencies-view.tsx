@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useGraph } from '@/lib/ferrix/hooks'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import type { BlastEntry, GraphEdge, GraphNode, GraphPayload } from '@/lib/ferrix/types'
 import { cn } from '@/lib/utils'
 import { ExplainDialog } from '../explain-dialog'
@@ -80,6 +81,7 @@ interface GraphPanelProps {
   showExternal: boolean
   selected: string
   onSelect: (id: string) => void
+  workspaceName: string
 }
 
 const GraphPanel = memo(function GraphPanel({
@@ -89,6 +91,7 @@ const GraphPanel = memo(function GraphPanel({
   showExternal,
   selected,
   onSelect,
+  workspaceName,
 }: GraphPanelProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [mouse, setMouse] = useState({ x: 24, y: 24, w: 320, h: 220 })
@@ -157,7 +160,7 @@ const GraphPanel = memo(function GraphPanel({
           viewBox="0 0 960 640"
           className="h-auto w-full rounded-lg border bg-[oklch(0.13_0.004_60)]"
           role="img"
-          aria-label="Dependency graph of the helios-platform workspace"
+          aria-label={`Dependency graph of the ${workspaceName} workspace`}
         >
           {/* band labels */}
           <text x={12} y={BAND_Y.bin - 36} fontSize={9} fill="oklch(0.9 0 0 / 0.35)" className="font-mono uppercase">
@@ -614,6 +617,7 @@ const LEGEND_ITEMS: { label: string; swatch: ReactNode }[] = [
 export default function DependenciesView({ onNavigate }: ViewProps) {
   const graph = useGraph()
   const data = graph.data
+  const activeWorkspace = useWorkspaceStore((s) => s.active)
 
   const [query, setQuery] = useState('')
   const [showExternal, setShowExternal] = useState(true)
@@ -692,6 +696,7 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
           showExternal={showExternal}
           selected={selected}
           onSelect={handleSelect}
+          workspaceName={activeWorkspace}
         />
         <NodeDetails node={node} edges={data.edges} blast={data.blast} onNavigate={onNavigate} />
       </div>

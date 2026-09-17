@@ -7,7 +7,6 @@ import {
   Braces,
   Check,
   GitBranch,
-  Info,
   RotateCw,
   Scale,
   ShieldCheck,
@@ -30,25 +29,43 @@ import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import { CountUp, Panel, SectionHeading } from '../shared'
 import type { ViewProps } from '../view-types'
 
-/* The E0502 conflict lives on line 5 (0-based index 4) of the fixture. */
-const ERRONEOUS_LINE_INDEX = 4
-/** Timeline maps main() lines 1..7 onto a 0..100% scale. */
-const TIMELINE_LINES = 7
-
-const linePos = (start: number, end: number) => ({
-  left: `${((start - 1) / (TIMELINE_LINES - 1)) * 100}%`,
-  width: `${((end - start + 1) / (TIMELINE_LINES - 1)) * 100}%`,
+/*
+ * Timeline + annotated-source geometry are payload-driven so any borrow
+ * scenario (helios E0502, atlas E0499) renders without view changes:
+ * - the erroneous line is the line of the first conflict-kind step
+ * - the timeline spans one tick per source line (timelineTicks.length)
+ */
+const linePos = (start: number, end: number, totalLines: number) => ({
+  left: `${((start - 1) / (totalLines - 1)) * 100}%`,
+  width: `${((end - start + 1) / (totalLines - 1)) * 100}%`,
 })
+
+/** Extract `E0502`-style code from the payload error string. */
+function errorCode(error: string): string {
+  return error.match(/E\d{4}/)?.[0] ?? 'E????'
+}
 
 /* ------------------------------------------------------------------ borrow */
 
 function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
   const [stepId, setStepId] = useState(1)
   const active = borrow.steps.find((s) => s.id === stepId) ?? borrow.steps[0]
-  const conflictActive = active.id === 2 || active.id === 4
-  const sharedLifetime = (borrow.steps.find((s) => s.id === 1) ?? borrow.steps[0]).lifetime
-  const conflictLifetime = (borrow.steps.find((s) => s.id === 2) ?? borrow.steps[0]).lifetime
-  const mutableLifetime = (borrow.steps.find((s) => s.id === 4) ?? borrow.steps[0]).lifetime
+  const totalLines = Math.max(borrow.timelineTicks.length, borrow.code.length)
+
+  /* Role-based derivations (no step-id assumptions):
+     - created borrow = step 1's lifetime (row 1 of the timeline)
+     - attempted borrow = first conflict-kind step (row 2 + red highlight)
+     - overlap region = a later step labeled "conflict region" (amber sliver) */
+  const createdLifetime = (borrow.steps.find((s) => s.id === 1) ?? borrow.steps[0]).lifetime
+  const conflictStep = borrow.steps.find((s) => s.lifetime.kind === 'conflict') ?? borrow.steps[0]
+  const conflictLifetime = conflictStep.lifetime
+  const overlapStep = borrow.steps.find((s) => s.id !== 1 && s.lifetime.label === 'conflict region')
+  const mutableLifetime = (overlapStep ?? conflictStep).lifetime
+
+  const erroneousLineIndex = conflictStep.line - 1
+  const conflictActive =
+    active.lifetime.kind === 'conflict' || active.lifetime.label === 'conflict region'
+  const createdActive = active.lifetime.label === createdLifetime.label
 
   return (
     <TabsContent value="borrow" className="mt-4 space-y-4">
@@ -63,19 +80,25 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
           }
           subtitle="deterministic — soundness guarantee, not style"
         >
-          <div className="overflow-x-auto rounded-lg border border-border/70 bg-black/30 p-3">
+          <div className="relative overflow-x-auto rounded-lg border border-border/70 bg-black/30 p-3">
+            <span
+              className="absolute right-2 top-2 rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-300/90"
+              aria-hidden
+            >
+              rust
+            </span>
             <pre className="font-mono text-[12.5px] leading-6">
               {borrow.code.map((line, i) => {
                 const isActiveLine = i === active.line - 1
-                const isErroneous = i === ERRONEOUS_LINE_INDEX
+                const isErroneous = i === erroneousLineIndex
                 const errActive = isErroneous && conflictActive
                 return (
                   <div
                     key={i}
                     className={cn(
-                      '-mx-1 flex rounded-sm border-l-2 px-2 transition-colors duration-300',
+                      '-mx-1 flex rounded-sm border-l-2 px-2 transition-all duration-300',
                       isActiveLine && !errActive && 'border-primary bg-primary/12',
-                      errActive && 'border-red-400 bg-red-500/10',
+                      errActive && 'border-red-400 bg-red-500/10 shadow-[inset_2px_0_0_rgba(248,113,113,0.35)]',
                       !isActiveLine && 'border-transparent',
                       !isActiveLine && isErroneous && conflictActive && 'bg-red-500/10',
                     )}
@@ -99,7 +122,7 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
         </Panel>
 
         {/* checker execution steps */}
-        <Panel className="lg:col-span-2" title="Execution of the checker" subtitle="step through how rustc reaches E0502">
+        <Panel className="lg:col-span-2" title="Execution of the checker" subtitle={`step through how rustc reaches ${errorCode(borrow.error)}`}>
           <div className="space-y-2">
             {borrow.steps.map((step) => {
               const isActive = step.id === active.id
@@ -144,12 +167,19 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
       </div>
 
       {/* lifetime timeline */}
-      <Panel title="Lifetime timeline" subtitle="shared borrow must outlive the mutable borrow">
+      <Panel
+        title="Lifetime timeline"
+        subtitle={
+          createdLifetime.kind === 'shared'
+            ? 'shared borrow must outlive the mutable borrow'
+            : 'exclusive borrows must not overlap'
+        }
+      >
         <div className="relative">
           {/* segment boundary gridlines */}
           <div className="pointer-events-none absolute inset-x-0 top-6 bottom-0 hidden sm:block">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="absolute inset-y-0 w-px bg-white/[0.04]" style={{ left: `${(i / (TIMELINE_LINES - 1)) * 100}%` }} />
+            {Array.from({ length: Math.max(totalLines - 2, 0) }, (_, i) => i + 1).map((i) => (
+              <div key={i} className="absolute inset-y-0 w-px bg-white/[0.04]" style={{ left: `${(i / (totalLines - 1)) * 100}%` }} />
             ))}
           </div>
 
@@ -159,7 +189,7 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
               <span
                 key={tick}
                 className="absolute -translate-x-1/2 font-mono text-[10px] text-muted-foreground"
-                style={{ left: `${((i + 0.5) / (TIMELINE_LINES - 1)) * 100}%` }}
+                style={{ left: `${((i + 0.5) / (totalLines - 1)) * 100}%` }}
               >
                 {tick}
               </span>
@@ -167,26 +197,34 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
           </div>
 
           <div className="relative mt-2 space-y-2">
-            {/* shared borrow — teal */}
+            {/* created borrow — teal when shared, amber when exclusive */}
             <div className="flex items-center gap-3">
               <span className="w-24 shrink-0 truncate text-right font-mono text-[10px] text-muted-foreground sm:w-28">
-                {sharedLifetime.label}
+                {createdLifetime.label}
               </span>
               <div className="relative h-6 flex-1 rounded bg-white/[0.03]">
                 <motion.div
-                  className="absolute inset-y-0 origin-left rounded-[3px] bg-chart-3/70"
-                  style={linePos(sharedLifetime.start, sharedLifetime.end)}
+                  className={cn(
+                    'absolute inset-y-0 origin-left rounded-[3px]',
+                    createdLifetime.kind === 'shared' ? 'bg-chart-3/70' : 'bg-amber-400/80',
+                  )}
+                  style={{
+                    ...linePos(createdLifetime.start, createdLifetime.end, totalLines),
+                    filter: createdActive
+                      ? 'drop-shadow(0 0 6px rgba(251,191,36,0.45)) drop-shadow(0 0 2px rgba(251,191,36,0.3))'
+                      : undefined,
+                  }}
                   initial={{ scaleX: 0, opacity: 0 }}
                   animate={{
                     scaleX: 1,
-                    opacity: active.id === 1 || active.id === 3 ? 1 : 0.35,
+                    opacity: createdActive ? 1 : 0.35,
                   }}
                   transition={{ duration: 0.4, ease: 'easeOut' }}
                 />
               </div>
             </div>
 
-            {/* mutable borrow + conflict marker — red bar with amber sliver */}
+            {/* conflicting borrow + overlap marker — red bar with amber sliver */}
             <div className="flex items-center gap-3">
               <span className="w-24 shrink-0 truncate text-right font-mono text-[10px] text-muted-foreground sm:w-28">
                 {conflictLifetime.label}
@@ -194,16 +232,21 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
               <div className="relative h-6 flex-1 rounded bg-white/[0.03]">
                 <motion.div
                   className="absolute inset-y-0 origin-left rounded-[3px] bg-red-500/60"
-                  style={linePos(conflictLifetime.start, conflictLifetime.end)}
+                  style={{
+                    ...linePos(conflictLifetime.start, conflictLifetime.end, totalLines),
+                    filter: conflictActive
+                      ? 'drop-shadow(0 0 6px rgba(248,113,113,0.5)) drop-shadow(0 0 2px rgba(248,113,113,0.35))'
+                      : undefined,
+                  }}
                   initial={{ scaleX: 0, opacity: 0 }}
                   animate={{ scaleX: 1, opacity: conflictActive ? 1 : 0.4 }}
                   transition={{ duration: 0.4, ease: 'easeOut' }}
                 />
                 <motion.div
                   className="absolute bottom-0 h-1 origin-left rounded-b-[3px] bg-amber-400/90"
-                  style={linePos(mutableLifetime.start, mutableLifetime.end)}
+                  style={linePos(mutableLifetime.start, mutableLifetime.end, totalLines)}
                   initial={{ opacity: 0 }}
-                  animate={{ opacity: active.id === 4 ? 1 : 0.15 }}
+                  animate={{ opacity: conflictActive && overlapStep ? 1 : 0.15 }}
                   transition={{ duration: 0.35 }}
                 />
               </div>
@@ -314,13 +357,13 @@ function TaskCard({ task, onNavigate }: { task: AsyncTask; onNavigate?: ViewProp
         <TaskStateBadge state={task.state} />
       </div>
       <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{task.detail}</p>
-      {blocked && onNavigate && (
+      {blocked && onNavigate && task.findingId && (
         <button
           type="button"
           onClick={() => onNavigate?.('doctor')}
           className="mt-1.5 inline-flex items-center gap-1 font-mono text-[10px] text-primary/90 hover:text-primary hover:underline"
         >
-          view finding FER-ASY-012 →
+          view finding {task.findingId} →
         </button>
       )}
     </div>
@@ -375,29 +418,22 @@ function AsyncFlowTab({ request, onNavigate }: { request: DiagnosticsPayload['re
           {request.segments.map((seg, i) => {
             const leftPct = (seg.startMs / request.totalMs) * 100
             const widthPct = (seg.durationMs / request.totalMs) * 100
-            const concurrent = seg.id === 'db' || seg.id === 'prov'
-            const note = seg.id === 'bg' ? seg.note : concurrent ? 'runs concurrently' : undefined
+            const concurrent = seg.concurrent === true
+            const isBlocked = seg.kind === 'blocked'
             return (
               <div key={seg.id} className="flex items-center gap-3">
                 <div className="w-32 shrink-0 sm:w-40">
                   <p className="truncate text-xs font-medium">{seg.label}</p>
                   <p className="truncate font-mono text-[10px] text-muted-foreground">{seg.span}</p>
-                  {note && (
-                    <p className={cn('flex items-center gap-1 truncate text-[10px]', concurrent ? 'text-amber-300/80' : 'text-muted-foreground/70')}>
+                  {seg.note && (
+                    <p className={cn('flex items-center gap-1 truncate text-[10px]', concurrent ? 'text-amber-300/80' : isBlocked ? 'text-red-300/80' : 'text-muted-foreground/70')}>
                       {concurrent && <GitBranch className="size-2.5 shrink-0" />}
-                      {note}
+                      {seg.note}
                     </p>
                   )}
                 </div>
                 <div className="relative h-7 min-w-0 flex-1 rounded bg-white/5">
-                  {seg.id === 'db' && (
-                    <div
-                      aria-hidden
-                      className="absolute z-10 w-px border-l border-dashed border-amber-300/50"
-                      style={{ left: `${leftPct}%`, bottom: '-0.5rem', height: 'calc(100% + 0.5rem)' }}
-                    />
-                  )}
-                  {seg.id === 'prov' && (
+                  {concurrent && (
                     <div
                       aria-hidden
                       className="absolute z-10 w-px border-l border-dashed border-amber-300/50"
@@ -406,14 +442,21 @@ function AsyncFlowTab({ request, onNavigate }: { request: DiagnosticsPayload['re
                   )}
                   <motion.div
                     className={cn('absolute inset-y-0.5 origin-left rounded-[3px]', SEGMENT_COLOR[seg.kind])}
-                    style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                      ...(isBlocked && {
+                        backgroundImage:
+                          'repeating-linear-gradient(45deg, transparent 0 6px, rgba(0,0,0,0.28) 6px 12px)',
+                      }),
+                    }}
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: 1 }}
                     transition={{ duration: 0.5, delay: i * 0.08, ease: 'easeOut' }}
                   >
-                    {seg.id === 'prov' && (
+                    {(concurrent || isBlocked) && widthPct > 12 && (
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 rounded-sm bg-black/30 px-1.5 py-0.5 font-mono text-[9px] text-amber-50">
-                        {Math.round((seg.durationMs / request.totalMs) * 100)}% of latency
+                        {Math.round(widthPct)}% of latency
                       </span>
                     )}
                   </motion.div>
@@ -441,7 +484,7 @@ function AsyncFlowTab({ request, onNavigate }: { request: DiagnosticsPayload['re
           </div>
           <div className="grid gap-3 pt-4 sm:grid-cols-3">
             {children.map((t) => (
-              <TaskCard key={t.id} task={t} />
+              <TaskCard key={t.id} task={t} onNavigate={onNavigate} />
             ))}
           </div>
         </div>
@@ -489,17 +532,8 @@ export default function DiagnosticsView({ onNavigate }: ViewProps) {
       <SectionHeading
         eyebrow="Debugging Intelligence"
         title="Diagnostics"
-        description="Explain the concept, not just generate a fix — compile-time and runtime understanding side by side."
+        description={`Explain the concept, not just generate a fix — compile-time and runtime understanding side by side. Scenario indexed for ${activeWorkspace}.`}
       />
-
-      {activeWorkspace !== 'helios-platform' && (
-        <p className="flex items-start gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-[11.5px] leading-snug text-muted-foreground">
-          <Info className="mt-0.5 size-3.5 shrink-0 text-primary/70" aria-hidden />
-          Diagnostic scenarios are indexed for{' '}
-          <span className="font-mono text-foreground/85">helios-platform</span> — findings referenced here (e.g.
-          FER-ASY-012) belong to that workspace.
-        </p>
-      )}
 
       {isPending && <DiagnosticsSkeleton />}
 
