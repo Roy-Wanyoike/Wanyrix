@@ -132,6 +132,89 @@
     0 12px 48px -12px oklch(0.72 0.16 45 / 18%);
 }
 
+/* CRT-style scanline texture for terminal / report surfaces (issue #39) */
+.scanlines {
+  position: relative;
+}
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    to bottom,
+    oklch(1 0 0 / 1.6%) 0px,
+    oklch(1 0 0 / 1.6%) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  mix-blend-mode: overlay;
+}
+
+/* proposed-change body in the diff queue (issue #38) */
+.diff-body {
+  background:
+    linear-gradient(to right, oklch(0.72 0.16 45 / 3%), transparent 55%),
+    oklch(0.14 0.005 60 / 45%);
+}
+
+/* gradient hairline on top of the status footer (issue #39) */
+.footer-hairline {
+  border-top: none;
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    oklch(0.72 0.16 45 / 35%) 18%,
+    oklch(0.72 0.16 45 / 55%) 50%,
+    oklch(0.72 0.16 45 / 35%) 82%,
+    transparent
+  );
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+  background-position: top;
+}
+
+/* corner tick marks for hero panels (issue #39) */
+.corner-ticks {
+  position: relative;
+}
+.corner-ticks::before,
+.corner-ticks::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.corner-ticks::before {
+  top: 6px;
+  left: 6px;
+  border-top: 1.5px solid oklch(0.72 0.16 45 / 70%);
+  border-left: 1.5px solid oklch(0.72 0.16 45 / 70%);
+  border-top-left-radius: 4px;
+}
+.corner-ticks::after {
+  bottom: 6px;
+  right: 6px;
+  border-bottom: 1.5px solid oklch(0.72 0.16 45 / 70%);
+  border-right: 1.5px solid oklch(0.72 0.16 45 / 70%);
+  border-bottom-right-radius: 4px;
+}
+.corner-ticks:hover::before,
+.corner-ticks:hover::after {
+  opacity: 1;
+}
+
+/* consistent keyboard focus (a11y, issue #39) */
+:focus-visible {
+  outline: 2px solid oklch(0.72 0.16 45 / 65%);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 ::selection {
   background: oklch(0.72 0.16 45 / 30%);
 }

@@ -176,7 +176,7 @@ export function KpiCard({
     red: 'text-red-400',
   }
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-border/80 bg-card p-4 transition-colors hover:border-primary/30">
+    <div className="group corner-ticks relative overflow-hidden rounded-xl border border-border/80 bg-card p-4 transition-all duration-200 hover:border-primary/30 hover:shadow-[0_0_24px_-8px_oklch(0.72_0.16_45/30%)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         {icon && <span className={cn('opacity-80', accents[accent])}>{icon}</span>}
@@ -295,8 +295,8 @@ export function Terminal({
   footer?: React.ReactNode
 }) {
   return (
-    <div className={cn('terminal-glow overflow-hidden rounded-xl border border-border bg-[oklch(0.12_0.004_60)]', className)}>
-      <div className="flex items-center gap-2 border-b border-border/60 bg-black/30 px-3 py-2">
+    <div className={cn('terminal-glow scanlines overflow-hidden rounded-xl border border-border bg-[oklch(0.12_0.004_60)]', className)}>
+      <div className="relative z-10 flex items-center gap-2 border-b border-border/60 bg-black/30 px-3 py-2">
         <span className="size-2.5 rounded-full bg-red-500/70" />
         <span className="size-2.5 rounded-full bg-amber-500/70" />
         <span className="size-2.5 rounded-full bg-emerald-500/70" />
@@ -308,7 +308,7 @@ export function Terminal({
           </span>
         )}
       </div>
-      <div className="space-y-1 px-4 py-3 font-mono text-[12px] leading-relaxed">
+      <div className="relative z-10 space-y-1 px-4 py-3 font-mono text-[12px] leading-relaxed">
         {lines.map((line, i) => (
           <motion.p
             key={i}

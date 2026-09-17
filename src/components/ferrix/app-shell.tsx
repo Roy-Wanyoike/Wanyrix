@@ -162,8 +162,8 @@ export function AppShell({
         </div>
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Ferrix views">
-          {NAV.map((group) => (
-            <div key={group.group}>
+          {NAV.map((group, gi) => (
+            <div key={group.group} className={gi > 0 ? 'border-t border-border/40 pt-4' : undefined}>
               <p className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
                 {group.group}
               </p>
@@ -176,7 +176,7 @@ export function AppShell({
                       className={cn(
                         'group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-all duration-150',
                         activeView === item.id
-                          ? 'bg-primary/12 text-foreground ring-1 ring-primary/25'
+                          ? 'bg-primary/12 text-foreground ring-1 ring-primary/25 shadow-[0_0_20px_-6px_oklch(0.72_0.16_45/45%)]'
                           : 'text-muted-foreground hover:translate-x-0.5 hover:bg-sidebar-accent hover:text-foreground',
                       )}
                     >
@@ -340,7 +340,7 @@ export function AppShell({
         <main className="flex-1 px-4 py-5 sm:px-6">{children}</main>
 
         {/* sticky status footer */}
-        <footer className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-border/70 bg-sidebar/60 px-4 py-2 font-mono text-[10.5px] text-muted-foreground sm:px-6">
+        <footer className="footer-hairline mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 bg-sidebar/60 px-4 py-2 font-mono text-[10.5px] text-muted-foreground sm:px-6">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="text-foreground/80">FERRIX ENGINE v0.4.2</span>
             <span>{activeSummary ? `${activeSummary.crates} crates indexed` : 'indexing…'}</span>
