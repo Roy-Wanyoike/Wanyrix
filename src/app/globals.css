@@ -45,7 +45,7 @@
 
 :root {
   --radius: 0.625rem;
-  /* light mode: warm paper + rust/amber — the Ferrix identity, daylight edition (issue #43) */
+  /* light mode: warm paper + rust/amber — the Wanyrix identity, daylight edition (issue #43) */
   --background: oklch(0.977 0.005 85);
   --foreground: oklch(0.24 0.012 60);
   --card: oklch(0.995 0.003 85);
@@ -115,7 +115,7 @@
   color-scheme: dark;
 }
 
-/* ---------- Ferrix utilities ---------- */
+/* ---------- Wanyrix utilities ---------- */
 
 /*
  * Light-mode palette overrides (issue #43).

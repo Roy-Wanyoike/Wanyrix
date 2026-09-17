@@ -17,15 +17,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ferrix — Rust Engineering Intelligence",
+  applicationName: "Wanyrix",
+  title: "Wanyrix — Engineering Intelligence",
   description:
-    "Ferrix continuously understands your Rust codebase: why builds are slow, what a change will cost, and how to verify improvements — grounded in evidence.",
-  keywords: ["Rust", "cargo", "build intelligence", "engineering intelligence", "ferrix"],
-  authors: [{ name: "Ferrix" }],
+    "Wanyrix continuously understands your Rust codebase: why builds are slow, what a change will cost, and how to verify improvements — grounded in evidence.",
+  keywords: ["Rust", "cargo", "build intelligence", "engineering intelligence", "wanyrix", "W-EIR"],
+  authors: [{ name: "Wanyrix" }],
   openGraph: {
-    title: "Ferrix — Rust Engineering Intelligence",
-    description: "Rust made software safer. Ferrix makes Rust development easier to understand and operate.",
-    siteName: "Ferrix",
+    title: "Wanyrix — Engineering Intelligence",
+    description: "Rust made software safer. Wanyrix makes Rust development easier to understand and operate.",
+    siteName: "Wanyrix",
     type: "website",
   },
 };

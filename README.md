@@ -1,22 +1,22 @@
-# Ferrix — Rust Engineering Intelligence Platform
+# Wanyrix — Engineering Intelligence Platform
 
-> Rust made software safer. Ferrix makes Rust development easier to understand and operate.
+> Rust made software safer. Wanyrix makes Rust development easier to understand and operate.
 
-Ferrix continuously understands a Rust workspace and explains **why development is slow,
+Wanyrix continuously understands a Rust workspace and explains **why development is slow,
 fragile, complicated or difficult** — with evidence, calibrated confidence, and a
 verification path for every claim. Estimates are never presented as measurements; only a
 run experiment can upgrade a claim to **verified**.
 
 ## What this repository contains
 
-This repo hosts the **Ferrix web platform** (Next.js 16 · TypeScript · Tailwind 4 ·
-shadcn/ui · TanStack Query · Prisma-ready), a working demonstrator of the Ferrix product
+This repo hosts the **Wanyrix web platform** (Next.js 16 · TypeScript · Tailwind 4 ·
+shadcn/ui · TanStack Query · Prisma-ready), a working demonstrator of the Wanyrix product
 loop over a fixture workspace (`helios-platform`, 47 crates):
 
 | Surface | What it demonstrates |
 | --- | --- |
 | **Engineering Health** (overview) | KPI grid, build-time trend, slowest crates, live activity |
-| **Build Doctor** (`ferrix doctor`) | animated scan, 12 evidence-backed findings, critical path, Human ⇄ `--json` modes |
+| **Build Doctor** (`wanyrix doctor`) | animated scan, 12 evidence-backed findings, critical path, Human ⇄ `--json` modes |
 | **Engineering Graph** | interactive dependency backbone, blast-radius explorer, duplicate versions |
 | **Impact Simulator** | add-dependency / edit-file / split-crate cost calculator (all labeled *estimated*) |
 | **Diagnostics** | borrow-checker explainer (E0502 walkthrough) + async flow inspector |
@@ -43,9 +43,17 @@ bun run dev          # http://localhost:3000
 bun run lint
 ```
 
-API surface: `/api/ferrix/{health,doctor,graph,impact,diagnostics,experiments,gates,issues,explain}`
+API surface: `/api/wanyrix/{health,doctor,graph,impact,diagnostics,experiments,gates,issues,explain}`
 
 ## Governance
 
 Work lands only through reviewed PRs referencing their issue (see the **Issues & PRs**
 board). Release status is tracked on the scorecard: **CONDITIONAL GO** as of 2026-09-17.
+
+## Brand history
+
+This product was previously released under the name *Ferrix*. The complete identity
+migration (Ferrix → Wanyrix, F-EIR → W-EIR, `ferrix` CLI → `wanyrix`) is documented in
+[`docs/migrations/FERRIX_TO_WANYRIX.md`](docs/migrations/FERRIX_TO_WANYRIX.md), including
+the controlled migration of persisted client state. This is the only place historical
+branding intentionally appears in documentation.
