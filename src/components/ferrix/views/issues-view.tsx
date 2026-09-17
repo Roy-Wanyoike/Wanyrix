@@ -137,6 +137,13 @@ export default function IssuesView(_: ViewProps) {
   const openCount = issues.filter((i) => i.state === 'open').length
   const unverifiedMerges = issues.filter((i) => i.state === 'merged' && !i.verification).length
 
+  const issueNumbers = issues.map((i) => i.ghIssue)
+  const prNumbers = issues.filter((i) => i.pr).map((i) => i.pr!.number)
+  const issueRange = issueNumbers.length
+    ? `#${Math.min(...issueNumbers)}–#${Math.max(...issueNumbers)}`
+    : '—'
+  const prRange = prNumbers.length ? `#${Math.min(...prNumbers)}–#${Math.max(...prNumbers)}` : '—'
+
   const summary = [
     `${issues.length} issues`,
     `${prCount} PRs`,
@@ -189,7 +196,7 @@ export default function IssuesView(_: ViewProps) {
               </span>
             ))}
             <span className="text-[11px] text-muted-foreground">
-              issue numbers #1–#9 · PR numbers #10–#18 mirror the live repo
+              issues {issueRange} · PRs {prRange} mirror the live repo
             </span>
           </div>
 
