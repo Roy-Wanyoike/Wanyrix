@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight, ChevronDown, Lightbulb, RotateCcw, Search } from 'lucide-react'
+import { ArrowRight, ChevronDown, Lightbulb, RotateCcw, Search, SplitSquareHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -19,7 +19,8 @@ import {
 } from '@/components/ui/table'
 import { useGraph } from '@/lib/ferrix/hooks'
 import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
-import type { BlastEntry, GraphEdge, GraphNode, GraphPayload } from '@/lib/ferrix/types'
+import { useSimulatorIntentStore } from '@/lib/ferrix/simulator-intent'
+import type { BlastEntry, DuplicateResolution, GraphEdge, GraphNode, GraphPayload } from '@/lib/ferrix/types'
 import { cn } from '@/lib/utils'
 import { ExplainDialog } from '../explain-dialog'
 import { CountUp, MeasurementBadge, Panel, SectionHeading } from '../shared'
@@ -343,11 +344,13 @@ function NodeDetails({
   node,
   edges,
   blast,
+  resolutions,
   onNavigate,
 }: {
   node: GraphNode
   edges: GraphEdge[]
   blast: BlastEntry[]
+  resolutions?: Record<string, DuplicateResolution>
   onNavigate?: ViewProps['onNavigate']
 }) {
   const dependents = edges.filter((e) => e.to === node.id).map((e) => e.from)
@@ -393,7 +396,7 @@ function NodeDetails({
         )}
 
         {node.duplicate && node.versions && (
-          <div className="space-y-1.5 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5">
+          <div className="space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5">
             <div className="flex gap-1.5">
               {node.versions.map((v) => (
                 <Badge key={v} variant="outline" className="font-mono text-[10px]">
@@ -402,6 +405,14 @@ function NodeDetails({
               ))}
             </div>
             <p className="text-[11px] text-amber-300">duplicate compiled ×2 — unify to one version</p>
+            {resolutions?.[node.id] && (
+              <ResolutionCta
+                crate={node.id}
+                resolution={resolutions[node.id]}
+                onNavigate={onNavigate}
+                compact
+              />
+            )}
           </div>
         )}
 
@@ -461,8 +472,98 @@ function NodeDetails({
 
 /* -------------------------------------------------------------- duplicates */
 
-function DuplicatesPanel({ duplicates }: { duplicates: GraphPayload['duplicates'] }) {
+/**
+ * Round-10 cross-view resolution CTA: routes to the Impact Simulator with
+ * the matching upgrade scenario preselected. `full` resolutions get an
+ * emerald "unifies the tree" framing; `partial` ones stay amber and say
+ * exactly which pin survives (honesty contract — never overclaim).
+ */
+function ResolutionCta({
+  resolution,
+  crate,
+  onNavigate,
+  compact = false,
+}: {
+  resolution: DuplicateResolution
+  crate: string
+  onNavigate?: ViewProps['onNavigate']
+  compact?: boolean
+}) {
+  const setIntent = useSimulatorIntentStore((s) => s.setIntent)
+  const full = resolution.kind === 'full'
+  return (
+    <div
+      className={cn(
+        'rounded-lg border px-3 py-2.5',
+        full ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/25 bg-amber-500/5',
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <SplitSquareHorizontal
+          className={cn('size-3.5 shrink-0', full ? 'text-emerald-400' : 'text-amber-400')}
+          aria-hidden
+        />
+        <span
+          className={cn(
+            'font-mono text-[11px] font-semibold',
+            full ? 'text-emerald-300' : 'text-amber-300',
+          )}
+        >
+          {full ? 'resolution available' : 'partial resolution'}
+        </span>
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {resolution.from} → {resolution.to}
+        </span>
+        <span
+          className={cn(
+            'rounded-full border px-1.5 py-0.5 font-mono text-[10px]',
+            resolution.ciDelta < 0
+              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+              : 'border-border bg-muted/50 text-muted-foreground',
+          )}
+        >
+          CI {resolution.ciDelta > 0 ? '+' : ''}
+          {resolution.ciDelta.toFixed(1)}s
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          className={cn(
+            'ml-auto h-7 gap-1 px-2 text-[11px]',
+            full && 'border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/10 hover:text-emerald-100',
+          )}
+          onClick={() => {
+            setIntent({
+              mode: 'upgrade-dep',
+              target: resolution.scenarioId,
+              source: `Engineering Graph · duplicate ${crate}`,
+            })
+            onNavigate?.('simulator')
+          }}
+          aria-label={`Simulate ${crate} ${resolution.from} to ${resolution.to} upgrade in the Impact Simulator`}
+        >
+          Simulate resolution
+          <ArrowRight className="size-3" aria-hidden />
+        </Button>
+      </div>
+      {!compact && (
+        <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{resolution.note}</p>
+      )}
+    </div>
+  )
+}
+
+function DuplicatesPanel({
+  duplicates,
+  resolutions,
+  onNavigate,
+}: {
+  duplicates: GraphPayload['duplicates']
+  resolutions?: Record<string, DuplicateResolution>
+  onNavigate?: ViewProps['onNavigate']
+}) {
   const total = duplicates.reduce((acc, d) => acc + d.wastedSeconds, 0)
+  const resolvable = duplicates.filter((d) => resolutions?.[d.name])
   return (
     <Panel
       title="Duplicate dependency versions"
@@ -508,6 +609,23 @@ function DuplicatesPanel({ duplicates }: { duplicates: GraphPayload['duplicates'
           </TableRow>
         </TableFooter>
       </Table>
+
+      {resolvable.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+            simulated resolutions · routed to the impact simulator
+          </p>
+          {resolvable.map((d) => (
+            <ResolutionCta
+              key={d.name}
+              crate={d.name}
+              resolution={resolutions![d.name]}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <MeasurementBadge status="measured" />
         <p className="text-[11px] text-muted-foreground">
@@ -698,11 +816,21 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
           onSelect={handleSelect}
           workspaceName={activeWorkspace}
         />
-        <NodeDetails node={node} edges={data.edges} blast={data.blast} onNavigate={onNavigate} />
+        <NodeDetails
+          node={node}
+          edges={data.edges}
+          blast={data.blast}
+          resolutions={data.resolutions}
+          onNavigate={onNavigate}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <DuplicatesPanel duplicates={data.duplicates} />
+        <DuplicatesPanel
+          duplicates={data.duplicates}
+          resolutions={data.resolutions}
+          onNavigate={onNavigate}
+        />
         <BlastPanel blast={data.blast} onNavigate={onNavigate} />
       </div>
     </div>

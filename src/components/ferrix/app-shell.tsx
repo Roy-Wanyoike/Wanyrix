@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  Bell,
+  Braces,
   Calculator,
   FileDiff,
   FileText,
@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Stethoscope,
   Sun,
+  TerminalSquare,
 } from 'lucide-react'
 const subscribeNoop = () => () => {}
 
@@ -30,8 +31,16 @@ import { FerrixLogo } from './logo'
 import { CommandPalette } from './command-palette'
 import { DiffQueueSheet } from './diff-queue-sheet'
 import { StorageDialog } from './storage-dialog'
+import { NotificationsPopover } from './notifications-popover'
+import { CliContractDialog } from './cli-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Select,
   SelectContent,
@@ -41,6 +50,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useReportExport, useWorkspaces } from '@/lib/ferrix/hooks'
+import type { ReportFormat } from '@/lib/ferrix/hooks'
 import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import { useScanStore } from '@/lib/ferrix/scan-store'
 import { countPending, useDiffQueueStore } from '@/lib/ferrix/diff-store'
@@ -152,6 +162,7 @@ export function AppShell({
   const [uptime, setUptime] = useState(22320) // 6h 12m in seconds — engine process age
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [diffOpen, setDiffOpen] = useState(false)
+  const [cliOpen, setCliOpen] = useState(false)
 
   /* workspace registry + active selection (issue #34) */
   const workspacesQuery = useWorkspaces()
@@ -165,8 +176,10 @@ export function AppShell({
   const diffEntries = useDiffQueueStore((s) => s.entries)
   const pendingDiffs = countPending(diffEntries, activeWs)
 
-  /* workspace report export (round 9) */
-  const reportExport = useReportExport()
+  /* workspace report export (round 9) — markdown + JSON flavors (round 10) */
+  const reportMd = useReportExport('markdown')
+  const reportJson = useReportExport('json')
+  const reportPending = reportMd.isPending || reportJson.isPending
 
   useEffect(() => {
     const update = () => {
@@ -202,12 +215,15 @@ export function AppShell({
     })
   }
 
-  const exportReport = () => {
-    reportExport.mutate(undefined, {
+  const exportReport = (format: ReportFormat = 'markdown') => {
+    const run = format === 'json' ? reportJson : reportMd
+    run.mutate(undefined, {
       onSuccess: (b) =>
         toast({
-          title: 'Workspace report downloaded',
-          description: `${b.filename} · ${(b.bytes / 1024).toFixed(1)} KB · doctor + graph + gates + storage`,
+          title: format === 'json' ? 'JSON snapshot downloaded' : 'Workspace report downloaded',
+          description: `${b.filename} · ${(b.bytes / 1024).toFixed(1)} KB${
+            format === 'json' ? ' · ferrix report --json parity' : ' · doctor + graph + gates + storage'
+          }`,
         }),
       onError: (e) =>
         toast({ title: 'Report export failed', description: e.message, variant: 'destructive' }),
@@ -274,11 +290,21 @@ export function AppShell({
         </nav>
 
         <div className="border-t border-border/70 px-4 py-3">
-          <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setCliOpen(true)}
+            className="w-full rounded-md px-1 py-0.5 text-left font-mono text-[10px] leading-relaxed text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="Open the ferrix CLI contract reference"
+            title="CLI contract — commands, --json, exit codes"
+          >
             ferrix engine v0.4.2
             <br />
             local-first · AI optional
-          </p>
+            <span className="mt-1 flex items-center gap-1 text-primary/80">
+              <TerminalSquare className="size-3" aria-hidden />
+              view CLI contract
+            </span>
+          </button>
         </div>
       </aside>
 
@@ -373,37 +399,39 @@ export function AppShell({
                 )}
               </Button>
 
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 gap-1.5 text-xs"
-                onClick={exportReport}
-                disabled={reportExport.isPending}
-                aria-label={`Download workspace report for ${activeSummary?.name ?? 'active workspace'} (Markdown)`}
-                title="Markdown report — findings, evidence, gates, storage"
-              >
-                {reportExport.isPending ? (
-                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <FileText className="size-3.5" aria-hidden />
-                )}
-                <span className="hidden sm:inline">Report</span>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs"
+                    disabled={reportPending}
+                    aria-label={`Download workspace report for ${activeSummary?.name ?? 'active workspace'} (Markdown or JSON)`}
+                    title="Workspace report — markdown findings/evidence/gates or machine-readable JSON (--json parity)"
+                  >
+                    {reportPending ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <FileText className="size-3.5" aria-hidden />
+                    )}
+                    <span className="hidden sm:inline">Report</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={() => exportReport('markdown')} className="gap-2 text-xs">
+                    <FileText className="size-3.5 text-teal-300" aria-hidden />
+                    <span className="flex-1">Markdown report</span>
+                    <span className="font-mono text-[9px] text-muted-foreground">.md</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportReport('json')} className="gap-2 text-xs">
+                    <Braces className="size-3.5 text-amber-400" aria-hidden />
+                    <span className="flex-1">JSON snapshot</span>
+                    <span className="font-mono text-[9px] text-muted-foreground">--json</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-              <Button
-                size="icon"
-                variant="ghost"
-                className="relative size-8"
-                aria-label="Notifications"
-                onClick={() =>
-                  toast({ title: '3 unread signals', description: 'PR #184 regression · tokio duplicates · EXP-015 running' })
-                }
-              >
-                <Bell className="size-4" />
-                <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary font-mono text-[9px] font-bold text-primary-foreground">
-                  3
-                </span>
-              </Button>
+              <NotificationsPopover onNavigate={onNavigate} />
 
               <ThemeToggle />
             </div>
@@ -471,10 +499,13 @@ export function AppShell({
           onNavigate={onNavigate}
           onRunScan={runScan}
           onOpenDiffs={() => setDiffOpen(true)}
-          onExportReport={exportReport}
+          onExportReport={() => exportReport('markdown')}
+          onExportJson={() => exportReport('json')}
+          onOpenCli={() => setCliOpen(true)}
           pendingDiffs={pendingDiffs}
         />
         <DiffQueueSheet open={diffOpen} onOpenChange={setDiffOpen} />
+        <CliContractDialog open={cliOpen} onOpenChange={setCliOpen} />
       </div>
     </div>
   )

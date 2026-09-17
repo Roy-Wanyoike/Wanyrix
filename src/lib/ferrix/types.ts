@@ -132,6 +132,24 @@ export interface ImpactCatalog {
 }
 
 /** GET /api/ferrix/graph */
+/**
+ * Cross-view resolution intelligence (round 10): when a duplicate-version
+ * group has a matching upgrade scenario, the graph carries the resolution so
+ * the duplicates panel can deep-link into the Impact Simulator.
+ * `full` = the upgrade unifies the tree; `partial` = one lineage moves but a
+ * pin elsewhere keeps the duplicate alive (stated honestly, never glossed).
+ */
+export interface DuplicateResolution {
+  /** upgrade scenario id (= crate name in the simulator catalog) */
+  scenarioId: string
+  from: string
+  to: string
+  /** simulated CI delta of the upgrade — negative is a win */
+  ciDelta: number
+  kind: 'full' | 'partial'
+  note: string
+}
+
 export interface GraphPayload {
   nodes: GraphNode[]
   edges: GraphEdge[]
@@ -140,6 +158,8 @@ export interface GraphPayload {
   meta: { workspaceCrates: number; totalEdges: number; lastScan: string }
   /** optional per-workspace simulator catalogs (issue #34) */
   catalog?: ImpactCatalog
+  /** crate name → upgrade scenario that resolves (fully or partially) the duplicate (round 10) */
+  resolutions?: Record<string, DuplicateResolution>
 }
 
 // ---------------------------------------------------------------------------

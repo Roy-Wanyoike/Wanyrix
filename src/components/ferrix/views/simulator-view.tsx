@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowDown, ArrowRight, Copy, Lightbulb, ShieldAlert, ShieldCheck, TrendingDown } from 'lucide-react'
+import { ArrowDown, ArrowRight, Copy, Lightbulb, ShieldAlert, ShieldCheck, TrendingDown, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { useGraph, useImpact } from '@/lib/ferrix/hooks'
 import { useDiffQueueStore } from '@/lib/ferrix/diff-store'
+import { useSimulatorIntentStore } from '@/lib/ferrix/simulator-intent'
 import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import type { AddDepImpact, BlastEntry, EditFileImpact, ImpactPayload, SplitImpact, UpgradeImpact } from '@/lib/ferrix/types'
 import { cn } from '@/lib/utils'
@@ -924,10 +925,23 @@ function UpgradeReport({ query }: { query: QueryLike<ImpactPayload> }) {
 /* -------------------------------------------------------------------- view */
 
 export default function SimulatorView({ onNavigate }: ViewProps) {
-  const [mode, setMode] = useState<Mode>('add-dep')
-  const [target, setTarget] = useState('')
-  const [file, setFile] = useState('')
-  const [upgrade, setUpgrade] = useState('')
+  /* cross-view deep links (round 10): consume a pending intent exactly once,
+   * during the first render's lazy initializer — StrictMode double-invocation
+   * discards the second call's result, so the take-once contract holds and
+   * no setState-in-effect is needed. */
+  const [initialIntent] = useState(() => useSimulatorIntentStore.getState().consumeIntent())
+
+  const [mode, setMode] = useState<Mode>(initialIntent?.mode ?? 'add-dep')
+  const [target, setTarget] = useState(
+    initialIntent?.mode === 'add-dep' && initialIntent.target ? initialIntent.target : '',
+  )
+  const [file, setFile] = useState(
+    initialIntent?.mode === 'edit-file' && initialIntent.file ? initialIntent.file : '',
+  )
+  const [upgrade, setUpgrade] = useState(
+    initialIntent?.mode === 'upgrade-dep' && initialIntent.target ? initialIntent.target : '',
+  )
+  const [routedFrom, setRoutedFrom] = useState<string | null>(initialIntent?.source ?? null)
 
   const graph = useGraph()
   const blast: BlastEntry[] = useMemo(() => graph.data?.blast ?? [], [graph.data])
@@ -952,6 +966,28 @@ export default function SimulatorView({ onNavigate }: ViewProps) {
         description="Estimates derived from build telemetry × graph traversal — verified only through experiments."
         actions={<MeasurementBadge status="estimated" />}
       />
+
+      {routedFrom && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
+          role="status"
+        >
+          <ArrowRight className="size-3.5 shrink-0 text-primary" aria-hidden />
+          <span className="text-foreground/90">
+            routed from <span className="font-mono text-primary">{routedFrom}</span> — scenario preselected below
+          </span>
+          <button
+            type="button"
+            onClick={() => setRoutedFrom(null)}
+            className="ml-auto rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="Dismiss routing notice"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </motion.div>
+      )}
 
       <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
         <TabsList className="h-auto flex-wrap">

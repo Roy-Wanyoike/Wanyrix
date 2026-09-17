@@ -501,16 +501,39 @@ export default function ExperimentsView({ onNavigate }: ViewProps) {
           }
           subtitle="the verification loop starts from a doctor finding"
         >
-          <div className="flex flex-col items-start gap-3">
-            <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-              Ferrix never claims an improvement without a measured baseline/candidate pair. Run{' '}
-              <span className="font-mono text-foreground/85">ferrix doctor</span> for this workspace, pick a finding
-              marked experiment-eligible, and the engine will scaffold the experiment with full metadata (Gate 20).
-            </p>
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onNavigate?.('doctor')}>
-              <Stethoscope className="size-3.5" aria-hidden />
-              Open Build Doctor
-            </Button>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            <div className="flex flex-1 flex-col items-start gap-3">
+              <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+                Ferrix never claims an improvement without a measured baseline/candidate pair. Run{' '}
+                <span className="font-mono text-foreground/85">ferrix doctor</span> for this workspace, pick a finding
+                marked experiment-eligible, and the engine will scaffold the experiment with full metadata (Gate 20).
+              </p>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onNavigate?.('doctor')}>
+                <Stethoscope className="size-3.5" aria-hidden />
+                Open Build Doctor
+              </Button>
+            </div>
+            {/* terminal-style placeholder — shows what a scaffolded experiment looks like */}
+            <div
+              className="scanlines w-full max-w-sm shrink-0 overflow-hidden rounded-lg border border-border bg-[oklch(0.12_0.004_60)] font-mono text-[11px] leading-relaxed"
+              aria-hidden
+            >
+              <div className="flex items-center gap-1.5 border-b border-border/60 bg-black/30 px-3 py-1.5 text-[10px] text-muted-foreground">
+                <span className="size-2 rounded-full bg-red-500/70" />
+                <span className="size-2 rounded-full bg-amber-500/70" />
+                <span className="size-2 rounded-full bg-emerald-500/70" />
+                <span className="ml-1.5">ferrix experiment — awaiting first run</span>
+              </div>
+              <div className="space-y-1 px-3 py-2.5">
+                <p className="text-muted-foreground">$ ferrix experiment start FER-…</p>
+                <p className="text-primary">◇ scaffold ready — baseline: pending</p>
+                <p className="text-muted-foreground">◇ candidate: —</p>
+                <p className="text-muted-foreground">◇ check · test · benchmark · compare</p>
+                <p className="flex items-center gap-1 text-emerald-300/80">
+                  verdict: <span className="inline-block h-3 w-1.5 animate-pulse bg-emerald-300/80" />
+                </p>
+              </div>
+            </div>
           </div>
         </Panel>
       )}

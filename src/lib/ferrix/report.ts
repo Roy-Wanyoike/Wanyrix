@@ -45,6 +45,206 @@ export interface ReportBundle {
   bytes: number
 }
 
+/* ------------------------------------------------------------------ json -- */
+
+/**
+ * JSON report flavor (round 10) — the CLI contract says every ferrix command
+ * speaks `--json`; the web report surface now does too. Same server getters,
+ * same sections as the Markdown flavor, but machine-readable: stable schema
+ * version, per-finding evidence arrays, measurement statuses, and the honesty
+ * notes as data instead of prose.
+ */
+export interface WorkspaceJsonReport {
+  schema: 'ferrix.report/v1'
+  workspace: string
+  generatedAt: string
+  summary: {
+    crates: number
+    edges: number
+    toolchain: string
+    cacheHitRate: number
+    lastScan: string
+    headlineInsight?: string
+  }
+  doctor: {
+    profile: string
+    buildTimeSeconds: number
+    estimatedRangeSeconds: [number, number]
+    confidencePct: number
+    scannedAt: string
+    criticalPath: { name: string; seconds: number; kind: string }[]
+    findings: {
+      id: string
+      title: string
+      severity: string
+      section: string
+      confidencePct: number
+      confidenceClass: string
+      measurementStatus: string
+      impactSeconds: number | null
+      description: string
+      evidence: { label: string; value: string; source: string }[]
+      affected: string[]
+      recommendation: string
+      verificationPath: string
+      remediationKind: string
+      experimentEligible: boolean
+    }[]
+  }
+  graph: {
+    duplicates: { name: string; versions: string[]; dependents: string[]; wastedSeconds: number }[]
+    blastTop: { file: string; crate: string; affectedWorkspace: number; incrementalDelta: number }[]
+  }
+  pr: {
+    number: number
+    title: string
+    state: string
+    regressionPct: number
+    affectedCrates: number
+    confidencePct: number
+    confidenceClass: string
+  }
+  experiments: {
+    id: string
+    title: string
+    status: string
+    improvementPct: number | null
+    claim: string
+  }[]
+  gates: {
+    verdict: string
+    rationale: string
+    gates: { id: number; name: string; target: string; measured: string; status: string; blocking: boolean }[]
+  }
+  storage: {
+    rows: { label: string; sizeMB: number; reclaimable: boolean }[]
+    totalMB: number
+    lastGc: string
+    retention: string
+    bound: string
+    note: string
+  }
+  honestyNotes: string[]
+}
+
+export interface ReportJsonBundle {
+  filename: string
+  json: WorkspaceJsonReport
+  bytes: number
+}
+
+export function buildWorkspaceJsonReport(ws: string, now = new Date()): ReportJsonBundle {
+  const health: HealthPayload = getHealth(ws)
+  const doctor: DoctorReport = getDoctor(ws)
+  const graph: GraphPayload = getGraphPayload(ws)
+  const pr: PRAnalysis = getPRAnalysis(ws)
+  const experiments: ExperimentsPayload = getExperiments(ws)
+  const storage: StoragePayload = storagePayload(now.getTime())
+
+  const payload: WorkspaceJsonReport = {
+    schema: 'ferrix.report/v1',
+    workspace: ws,
+    generatedAt: now.toISOString(),
+    summary: {
+      crates: health.crates,
+      edges: health.edges,
+      toolchain: health.toolchain,
+      cacheHitRate: health.cacheHitRate,
+      lastScan: health.lastScan,
+      headlineInsight: health.insight?.text,
+    },
+    doctor: {
+      profile: doctor.profile,
+      buildTimeSeconds: doctor.buildTime,
+      estimatedRangeSeconds: doctor.estimatedRange,
+      confidencePct: doctor.confidence,
+      scannedAt: doctor.scannedAt,
+      criticalPath: doctor.criticalPath.map((s) => ({ name: s.name, seconds: s.seconds, kind: s.kind })),
+      findings: [...doctor.findings]
+        .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+        .map((f) => ({
+          id: f.id,
+          title: f.title,
+          severity: f.severity,
+          section: f.section,
+          confidencePct: f.confidence,
+          confidenceClass: f.confidenceClass,
+          measurementStatus: f.measurementStatus,
+          impactSeconds: f.impactSeconds ?? null,
+          description: f.description,
+          evidence: f.evidence.map((e) => ({ label: e.label, value: e.value, source: e.source })),
+          affected: f.affected,
+          recommendation: f.recommendation,
+          verificationPath: f.verificationPath,
+          remediationKind: f.remediationKind,
+          experimentEligible: f.experimentEligible ?? false,
+        })),
+    },
+    graph: {
+      duplicates: graph.duplicates.map((d) => ({
+        name: d.name,
+        versions: d.versions,
+        dependents: d.dependents,
+        wastedSeconds: d.wastedSeconds,
+      })),
+      blastTop: [...graph.blast]
+        .sort((a, b) => b.affectedWorkspace - a.affectedWorkspace)
+        .slice(0, 5)
+        .map((b) => ({
+          file: b.file,
+          crate: b.crate,
+          affectedWorkspace: b.affectedWorkspace,
+          incrementalDelta: b.incrementalDelta,
+        })),
+    },
+    pr: {
+      number: pr.number,
+      title: pr.title,
+      state: pr.state ?? 'open',
+      regressionPct: pr.regressionPct,
+      affectedCrates: pr.affectedCrates,
+      confidencePct: pr.confidence,
+      confidenceClass: pr.confidenceClass,
+    },
+    experiments: experiments.experiments.map((e) => ({
+      id: e.id,
+      title: e.title,
+      status: e.status,
+      improvementPct: e.improvementPct ?? null,
+      claim: e.claim,
+    })),
+    gates: {
+      verdict: GATES.verdict,
+      rationale: GATES.rationale,
+      gates: GATES.gates.map((g) => ({
+        id: g.id,
+        name: g.name,
+        target: g.target,
+        measured: g.measured,
+        status: g.status,
+        blocking: g.blocking,
+      })),
+    },
+    storage: {
+      rows: storage.rows.map((r) => ({ label: r.label, sizeMB: r.sizeMB, reclaimable: r.reclaimable })),
+      totalMB: storage.totalMB,
+      lastGc: storage.lastGc,
+      retention: storage.retention,
+      bound: storage.bound,
+      note: 'Simulated in-process state — resets when the demo server restarts.',
+    },
+    honestyNotes: [
+      'All figures labeled `estimated` come from build telemetry × graph traversal simulation and are NOT measured results until a ferrix experiment verifies them (Gate 21).',
+      'Findings carry stable IDs and per-claim evidence with source attribution; nothing was auto-applied to any repository (Gate 19).',
+      'AI (when connected) only adds grounded explanations on top of deterministic analysis; it never edits code silently.',
+    ],
+  }
+
+  const filename = `ferrix-report-${ws}-${now.toISOString().slice(0, 10)}.json`
+  const bytes = new TextEncoder().encode(JSON.stringify(payload)).length
+  return { filename, json: payload, bytes }
+}
+
 export function buildWorkspaceReport(ws: string, now = new Date()): ReportBundle {
   const health: HealthPayload = getHealth(ws)
   const doctor: DoctorReport = getDoctor(ws)

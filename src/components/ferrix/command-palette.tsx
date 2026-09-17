@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import {
+  Braces,
   Calculator,
   Check,
   Database,
@@ -22,6 +23,7 @@ import {
   ShieldCheck,
   Stethoscope,
   Sun,
+  TerminalSquare,
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -56,6 +58,8 @@ export function CommandPalette({
   onRunScan,
   onOpenDiffs,
   onExportReport,
+  onExportJson,
+  onOpenCli,
   pendingDiffs,
 }: {
   open: boolean
@@ -64,6 +68,8 @@ export function CommandPalette({
   onRunScan: () => void
   onOpenDiffs: () => void
   onExportReport: () => void
+  onExportJson: () => void
+  onOpenCli: () => void
   pendingDiffs: number
 }) {
   useEffect(() => {
@@ -160,6 +166,28 @@ export function CommandPalette({
             <FileText className="size-4 text-teal-300" />
             <span>Export workspace report</span>
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">markdown · findings + gates</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setOpen(false)
+              onExportJson()
+            }}
+            className="gap-2.5"
+          >
+            <Braces className="size-4 text-amber-400" />
+            <span>Export JSON snapshot</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">ferrix report --json</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setOpen(false)
+              onOpenCli()
+            }}
+            className="gap-2.5"
+          >
+            <TerminalSquare className="size-4 text-violet-300" />
+            <span>View CLI contract</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">commands · exit codes</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {

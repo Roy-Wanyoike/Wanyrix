@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { buildWorkspaceReport } from '@/lib/ferrix/report'
+import { buildWorkspaceJsonReport, buildWorkspaceReport } from '@/lib/ferrix/report'
 
 /**
- * Workspace report (round 9) — server-assembled Markdown "ferrix report"
- * built from the same getters the other /api/ferrix/* routes serve.
- * Returns JSON so the client can trigger a named download + toast the size.
+ * Workspace report — server-assembled "ferrix report" built from the same
+ * getters the other /api/ferrix/* routes serve. Two flavors (round 10),
+ * mirroring the CLI contract:
+ *  - `format=markdown` (default) → { filename, markdown, bytes }
+ *  - `format=json`               → { filename, json, bytes }   (`--json` parity)
+ * Both return JSON envelopes so the client can trigger a named download +
+ * toast the size.
  */
 export async function GET(req: NextRequest) {
   const ws = req.nextUrl.searchParams.get('ws') ?? 'helios-platform'
-  const bundle = buildWorkspaceReport(ws)
-  return NextResponse.json(bundle)
+  const format = req.nextUrl.searchParams.get('format') ?? 'markdown'
+
+  if (format === 'json') {
+    return NextResponse.json(buildWorkspaceJsonReport(ws))
+  }
+  if (format === 'markdown') {
+    return NextResponse.json(buildWorkspaceReport(ws))
+  }
+  return NextResponse.json({ error: `unknown format '${format}' (markdown | json)` }, { status: 400 })
 }

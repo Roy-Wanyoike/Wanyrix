@@ -34,7 +34,7 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useHealth } from '@/lib/ferrix/hooks'
 import type { ActivityEvent, Severity } from '@/lib/ferrix/types'
-import { CountUp, KpiCard, Panel, SectionHeading } from '../shared'
+import { CountUp, KpiCard, Panel, Reveal, SectionHeading } from '../shared'
 import { ExplainDialog } from '../explain-dialog'
 import type { ViewProps } from '../view-types'
 
@@ -154,59 +154,71 @@ export default function OverviewView({ onNavigate }: ViewProps) {
         }
       />
 
-      {/* ------------------------------------------------ 2) KPI grid */}
+      {/* ------------------------------------------------ 2) KPI grid — staggered entrance (round 10) */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard
-          label={k.buildPerformance.label}
-          value={<CountUp value={Math.abs(k.buildPerformance.delta)} suffix="%" />}
-          delta={k.buildPerformance.delta}
-          deltaSuffix="%"
-          goodWhenDown
-          hint="estimated, rolling 6 months"
-          icon={<TrendingDown className="size-4" />}
-          accent="primary"
-        />
-        <KpiCard
-          label={k.ciCost.label}
-          value={<CountUp value={Math.abs(k.ciCost.delta)} suffix="%" />}
-          delta={k.ciCost.delta}
-          deltaSuffix="%"
-          goodWhenDown
-          hint="spend per pipeline, rolling 6 months"
-          icon={<CircleDollarSign className="size-4" />}
-          accent="amber"
-        />
-        <KpiCard
-          label={k.dependencyRisk.label}
-          value={<CountUp value={Math.abs(k.dependencyRisk.delta)} suffix="%" />}
-          delta={k.dependencyRisk.delta}
-          deltaSuffix="%"
-          goodWhenDown
-          hint="duplicate + vulnerable surface"
-          icon={<ShieldAlert className="size-4" />}
-          accent="teal"
-        />
-        <KpiCard
-          label={k.prRegressions.label}
-          value={<CountUp value={k.prRegressions.count} />}
-          hint="2 open · ferrix/build-impact"
-          icon={<GitPullRequest className="size-4" />}
-          accent="red"
-        />
-        <KpiCard
-          label={k.architectureDebt.label}
-          value={<CountUp value={k.architectureDebt.count} />}
-          hint="oversized/fan-out crates"
-          icon={<Boxes className="size-4" />}
-          accent="amber"
-        />
-        <KpiCard
-          label={k.runtimeBottlenecks.label}
-          value={<CountUp value={k.runtimeBottlenecks.count} />}
-          hint="async + memory signals"
-          icon={<Activity className="size-4" />}
-          accent="teal"
-        />
+        {[
+          <KpiCard
+            key="bp"
+            label={k.buildPerformance.label}
+            value={<CountUp value={Math.abs(k.buildPerformance.delta)} suffix="%" />}
+            delta={k.buildPerformance.delta}
+            deltaSuffix="%"
+            goodWhenDown
+            hint="estimated, rolling 6 months"
+            icon={<TrendingDown className="size-4" />}
+            accent="primary"
+          />,
+          <KpiCard
+            key="cc"
+            label={k.ciCost.label}
+            value={<CountUp value={Math.abs(k.ciCost.delta)} suffix="%" />}
+            delta={k.ciCost.delta}
+            deltaSuffix="%"
+            goodWhenDown
+            hint="spend per pipeline, rolling 6 months"
+            icon={<CircleDollarSign className="size-4" />}
+            accent="amber"
+          />,
+          <KpiCard
+            key="dr"
+            label={k.dependencyRisk.label}
+            value={<CountUp value={Math.abs(k.dependencyRisk.delta)} suffix="%" />}
+            delta={k.dependencyRisk.delta}
+            deltaSuffix="%"
+            goodWhenDown
+            hint="duplicate + vulnerable surface"
+            icon={<ShieldAlert className="size-4" />}
+            accent="teal"
+          />,
+          <KpiCard
+            key="pr"
+            label={k.prRegressions.label}
+            value={<CountUp value={k.prRegressions.count} />}
+            hint="2 open · ferrix/build-impact"
+            icon={<GitPullRequest className="size-4" />}
+            accent="red"
+          />,
+          <KpiCard
+            key="ad"
+            label={k.architectureDebt.label}
+            value={<CountUp value={k.architectureDebt.count} />}
+            hint="oversized/fan-out crates"
+            icon={<Boxes className="size-4" />}
+            accent="amber"
+          />,
+          <KpiCard
+            key="rb"
+            label={k.runtimeBottlenecks.label}
+            value={<CountUp value={k.runtimeBottlenecks.count} />}
+            hint="async + memory signals"
+            icon={<Activity className="size-4" />}
+            accent="teal"
+          />,
+        ].map((card, i) => (
+          <Reveal key={i} delay={0.05 * i}>
+            {card}
+          </Reveal>
+        ))}
       </div>
 
       {/* ------------------------------------------------ 3) trend + distribution */}

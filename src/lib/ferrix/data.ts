@@ -4,6 +4,7 @@ import type {
   DiagnosticsPayload,
   DoctorReport,
   DuplicateGroup,
+  DuplicateResolution,
   Experiment,
   Finding,
   GraphEdge,
@@ -2094,25 +2095,16 @@ const ATLAS_ADD_DEP_CATALOG: Record<
 
 const UPGRADE_CATALOG: Record<
   string,
-  {
-    from: string
-    to: string
-    semver: 'major' | 'minor' | 'patch'
-    duplicateBefore?: boolean
-    recompileCrates: number
-    cleanDelta: number
-    incrementalDelta: number
-    ciDelta: number
-    breaking: { title: string; detail: string }[]
-    migrations: { code: string; note: string }[]
-    notes: string[]
-    suggestions: string[]
-  }
+  UpgradeCatalogEntry
 > = {
   tokio: {
     from: '1.40.0',
     to: '1.41.1',
     semver: 'minor',
+    resolves: {
+      kind: 'partial',
+      note: 'Unifies the 1.40 lineage on 1.41.1 — the 1.34.2 pin (sqlx 0.7 · legacy-cache) needs its own migration before the tree is clean.',
+    },
     recompileCrates: 46,
     cleanDelta: 0.8,
     incrementalDelta: 0.2,
@@ -2134,6 +2126,10 @@ const UPGRADE_CATALOG: Record<
     from: '1.0.210',
     to: '1.0.215',
     semver: 'patch',
+    resolves: {
+      kind: 'partial',
+      note: 'Moves the modern lineage to 1.0.215 — old-sdk 2.1 still pins 1.0.203; dropping that pin is what fully unifies the tree.',
+    },
     recompileCrates: 52,
     cleanDelta: 0.3,
     incrementalDelta: 0.1,
@@ -2214,28 +2210,41 @@ const UPGRADE_CATALOG: Record<
   },
 }
 
+/**
+ * Shared shape of the per-workspace version-upgrade catalogs (round 9).
+ * `resolves` (round 10) marks scenarios that close a duplicate-version group:
+ * 'full' = the upgrade unifies the tree; 'partial' = one lineage moves but a
+ * pin elsewhere keeps the duplicate alive — surfaced honestly in the UI.
+ */
+interface UpgradeCatalogEntry {
+  from: string
+  to: string
+  semver: 'major' | 'minor' | 'patch'
+  duplicateBefore?: boolean
+  resolves?: { kind: 'full' | 'partial'; note: string }
+  recompileCrates: number
+  cleanDelta: number
+  incrementalDelta: number
+  ciDelta: number
+  breaking: { title: string; detail: string }[]
+  migrations: { code: string; note: string }[]
+  notes: string[]
+  suggestions: string[]
+}
+
 const ATLAS_UPGRADE_CATALOG: Record<
   string,
-  {
-    from: string
-    to: string
-    semver: 'major' | 'minor' | 'patch'
-    duplicateBefore?: boolean
-    recompileCrates: number
-    cleanDelta: number
-    incrementalDelta: number
-    ciDelta: number
-    breaking: { title: string; detail: string }[]
-    migrations: { code: string; note: string }[]
-    notes: string[]
-    suggestions: string[]
-  }
+  UpgradeCatalogEntry
 > = {
   bytes: {
     from: '1.8.0',
     to: '1.9.0',
     semver: 'minor',
     duplicateBefore: true,
+    resolves: {
+      kind: 'full',
+      note: 'Unifying on 1.9.0 removes the duplicate artifact introduced by PR #97 buffer-pool vendoring — cargo tree -d goes clean.',
+    },
     recompileCrates: 6,
     cleanDelta: -0.6,
     incrementalDelta: -2.1,
@@ -2597,6 +2606,29 @@ export function getPRAnalysis(ws: string): PRAnalysis {
   return ws === 'atlas-consortium' ? PR_97_ATLAS : PR_184
 }
 
+/**
+ * Round-10 cross-view intelligence: for every duplicate-version group with a
+ * matching upgrade scenario that closes (fully or partially) the duplicate,
+ * build the crate → resolution map the graph payload serves to the UI.
+ */
+function buildResolutions(
+  catalog: Record<string, UpgradeCatalogEntry>,
+): Record<string, DuplicateResolution> {
+  const out: Record<string, DuplicateResolution> = {}
+  for (const [id, entry] of Object.entries(catalog)) {
+    if (!entry.resolves) continue
+    out[id] = {
+      scenarioId: id,
+      from: entry.from,
+      to: entry.to,
+      ciDelta: entry.ciDelta,
+      kind: entry.resolves.kind,
+      note: entry.resolves.note,
+    }
+  }
+  return out
+}
+
 export function getGraphPayload(ws: string): GraphPayload {
   if (ws === 'atlas-consortium') {
     return {
@@ -2614,6 +2646,7 @@ export function getGraphPayload(ws: string): GraphPayload {
         splitCandidates: [SPLIT_SIM_ATLAS.source],
         upgrades: Object.entries(ATLAS_UPGRADE_CATALOG).map(([id, v]) => ({ id, from: v.from, to: v.to })),
       },
+      resolutions: buildResolutions(ATLAS_UPGRADE_CATALOG),
     }
   }
   return {
@@ -2631,6 +2664,7 @@ export function getGraphPayload(ws: string): GraphPayload {
       splitCandidates: [SPLIT_SIM.source],
       upgrades: Object.entries(UPGRADE_CATALOG).map(([id, v]) => ({ id, from: v.from, to: v.to })),
     },
+    resolutions: buildResolutions(UPGRADE_CATALOG),
   }
 }
 

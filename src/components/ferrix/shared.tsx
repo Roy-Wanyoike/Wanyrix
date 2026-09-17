@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import type { ConfidenceClass, MeasurementStatus, Severity } from '@/lib/ferrix/types'
 
@@ -262,6 +262,34 @@ export function EmptyState({ label }: { label: string }) {
     <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
       {label}
     </div>
+  )
+}
+
+/**
+ * Reveal (round 10) — one-shot entrance: subtle rise + fade with an optional
+ * stagger delay. Respects prefers-reduced-motion (renders a plain div), so
+ * the global reduced-motion kill-switch and framer-motion agree.
+ */
+export function Reveal({
+  children,
+  delay = 0,
+  className,
+}: {
+  children: React.ReactNode
+  delay?: number
+  className?: string
+}) {
+  const reduce = useReducedMotion()
+  if (reduce) return <div className={className}>{children}</div>
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
   )
 }
 

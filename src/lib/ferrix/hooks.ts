@@ -180,19 +180,31 @@ export interface ReportBundle {
   bytes: number
 }
 
+export interface ReportJsonBundle {
+  filename: string
+  json: unknown
+  bytes: number
+}
+
+export type ReportFormat = 'markdown' | 'json'
+
 /**
- * Exports the server-assembled Markdown workspace report and triggers a
- * browser download. Mutation state drives the topbar button spinner.
+ * Exports the server-assembled workspace report and triggers a browser
+ * download. `markdown` is the human-readable flavor; `json` mirrors the CLI
+ * `--json` contract (round 10). Mutation state drives the topbar spinner.
  */
-export function useReportExport(): UseMutationResult<ReportBundle, Error, void> {
+export function useReportExport(format: ReportFormat = 'markdown') {
   const ws = useActiveWorkspace()
-  return useMutation<ReportBundle, Error, void>({
+  return useMutation<ReportBundle | ReportJsonBundle, Error, void>({
     mutationFn: async () => {
-      const res = await fetch(`/api/ferrix/report?ws=${encodeURIComponent(ws)}`)
+      const res = await fetch(
+        `/api/ferrix/report?ws=${encodeURIComponent(ws)}&format=${format}`,
+      )
       if (!res.ok) throw new Error(`report → ${res.status}`)
-      const bundle = (await res.json()) as ReportBundle
+      const bundle = (await res.json()) as ReportBundle | ReportJsonBundle
       const { downloadText } = await import('./patch')
-      downloadText(bundle.filename, bundle.markdown)
+      if ('markdown' in bundle) downloadText(bundle.filename, bundle.markdown)
+      else downloadText(bundle.filename, JSON.stringify(bundle.json, null, 2))
       return bundle
     },
   })
