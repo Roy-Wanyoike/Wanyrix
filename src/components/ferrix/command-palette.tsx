@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useTheme } from 'next-themes'
 import {
   Calculator,
   Check,
@@ -14,10 +15,12 @@ import {
   LayoutDashboard,
   ListChecks,
   Microscope,
+  Moon,
   Network,
   RefreshCw,
   ShieldCheck,
   Stethoscope,
+  Sun,
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -177,8 +180,30 @@ export function CommandPalette({
             <span>Storage report</span>
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">also in the footer</span>
           </CommandItem>
+          <ThemeAction />
         </CommandGroup>
       </CommandList>
     </CommandDialog>
+  )
+}
+
+/**
+ * Appearance toggle inside the palette (issue #43) — kept as its own component
+ * so useTheme only runs when the palette is rendered.
+ */
+function ThemeAction() {
+  const { resolvedTheme, setTheme } = useTheme()
+  const isDark = resolvedTheme !== 'light'
+  return (
+    <CommandItem
+      onSelect={() => setTheme(isDark ? 'light' : 'dark')}
+      className="gap-2.5"
+    >
+      {isDark ? <Sun className="size-4 text-amber-400" /> : <Moon className="size-4 text-teal-300" />}
+      <span>{isDark ? 'Switch to light appearance' : 'Switch to dark appearance'}</span>
+      <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+        {isDark ? 'daylight edition' : 'terminal edition'}
+      </span>
+    </CommandItem>
   )
 }

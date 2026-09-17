@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   Bell,
@@ -12,12 +13,16 @@ import {
   LayoutDashboard,
   ListChecks,
   Microscope,
+  Moon,
   Network,
   RefreshCw,
   Search,
   ShieldCheck,
   Stethoscope,
+  Sun,
 } from 'lucide-react'
+const subscribeNoop = () => () => {}
+
 import { cn } from '@/lib/utils'
 import { FerrixLogo } from './logo'
 import { CommandPalette } from './command-palette'
@@ -43,6 +48,49 @@ const WS_ACCENT: Record<WorkspaceSummary['accent'], string> = {
   primary: 'bg-primary',
   emerald: 'bg-emerald-400',
   zinc: 'bg-zinc-400',
+}
+
+/**
+ * Appearance toggle (issue #43) — dark is the terminal-native default;
+ * light is the warm-paper daylight edition. Rendered only after mount to
+ * avoid any SSR/client mismatch on the resolved theme.
+ */
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme()
+  // hydration flag without setState-in-effect: false during SSR/hydration,
+  // true on the client afterwards
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  )
+
+  const isDark = resolvedTheme !== 'light'
+  // Pre-hydration renders use theme-neutral labels — resolvedTheme differs
+  // between server and first client render, so anything theme-dependent must
+  // wait for `mounted` or it triggers an attribute hydration mismatch.
+  const label = mounted ? (isDark ? 'Switch to light appearance' : 'Switch to dark appearance') : 'Toggle appearance'
+  const hint = mounted ? (isDark ? 'Daylight edition' : 'Terminal edition') : 'Toggle appearance'
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      className="size-8"
+      aria-label={label}
+      title={hint}
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+    >
+      {mounted ? (
+        isDark ? (
+          <Sun className="size-4" />
+        ) : (
+          <Moon className="size-4" />
+        )
+      ) : (
+        <Moon className="size-4 opacity-0" aria-hidden />
+      )}
+    </Button>
+  )
 }
 
 const NAV: {
@@ -310,6 +358,8 @@ export function AppShell({
                   3
                 </span>
               </Button>
+
+              <ThemeToggle />
             </div>
           </div>
 
