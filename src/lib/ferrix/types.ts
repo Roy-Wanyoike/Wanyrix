@@ -418,6 +418,31 @@ export interface HealthPayload {
   lastScan: string
 }
 
+// ---------------------------------------------------------------------------
+// Workspace registry (live workspace switcher)
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceSummary {
+  id: string
+  name: string
+  description: string
+  crates: number
+  edges: number
+  toolchain: string
+  /** css color for the workspace accent dot (bg-<x> token family) */
+  accent: 'primary' | 'emerald' | 'zinc'
+  /** live = doctor+health indexed and fresh; archived = selectable for history only */
+  status: 'live' | 'archived'
+  findings: number
+  lastScan: string
+}
+
+/** GET /api/ferrix/workspaces */
+export interface WorkspacesPayload {
+  workspaces: WorkspaceSummary[]
+  default: string
+}
+
 /** POST /api/ferrix/explain */
 export interface ExplainRequest {
   context: string
