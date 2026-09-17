@@ -130,3 +130,33 @@ export function reclaimCaches(now = Date.now()): {
     storage: storagePayload(now),
   }
 }
+
+/**
+ * Simulate scan activity rebuilding the reclaimable caches (inverse of
+ * reclaim): every reclaimable row jumps back to its baseline. GC time is
+ * untouched — only the caches grow. Returns the MB added.
+ */
+export function rebuildCaches(now = Date.now()): {
+  rebuiltMB: number
+  detail: string[]
+  storage: StoragePayload
+} {
+  const s = getState()
+  storagePayload(now) // fold pending regrowth first, so the delta is exact
+  let rebuiltMB = 0
+  const detail: string[] = []
+  for (const [label, r] of Object.entries(s.rows)) {
+    if (r.reclaimable && r.current < r.base) {
+      const delta = r.base - r.current
+      rebuiltMB += delta
+      detail.push(`${label}: +${round1(delta)} MB`)
+      r.current = r.base
+    }
+  }
+  s.lastAppliedMs = now
+  return {
+    rebuiltMB: round1(rebuiltMB),
+    detail,
+    storage: storagePayload(now),
+  }
+}

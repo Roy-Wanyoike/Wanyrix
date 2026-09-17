@@ -12,6 +12,7 @@ import type {
   ImpactPayload,
   IssuesPayload,
   ExperimentsPayload,
+  PRAnalysis,
   StoragePayload,
   WorkspacesPayload,
 } from './types'
@@ -88,6 +89,15 @@ export function useExperiments() {
   })
 }
 
+export function usePRAnalysis() {
+  const ws = useActiveWorkspace()
+  return useQuery<PRAnalysis>({
+    queryKey: ['pr', ws],
+    queryFn: () => getJson(`/api/ferrix/pr?ws=${encodeURIComponent(ws)}`),
+    staleTime: Infinity,
+  })
+}
+
 export function useGates() {
   return useQuery<GatesPayload>({ queryKey: ['gates'], queryFn: () => getJson('/api/ferrix/gates') })
 }
@@ -121,6 +131,27 @@ export function useReclaimCaches(): UseMutationResult<ReclaimResponse, Error, vo
     },
     onSuccess: (data) => {
       // seed the cache with the server's post-GC payload, then refetch
+      queryClient.setQueryData<StoragePayload>(['storage'], data.storage)
+      void queryClient.invalidateQueries({ queryKey: ['storage'] })
+    },
+  })
+}
+
+export interface RebuildResponse {
+  rebuiltMB: number
+  detail: string[]
+  storage: StoragePayload
+}
+
+export function useRebuildCaches(): UseMutationResult<RebuildResponse, Error, void> {
+  const queryClient = useQueryClient()
+  return useMutation<RebuildResponse, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch('/api/ferrix/storage/rebuild', { method: 'POST' })
+      if (!res.ok) throw new Error(`rebuild → ${res.status}`)
+      return res.json() as Promise<RebuildResponse>
+    },
+    onSuccess: (data) => {
       queryClient.setQueryData<StoragePayload>(['storage'], data.storage)
       void queryClient.invalidateQueries({ queryKey: ['storage'] })
     },

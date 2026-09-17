@@ -278,6 +278,8 @@ export interface PRAnalysis {
   author: string
   branch: string
   base: string
+  /** PR lifecycle — open while the regression guard blocks it, merged once landed */
+  state?: 'open' | 'merged'
   before: number
   after: number
   regressionPct: number

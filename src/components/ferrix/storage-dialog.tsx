@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Database, HardDrive, History, Layers, ScrollText, Sparkles } from 'lucide-react'
+import { Database, Hammer, HardDrive, History, Layers, ScrollText, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { useReclaimCaches, useStorage } from '@/lib/ferrix/hooks'
+import { useRebuildCaches, useReclaimCaches, useStorage } from '@/lib/ferrix/hooks'
 import type { StorageRow } from '@/lib/ferrix/types'
 import { cn } from '@/lib/utils'
 import { StatusDot } from './shared'
@@ -28,6 +28,12 @@ function rowAccent(row: StorageRow): { bar: string; chip: string } {
   return { bar: 'from-violet-500/70 to-violet-400/40', chip: 'text-violet-300' }
 }
 
+/** Baseline (pre-GC) sizes of the reclaimable rows — mirrors the server model. */
+const BASELINE_MB: Record<string, number> = {
+  'Analysis cache (reusable regions)': 96,
+  'Logs (structured, 14-day retention)': 12,
+}
+
 /**
  * `ferrix storage` — Gate 71.10: storage must be bounded, inspectable and
  * safely reclaimable. Opened from the status footer chip. The reclaim CTA is
@@ -37,10 +43,22 @@ function rowAccent(row: StorageRow): { bar: string; chip: string } {
 export function StorageDialog({ children }: { children: React.ReactNode }) {
   const { data, isLoading, isError, refetch } = useStorage()
   const reclaim = useReclaimCaches()
+  const rebuild = useRebuildCaches()
   const { toast } = useToast()
 
   const reclaimableMB = data ? Math.round(data.rows.filter((r) => r.reclaimable).reduce((s, r) => s + r.sizeMB, 0)) : 0
   const nothingToReclaim = reclaimableMB < 1
+  /* baselines of the reclaimable rows — below this, scans can rebuild caches */
+  const rebuildableMB = data
+    ? Math.max(
+        0,
+        Math.round(
+          data.rows
+            .filter((r) => r.reclaimable)
+            .reduce((s, r) => s + Math.max(0, BASELINE_MB[r.label] - r.sizeMB), 0),
+        ),
+      )
+    : 0
 
   const onReclaim = () => {
     reclaim.mutate(undefined, {
@@ -55,6 +73,23 @@ export function StorageDialog({ children }: { children: React.ReactNode }) {
       },
       onError: (err) => {
         toast({ title: 'Reclaim failed', description: err.message })
+      },
+    })
+  }
+
+  const onRebuild = () => {
+    rebuild.mutate(undefined, {
+      onSuccess: (res) => {
+        toast({
+          title: `Caches rebuilt: +${res.rebuiltMB} MB`,
+          description:
+            res.detail.length > 0
+              ? `${res.detail.join(' · ')} — as a scan would repopulate them (simulated).`
+              : 'Caches are already at their working-set size.',
+        })
+      },
+      onError: (err) => {
+        toast({ title: 'Rebuild failed', description: err.message })
       },
     })
   }
@@ -159,19 +194,32 @@ export function StorageDialog({ children }: { children: React.ReactNode }) {
                   ? 'nothing reclaimable — caches regrow as scans run'
                   : `${reclaimableMB} MB safely reclaimable`}
               </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={onReclaim}
-                disabled={reclaim.isPending || nothingToReclaim}
-              >
-                {reclaim.isPending
-                  ? 'Reclaiming…'
-                  : reclaimableMB > 0
-                    ? `Reclaim caches (${reclaimableMB} MB)`
-                    : 'Reclaim caches'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1.5 text-xs text-muted-foreground"
+                  onClick={onRebuild}
+                  disabled={rebuild.isPending || reclaim.isPending || rebuildableMB < 1}
+                  title="Simulate scans repopulating the reclaimable caches (Gate 21: simulated)"
+                >
+                  <Hammer className="size-3" />
+                  Simulate scan rebuild{rebuildableMB >= 1 ? ` (+${rebuildableMB} MB)` : ''}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={onReclaim}
+                  disabled={reclaim.isPending || nothingToReclaim}
+                >
+                  {reclaim.isPending
+                    ? 'Reclaiming…'
+                    : reclaimableMB > 0
+                      ? `Reclaim caches (${reclaimableMB} MB)`
+                      : 'Reclaim caches'}
+                </Button>
+              </div>
             </div>
           </div>
         )}

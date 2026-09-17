@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FlaskConical,
   GitBranch,
+  GitMerge,
   GitPullRequest,
   Info,
   Network,
@@ -18,9 +19,11 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
-import { PR_184, REPO_URL } from '@/lib/ferrix/data'
+import { REPO_URL } from '@/lib/ferrix/data'
+import { usePRAnalysis } from '@/lib/ferrix/hooks'
 import type { PRAnalysis } from '@/lib/ferrix/types'
 import { ExplainDialog } from '../explain-dialog'
 import { FerrixLogo } from '../logo'
@@ -68,12 +71,34 @@ const CAUSE_ICON: Record<PRAnalysis['causeChain'][number]['kind'], { Icon: typeo
 
 export default function PRView({ onNavigate }: ViewProps) {
   const { toast } = useToast()
-  const pr = PR_184
+  const { data: pr, isPending } = usePRAnalysis()
   const activeWorkspace = useWorkspaceStore((s) => s.active)
+
+  if (isPending || !pr) {
+    return (
+      <div className="space-y-5">
+        <SectionHeading
+          eyebrow="Action"
+          title="PR Analysis"
+          description="Build regression triage — every number traces back to evidence, and every fix runs as an experiment first."
+        />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Skeleton className="h-64 lg:col-span-2" />
+          <Skeleton className="h-64" />
+        </div>
+        <Skeleton className="h-48" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-56" />
+          <Skeleton className="h-56" />
+        </div>
+      </div>
+    )
+  }
 
   const totalAdditions = pr.files.reduce((acc, f) => acc + f.additions, 0)
   const totalDeletions = pr.files.reduce((acc, f) => acc + f.deletions, 0)
   const maxDiff = Math.max(...pr.files.map((f) => f.additions + f.deletions))
+  const merged = pr.state === 'merged'
 
   const copyComment = async () => {
     try {
@@ -104,18 +129,8 @@ export default function PRView({ onNavigate }: ViewProps) {
       <SectionHeading
         eyebrow="Action"
         title="PR Analysis"
-        description="Build regression triage — every number traces back to evidence, and every fix runs as an experiment first."
+        description={`Build regression triage for ${activeWorkspace} — every number traces back to evidence, and every fix runs as an experiment first.`}
       />
-
-      {activeWorkspace !== 'helios-platform' && (
-        <p className="flex items-start gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-[11.5px] leading-snug text-muted-foreground">
-          <Info className="mt-0.5 size-3.5 shrink-0 text-primary/70" aria-hidden />
-          PR telemetry is currently indexed for{' '}
-          <span className="font-mono text-foreground/85">helios-platform</span> — the regression guard for{' '}
-          <span className="font-mono text-foreground/85">{activeWorkspace}</span> lands with its first CI correlation
-          scan.
-        </p>
-      )}
 
       {/* 1 — header */}
       <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5">
@@ -123,10 +138,17 @@ export default function PRView({ onNavigate }: ViewProps) {
           <GitPullRequest className="size-5 shrink-0 text-primary" />
           <span className="font-mono text-sm text-muted-foreground">#{pr.number}</span>
           <h2 className="text-[15px] font-semibold tracking-tight">{pr.title}</h2>
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
-            <span className="size-1.5 rounded-full bg-emerald-400" />
-            Open
-          </span>
+          {merged ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-300">
+              <GitMerge className="size-3" />
+              Merged
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
+              <span className="size-1.5 rounded-full bg-emerald-400" />
+              Open
+            </span>
+          )}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-border/60 pt-3">
           <div className="flex items-center gap-1.5">
@@ -193,6 +215,22 @@ export default function PRView({ onNavigate }: ViewProps) {
                   animate={{ scaleX: 1 }}
                   transition={{ duration: 0.7, delay: 0.15, ease: 'easeOut' }}
                 />
+                {/* regression delta zone — between baseline width and PR width */}
+                <div
+                  aria-hidden
+                  className="absolute inset-y-0 border-l border-dashed border-foreground/40"
+                  style={{
+                    left: `${(pr.before / pr.after) * 100}%`,
+                    right: 0,
+                    backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 5px, rgba(248,113,113,0.16) 5px 10px)',
+                  }}
+                />
+                <span
+                  className="absolute top-1/2 z-10 -translate-y-1/2 whitespace-nowrap rounded-sm bg-black/40 px-1.5 py-0.5 font-mono text-[9px] text-red-100"
+                  style={{ left: `calc(${(pr.before / pr.after) * 100}% + 6px)` }}
+                >
+                  +{(pr.after - pr.before).toFixed(1)}s vs main
+                </span>
               </div>
             </div>
           </div>
@@ -274,7 +312,9 @@ export default function PRView({ onNavigate }: ViewProps) {
             <span className="flex items-center gap-2">
               <FerrixLogo size={20} />
               ferrix[bot]
-              <span className="text-[11px] font-normal text-muted-foreground">commented 2m ago</span>
+              <span className="text-[11px] font-normal text-muted-foreground">
+                {merged ? 'commented before merge' : 'commented 2m ago'}
+              </span>
             </span>
           }
           actions={
@@ -340,7 +380,10 @@ export default function PRView({ onNavigate }: ViewProps) {
       >
         <div className="divide-y divide-border/60">
           {pr.files.map((f) => (
-            <div key={f.name} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+            <div
+              key={f.name}
+              className="flex items-center gap-3 rounded-sm px-1 py-2 transition-colors first:pt-0 last:pb-0 hover:bg-white/[0.04]"
+            >
               <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/85">{f.name}</span>
               <span className="shrink-0 font-mono text-[11px] text-emerald-300">+{f.additions}</span>
               <span className="shrink-0 font-mono text-[11px] text-red-300">−{f.deletions}</span>

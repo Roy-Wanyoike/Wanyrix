@@ -2207,6 +2207,65 @@ export const HEALTH_ATLAS: HealthPayload = {
   },
 }
 
+// ------------------------------------------------------- atlas: PR analysis
+// Workspace-scoped PR regression (round 8): atlas-consortium's own guard
+// case. PR #97 is the merged refactor referenced by the atlas health feed —
+// it introduced bytes 1.9.0 next to 1.8.0 (the DUPLICATES_ATLAS bytes group)
+// and amplified atlas-common touches to an 18-crate rebuild.
+
+export const PR_97_ATLAS: PRAnalysis = {
+  number: 97,
+  title: 'refactor(common): unify buffer pooling behind atlas-common',
+  author: 'dchen',
+  branch: 'refactor/buffer-pool',
+  base: 'main',
+  state: 'merged',
+  before: 6.8,
+  after: 11.8,
+  regressionPct: 73.5,
+  affectedCrates: 18,
+  confidence: 88,
+  confidenceClass: 'high',
+  causeChain: [
+    { label: 'atlas-common/Cargo.toml', note: '+ bytes 1.9.0 via pool-helper vendoring', kind: 'dep' },
+    { label: 'bytes', note: '1.8.0 + 1.9.0 now compile side by side', kind: 'crate' },
+    { label: 'atlas-common', note: '+2.1s compile from duplicate artifacts', kind: 'crate' },
+    { label: '18 downstream crates', note: '78% of the workspace re-invalidates on every atlas-common touch', kind: 'fanout' },
+  ],
+  comment:
+    '⚠ **Build Performance Regression**\n\nThis PR increases estimated incremental build time for atlas-common touches by **73.5%** (6.8s → 11.8s).\n\n**Primary cause:** the pooled buffer helper vendored `bytes 1.9.0` next to the workspace\u2019s `bytes 1.8.0`.\n\n**Evidence:**\n- `cargo tree -d`: bytes resolved to two versions (1.8.0 · 1.9.0)\n- `cargo build --timings`: atlas-common 4.6s → 6.7s\n- Blast radius: 18 downstream crates re-invalidate on `atlas-common` changes (78% of workspace)\n\n**Suggested alternatives:**\n1. Re-point the pool helper onto bytes 1.8 (`cargo update -p bytes@1.9.0 --precise 1.8.0`)\n2. Extract a stable `atlas-bytes` crate (see ATL-WRK-005)\n3. Gate the pooling helper behind an optional feature\n\n_Estimated values — not verified until an experiment is run._',
+  suggestions: [
+    {
+      title: 'Re-point pool helper onto bytes 1.8',
+      detail: 'One lockfile line — removes the duplicate build entirely.',
+      estimatedSaving: '≈ −2.1s incremental for 18 downstream crates',
+    },
+    {
+      title: 'Extract stable atlas-bytes crate',
+      detail: 'Buffer abstractions rarely change; glue code stays in atlas-common.',
+      estimatedSaving: '≈ −6.2s median incremental on common touches',
+    },
+    {
+      title: 'Gate pooling behind a feature flag',
+      detail: 'default-features = false for ingest-only consumers that need the pool.',
+      estimatedSaving: '≈ −1.4s clean build for bins',
+    },
+  ],
+  checks: [
+    { name: 'ferrix/build-impact', status: 'fail', duration: '9s' },
+    { name: 'ferrix/graph-diff', status: 'pass', duration: '6s' },
+    { name: 'ferrix/evidence-lint', status: 'pass', duration: '2s' },
+    { name: 'ci/build', status: 'pass', duration: '3m51s' },
+    { name: 'ci/test', status: 'pass', duration: '5m02s' },
+  ],
+  files: [
+    { name: 'atlas-common/Cargo.toml', additions: 3, deletions: 1 },
+    { name: 'atlas-common/src/pool.rs', additions: 186, deletions: 12 },
+    { name: 'atlas-common/src/lib.rs', additions: 14, deletions: 2 },
+    { name: 'Cargo.lock', additions: 9, deletions: 1 },
+  ],
+}
+
 // ------------------------------------------------------- atlas: diagnostics
 // Workspace-scoped diagnostics (round 7): atlas-consortium gets its own
 // borrow-checker scenario (E0499, the memtable writer pair) and its own async
@@ -2327,6 +2386,10 @@ export function getDoctor(ws: string): DoctorReport {
 
 export function getDiagnostics(ws: string): DiagnosticsPayload {
   return ws === 'atlas-consortium' ? DIAGNOSTICS_ATLAS : DIAGNOSTICS
+}
+
+export function getPRAnalysis(ws: string): PRAnalysis {
+  return ws === 'atlas-consortium' ? PR_97_ATLAS : PR_184
 }
 
 export function getGraphPayload(ws: string): GraphPayload {
