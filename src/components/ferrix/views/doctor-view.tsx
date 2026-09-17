@@ -550,7 +550,7 @@ export default function DoctorView({ onNavigate }: ViewProps) {
             }
             bodyClassName="p-0"
           >
-            <pre className="max-h-[420px] overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-foreground/90">
+            <pre className="scanlines relative max-h-[420px] overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-foreground/90">
               {json}
             </pre>
           </Panel>
