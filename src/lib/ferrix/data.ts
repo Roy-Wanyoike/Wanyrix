@@ -1378,6 +1378,48 @@ export const ISSUES: IssueItem[] = [
     verification: 'helios ⇄ atlas round-trip on overview/doctor/graph/simulator/experiments · persisted selection',
     repoUrl: REPO_URL,
   },
+  {
+    id: 'FER-115',
+    ghIssue: 37,
+    title: 'Doctor scan history — event-driven scan + persisted run log',
+    gate: 'Gate 21 · Honest measurement scope',
+    labels: ['frontend', 'build-doctor'],
+    state: 'merged',
+    pr: {
+      number: 40,
+      branch: 'feat/round5-scan-diff',
+      title: 'feat: doctor scan history + reviewable diff queue (Gate 19 flow)',
+      checks: [
+        { name: 'lint', status: 'pass' },
+        { name: 'browser-qa', status: 'pass' },
+      ],
+      additions: 780,
+      deletions: 18,
+    },
+    verification: 'topbar/⌘K scan bumps global event → doctor replays + records history · trend bars + trigger labels verified',
+    repoUrl: REPO_URL,
+  },
+  {
+    id: 'FER-116',
+    ghIssue: 38,
+    title: 'Diff review queue — close the Gate-19 loop',
+    gate: 'Gate 19 · No silent modification',
+    labels: ['frontend', 'governance'],
+    state: 'merged',
+    pr: {
+      number: 40,
+      branch: 'feat/round5-scan-diff',
+      title: 'feat: doctor scan history + reviewable diff queue (Gate 19 flow)',
+      checks: [
+        { name: 'lint', status: 'pass' },
+        { name: 'browser-qa', status: 'pass' },
+      ],
+      additions: 780,
+      deletions: 18,
+    },
+    verification: 'Queue-as-diff lands real per-workspace entries · pending badge · copy/mark-applied(dismiss)/re-open verified',
+    repoUrl: REPO_URL,
+  },
 ]
 
 // ---------------------------------------------------------------------------
