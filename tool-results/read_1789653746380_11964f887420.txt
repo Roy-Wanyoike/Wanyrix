@@ -1,0 +1,716 @@
+     1→'use client'
+     2→
+     3→import { Fragment, useMemo, useState, type ReactNode } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import { ArrowDown, ArrowRight, Lightbulb, ShieldAlert, ShieldCheck } from 'lucide-react'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Checkbox } from '@/components/ui/checkbox'
+     9→import {
+    10→  Dialog,
+    11→  DialogContent,
+    12→  DialogDescription,
+    13→  DialogHeader,
+    14→  DialogTitle,
+    15→} from '@/components/ui/dialog'
+    16→import { Skeleton } from '@/components/ui/skeleton'
+    17→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    18→import { useToast } from '@/hooks/use-toast'
+    19→import { useGraph, useImpact } from '@/lib/ferrix/hooks'
+    20→import { useDiffQueueStore } from '@/lib/ferrix/diff-store'
+    21→import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
+    22→import type { AddDepImpact, BlastEntry, EditFileImpact, ImpactPayload, SplitImpact } from '@/lib/ferrix/types'
+    23→import { cn } from '@/lib/utils'
+    24→import { ExplainDialog } from '../explain-dialog'
+    25→import { CountUp, MeasurementBadge, Panel, SectionHeading } from '../shared'
+    26→import type { ViewProps } from '../view-types'
+    27→
+    28→/* ----------------------------------------------------------------- helpers */
+    29→
+    30→type Mode = 'add-dep' | 'edit-file' | 'split-crate'
+    31→
+    32→/** Minimal structural view of a TanStack Query result — keeps props simple. */
+    33→interface QueryLike<T> {
+    34→  data: T | undefined
+    35→  isPending: boolean
+    36→  isError: boolean
+    37→  error: Error | null
+    38→  refetch: () => void
+    39→}
+    40→
+    41→// the add-dep catalog is served per workspace via the graph payload (issue #34)
+    42→
+    43→function SectionLabel({ children }: { children: ReactNode }) {
+    44→  return <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{children}</h3>
+    45→}
+    46→
+    47→function QueryError({ message, onRetry }: { message: string; onRetry: () => void }) {
+    48→  return (
+    49→    <div className="flex flex-col items-start gap-2.5 rounded-lg border border-red-500/25 bg-red-500/5 px-4 py-3.5">
+    50→      <p className="text-xs text-red-300">Failed to load impact estimate — {message}</p>
+    51→      <Button size="sm" variant="outline" onClick={onRetry}>
+    52→        Retry
+    53→      </Button>
+    54→    </div>
+    55→  )
+    56→}
+    57→
+    58→function TilesSkeleton({ count = 7 }: { count?: number }) {
+    59→  return (
+    60→    <div className="space-y-3">
+    61→      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+    62→        {Array.from({ length: count }).map((_, i) => (
+    63→          <Skeleton key={i} className="h-[74px]" />
+    64→        ))}
+    65→      </div>
+    66→      <Skeleton className="h-28" />
+    67→    </div>
+    68→  )
+    69→}
+    70→
+    71→function ImpactTile({
+    72→  label,
+    73→  value,
+    74→  decimals = 0,
+    75→  prefix = '',
+    76→  suffix = '',
+    77→  cost = false,
+    78→}: {
+    79→  label: string
+    80→  value: number
+    81→  decimals?: number
+    82→  prefix?: string
+    83→  suffix?: string
+    84→  cost?: boolean
+    85→}) {
+    86→  return (
+    87→    <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+    88→      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+    89→      <p className={cn('mt-1 font-mono text-lg font-semibold', cost ? 'text-red-300' : 'text-foreground')}>
+    90→        <CountUp value={value} decimals={decimals} prefix={prefix} suffix={suffix} />
+    91→      </p>
+    92→    </div>
+    93→  )
+    94→}
+    95→
+    96→function ChainStepper({ items }: { items: { label: string; note?: string }[] }) {
+    97→  return (
+    98→    <ol className="relative ml-1.5 space-y-4 border-l border-border/60 pl-5">
+    99→      {items.map((c, i) => (
+   100→        <li key={`${c.label}-${i}`} className="relative">
+   101→          <span
+   102→            className={cn(
+   103→              'absolute -left-[25.5px] top-0.5 size-2.5 rounded-full border-2 border-background',
+   104→              i === 0 ? 'bg-primary' : 'bg-primary/50',
+   105→            )}
+   106→          />
+   107→          <p className="text-sm font-medium leading-tight">{c.label}</p>
+   108→          {c.note && <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{c.note}</p>}
+   109→        </li>
+   110→      ))}
+   111→    </ol>
+   112→  )
+   113→}
+   114→
+   115→/* ------------------------------------------------------------ add-dep tab */
+   116→
+   117→function CatalogCard({
+   118→  id,
+   119→  version,
+   120→  active,
+   121→  onSelect,
+   122→}: {
+   123→  id: string
+   124→  version: string
+   125→  active: boolean
+   126→  onSelect: () => void
+   127→}) {
+   128→  const query = useImpact('add-dep', id)
+   129→  const d = query.data && query.data.kind === 'add-dep' ? query.data : undefined
+   130→
+   131→  return (
+   132→    <button
+   133→      type="button"
+   134→      role="radio"
+   135→      aria-checked={active}
+   136→      onClick={onSelect}
+   137→      className={cn(
+   138→        'w-full rounded-lg border p-3 text-left transition-colors',
+   139→        active ? 'border-primary/60 bg-primary/10' : 'border-border/70 bg-card hover:border-primary/30',
+   140→      )}
+   141→    >
+   142→      <div className="flex items-center justify-between gap-2">
+   143→        <span className="truncate font-mono text-xs font-semibold">{id}</span>
+   144→        <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+   145→          v{version}
+   146→        </Badge>
+   147→      </div>
+   148→      <div className="mt-2 flex items-center gap-3 font-mono text-[11px]">
+   149→        {d ? (
+   150→          <>
+   151→            <span className="text-muted-foreground">{d.cratesAdded} crates</span>
+   152→            <span className="text-red-300">+{d.ciDelta}s CI</span>
+   153→          </>
+   154→        ) : (
+   155→          <span className="animate-pulse text-muted-foreground">loading…</span>
+   156→        )}
+   157→      </div>
+   158→    </button>
+   159→  )
+   160→}
+   161→
+   162→function AddDepReport({ query }: { query: QueryLike<ImpactPayload> }) {
+   163→  const [pending, setPending] = useState<string | null>(null)
+   164→  const { toast } = useToast()
+   165→  const activeWs = useWorkspaceStore((s) => s.active)
+   166→  const enqueueDiff = useDiffQueueStore((s) => s.enqueue)
+   167→  const d = query.data && query.data.kind === 'add-dep' ? (query.data as AddDepImpact) : undefined
+   168→
+   169→  if (query.isPending || (query.data === undefined && !query.isError)) {
+   170→    return (
+   171→      <Panel title="Dependency impact">
+   172→        <TilesSkeleton />
+   173→      </Panel>
+   174→    )
+   175→  }
+   176→
+   177→  if (!d) {
+   178→    return (
+   179→      <Panel title="Dependency impact">
+   180→        <QueryError message={query.error?.message ?? 'unknown error'} onRetry={() => query.refetch()} />
+   181→      </Panel>
+   182→    )
+   183→  }
+   184→
+   185→  const tiles: {
+   186→    label: string
+   187→    value: number
+   188→    decimals?: number
+   189→    prefix?: string
+   190→    suffix?: string
+   191→    cost?: boolean
+   192→  }[] = [
+   193→    { label: 'crates added', value: d.cratesAdded },
+   194→    { label: 'proc-macros added', value: d.procMacrosAdded },
+   195→    { label: 'target size', value: d.targetMB, decimals: 1, suffix: ' MB' },
+   196→    { label: 'transitive deps', value: d.transitiveDeps },
+   197→    { label: 'clean build', value: d.cleanDelta, decimals: 1, prefix: '+', suffix: 's', cost: true },
+   198→    { label: 'incremental', value: d.incrementalDelta, decimals: 1, prefix: '+', suffix: 's', cost: true },
+   199→    { label: 'CI', value: d.ciDelta, prefix: '+', suffix: 's', cost: true },
+   200→  ]
+   201→
+   202→  return (
+   203→    <Panel
+   204→      title={`Dependency impact — ${d.crate} ${d.version}`}
+   205→      subtitle="what enters your tree if you add this crate"
+   206→      actions={<MeasurementBadge status={d.measurementStatus} />}
+   207→    >
+   208→      <div className="space-y-5">
+   209→        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+   210→          {tiles.map((t) => (
+   211→            <ImpactTile key={t.label} {...t} />
+   212→          ))}
+   213→        </div>
+   214→
+   215→        <section>
+   216→          <SectionLabel>Cascading rebuild chain</SectionLabel>
+   217→          <div className="mt-3">
+   218→            <ChainStepper items={d.chain} />
+   219→          </div>
+   220→        </section>
+   221→
+   222→        <section>
+   223→          <SectionLabel>Security &amp; supply chain</SectionLabel>
+   224→          <ul className="mt-2.5 space-y-1.5">
+   225→            {d.security.map((s, i) => (
+   226→              <li key={i} className="flex items-start gap-2 text-xs">
+   227→                {s.level === 'warn' ? (
+   228→                  <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+   229→                ) : (
+   230→                  <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-teal-300" />
+   231→                )}
+   232→                <span className={s.level === 'warn' ? 'text-amber-200/90' : 'text-muted-foreground'}>
+   233→                  {s.label}
+   234→                </span>
+   235→              </li>
+   236→            ))}
+   237→          </ul>
+   238→        </section>
+   239→
+   240→        <section>
+   241→          <SectionLabel>Suggestions</SectionLabel>
+   242→          <ol className="mt-2.5 space-y-2">
+   243→            {d.suggestions.map((s, i) => (
+   244→              <li
+   245→                key={i}
+   246→                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2"
+   247→              >
+   248→                <p className="text-xs leading-snug">
+   249→                  <span className="mr-2 font-mono text-muted-foreground">{String(i + 1).padStart(2, '0')}</span>
+   250→                  {s}
+   251→                </p>
+   252→                <Button
+   253→                  size="sm"
+   254→                  variant="outline"
+   255→                  className="h-7 shrink-0 text-[11px]"
+   256→                  onClick={() => setPending(s)}
+   257→                >
+   258→                  Apply suggestion
+   259→                </Button>
+   260→              </li>
+   261→            ))}
+   262→          </ol>
+   263→        </section>
+   264→      </div>
+   265→
+   266→      <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+   267→        <DialogContent className="max-w-md">
+   268→          <DialogHeader>
+   269→            <DialogTitle>Queue a reviewable diff?</DialogTitle>
+   270→            <DialogDescription>
+   271→              Ferrix never modifies your repository silently. A reviewable diff will be proposed (Gate 19).
+   272→            </DialogDescription>
+   273→          </DialogHeader>
+   274→          <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/90">
+   275→            {pending}
+   276→          </div>
+   277→          <div className="flex justify-end gap-2">
+   278→            <Button size="sm" variant="ghost" onClick={() => setPending(null)}>
+   279→              Cancel
+   280→            </Button>
+   281→            <Button
+   282→              size="sm"
+   283→              onClick={() => {
+   284→                if (!pending) return
+   285→                enqueueDiff({
+   286→                  id: `diff-${Date.now()}`,
+   287→                  workspace: activeWs,
+   288→                  at: Date.now(),
+   289→                  source: 'simulator:add-dep',
+   290→                  kind: 'config',
+   291→                  title: `Dependency change — ${d.crate} ${d.version}`,
+   292→                  target: `${d.crate} ${d.version} · Cargo.toml`,
+   293→                  suggestion: pending,
+   294→                  estimate: `+${d.cleanDelta}s clean · +${d.ciDelta}s CI per build`,
+   295→                  status: 'pending',
+   296→                })
+   297→                toast({
+   298→                  title: 'Diff queued for review',
+   299→                  description: 'Open Pending diffs in the topbar to inspect or export it (Gate 19).',
+   300→                })
+   301→                setPending(null)
+   302→              }}
+   303→            >
+   304→              Queue as diff
+   305→            </Button>
+   306→          </div>
+   307→        </DialogContent>
+   308→      </Dialog>
+   309→    </Panel>
+   310→  )
+   311→}
+   312→
+   313→/* ---------------------------------------------------------- edit-file tab */
+   314→
+   315→function EditFileReport({
+   316→  query,
+   317→  onNavigate,
+   318→}: {
+   319→  query: QueryLike<ImpactPayload>
+   320→  onNavigate?: ViewProps['onNavigate']
+   321→}) {
+   322→  const d = query.data && query.data.kind === 'edit-file' ? (query.data as EditFileImpact) : undefined
+   323→
+   324→  if (query.isPending || (query.data === undefined && !query.isError)) {
+   325→    return (
+   326→      <Panel title="File impact">
+   327→        <TilesSkeleton count={2} />
+   328→      </Panel>
+   329→    )
+   330→  }
+   331→
+   332→  if (!d) {
+   333→    return (
+   334→      <Panel title="File impact">
+   335→        <QueryError message={query.error?.message ?? 'unknown error'} onRetry={() => query.refetch()} />
+   336→      </Panel>
+   337→    )
+   338→  }
+   339→
+   340→  return (
+   341→    <Panel
+   342→      title="File impact"
+   343→      subtitle={d.file}
+   344→      actions={<MeasurementBadge status={d.measurementStatus} />}
+   345→    >
+   346→      <div className="space-y-5">
+   347→        <div className="rounded-lg border border-red-500/25 bg-red-500/5 px-4 py-3.5">
+   348→          <p className="font-mono text-4xl font-semibold text-red-300">
+   349→            <CountUp value={d.affectedWorkspace} />
+   350→          </p>
+   351→          <p className="mt-1 text-sm text-muted-foreground">
+   352→            workspace crates re-invalidate when <span className="font-mono text-[11px] text-foreground/80">{d.file}</span> changes
+   353→          </p>
+   354→        </div>
+   355→
+   356→        <div className="grid grid-cols-2 gap-2.5">
+   357→          <ImpactTile label="incremental rebuild" value={d.incrementalDelta} decimals={1} prefix="+" suffix="s" cost />
+   358→          <ImpactTile label="CI pipeline" value={d.ciDelta} decimals={1} prefix="+" suffix="s" cost />
+   359→        </div>
+   360→
+   361→        <section>
+   362→          <SectionLabel>Invalidation chain</SectionLabel>
+   363→          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+   364→            {d.chain.map((c, i) => (
+   365→              <Fragment key={`${c}-${i}`}>
+   366→                {i > 0 && <ArrowRight className="size-3 text-muted-foreground" />}
+   367→                <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-0.5 font-mono text-[10px]">
+   368→                  {c}
+   369→                </span>
+   370→              </Fragment>
+   371→            ))}
+   372→          </div>
+   373→        </section>
+   374→
+   375→        <section>
+   376→          <SectionLabel>Notes</SectionLabel>
+   377→          <ul className="mt-2 space-y-1.5">
+   378→            {d.notes.map((n, i) => (
+   379→              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+   380→                <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary/70" />
+   381→                {n}
+   382→              </li>
+   383→            ))}
+   384→          </ul>
+   385→        </section>
+   386→
+   387→        <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5">
+   388→          <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+   389→          <p className="text-xs text-amber-200/90">{d.suggestion}</p>
+   390→        </div>
+   391→
+   392→        <Button variant="outline" size="sm" onClick={() => onNavigate?.('graph')}>
+   393→          View in graph
+   394→        </Button>
+   395→      </div>
+   396→    </Panel>
+   397→  )
+   398→}
+   399→
+   400→/* -------------------------------------------------------- split-crate tab */
+   401→
+   402→function TimeBar({
+   403→  label,
+   404→  seconds,
+   405→  widthPct,
+   406→  tone,
+   407→}: {
+   408→  label: string
+   409→  seconds: number
+   410→  widthPct: number
+   411→  tone: string
+   412→}) {
+   413→  return (
+   414→    <div className="flex items-center gap-3">
+   415→      <span className="w-36 shrink-0 font-mono text-[11px] text-muted-foreground">{label}</span>
+   416→      <div className="h-3.5 flex-1 overflow-hidden rounded-full bg-muted/40">
+   417→        <motion.div
+   418→          className={cn('h-full rounded-full', tone)}
+   419→          initial={{ width: 0 }}
+   420→          animate={{ width: `${widthPct}%` }}
+   421→          transition={{ duration: 0.9, ease: 'easeOut' }}
+   422→        />
+   423→      </div>
+   424→      <span className="w-14 shrink-0 text-right font-mono text-xs text-foreground">{seconds.toFixed(1)}s</span>
+   425→    </div>
+   426→  )
+   427→}
+   428→
+   429→function SplitReport({
+   430→  query,
+   431→  onNavigate,
+   432→}: {
+   433→  query: QueryLike<ImpactPayload>
+   434→  onNavigate?: ViewProps['onNavigate']
+   435→}) {
+   436→  const { toast } = useToast()
+   437→  const [done, setDone] = useState<boolean[]>([])
+   438→  const d = query.data && query.data.kind === 'split-crate' ? (query.data as SplitImpact) : undefined
+   439→
+   440→  if (query.isPending || (query.data === undefined && !query.isError)) {
+   441→    return (
+   442→      <Panel title="Architecture proposal">
+   443→        <TilesSkeleton count={4} />
+   444→      </Panel>
+   445→    )
+   446→  }
+   447→
+   448→  if (!d) {
+   449→    return (
+   450→      <Panel title="Architecture proposal">
+   451→        <QueryError message={query.error?.message ?? 'unknown error'} onRetry={() => query.refetch()} />
+   452→      </Panel>
+   453→    )
+   454→  }
+   455→
+   456→  const toggle = (i: number) => {
+   457→    const next = d.migration.map((_, j) => (j === i ? !(done[j] ?? false) : (done[j] ?? false)))
+   458→    setDone(next)
+   459→    if (next.every(Boolean)) {
+   460→      toast({ title: 'All steps marked — create the experiment to verify' })
+   461→    }
+   462→  }
+   463→
+   464→  const afterPct = (d.proposal.buildSeconds / d.before.buildSeconds) * 100
+   465→
+   466→  return (
+   467→    <Panel
+   468→      title={`Architecture proposal — split ${d.source}`}
+   469→      subtitle="monolith → focused crates, sized by real build telemetry"
+   470→      actions={<MeasurementBadge status={d.measurementStatus} />}
+   471→    >
+   472→      <div className="space-y-6">
+   473→        {/* before / after diagrams */}
+   474→        <div className="grid items-stretch gap-4 lg:grid-cols-[1fr_auto_1.6fr]">
+   475→          <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+   476→            <div className="flex items-center justify-between gap-2">
+   477→              <p className="font-mono text-sm font-semibold">{d.source}</p>
+   478→              <Badge variant="outline" className="font-mono text-[10px]">
+   479→                before
+   480→              </Badge>
+   481→            </div>
+   482→            <div className="mt-3 flex flex-wrap gap-1.5">
+   483→              {d.before.modules.map((m) => (
+   484→                <span
+   485→                  key={m}
+   486→                  className="rounded-md border border-border/70 bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+   487→                >
+   488→                  {m}
+   489→                </span>
+   490→              ))}
+   491→            </div>
+   492→            <p className="mt-4 font-mono text-2xl font-semibold">{d.before.buildSeconds.toFixed(1)}s</p>
+   493→            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+   494→              fan-out {d.before.fanOut} · downstream {d.before.downstream}
+   495→            </p>
+   496→          </div>
+   497→
+   498→          <div className="flex items-center justify-center">
+   499→            <ArrowDown className="size-5 text-primary lg:hidden" />
+   500→            <ArrowRight className="hidden size-5 text-primary lg:block" />
+   501→          </div>
+   502→
+   503→          <div className="rounded-xl border border-dashed border-primary/40 bg-card p-4">
+   504→            <div className="flex items-center justify-between gap-2">
+   505→              <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/90">proposed split</p>
+   506→              <Badge
+   507→                variant="outline"
+   508→                className="border-emerald-500/30 bg-emerald-500/10 font-mono text-[10px] text-emerald-300"
+   509→              >
+   510→                total {d.proposal.buildSeconds.toFixed(1)}s
+   511→              </Badge>
+   512→            </div>
+   513→            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+   514→              {d.proposal.crates.map((c) => (
+   515→                <div key={c.name} className="rounded-lg border border-dashed border-border/80 bg-muted/20 p-3">
+   516→                  <p className="font-mono text-xs font-semibold">{c.name}</p>
+   517→                  <div className="mt-2 flex flex-wrap gap-1">
+   518→                    {c.modules.map((m) => (
+   519→                      <span
+   520→                        key={m}
+   521→                        className="rounded border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground"
+   522→                      >
+   523→                        {m}
+   524→                      </span>
+   525→                    ))}
+   526→                  </div>
+   527→                  <p className="mt-3 font-mono text-lg font-semibold">{c.buildSeconds.toFixed(1)}s</p>
+   528→                  <p className="font-mono text-[10px] text-muted-foreground">downstream {c.downstream}</p>
+   529→                </div>
+   530→              ))}
+   531→            </div>
+   532→          </div>
+   533→        </div>
+   534→
+   535→        {/* build-time bars */}
+   536→        <section>
+   537→          <SectionLabel>Build time — affected subtree, clean build</SectionLabel>
+   538→          <div className="mt-3 space-y-2.5">
+   539→            <TimeBar
+   540→              label={`before · ${d.source}`}
+   541→              seconds={d.before.buildSeconds}
+   542→              widthPct={100}
+   543→              tone="bg-red-400/50"
+   544→            />
+   545→            <TimeBar
+   546→              label="after · split"
+   547→              seconds={d.proposal.buildSeconds}
+   548→              widthPct={afterPct}
+   549→              tone="bg-emerald-400/60"
+   550→            />
+   551→          </div>
+   552→          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+   553→            <p className="font-mono text-3xl font-semibold text-emerald-300">
+   554→              +<CountUp value={d.improvementPct} decimals={1} suffix="%" />
+   555→            </p>
+   556→            <div className="space-y-1">
+   557→              <p className="text-xs font-medium text-emerald-200/90">clean-build improvement from the split</p>
+   558→              <MeasurementBadge status={d.measurementStatus} />
+   559→            </div>
+   560→          </div>
+   561→        </section>
+   562→
+   563→        {/* migration checklist */}
+   564→        <section>
+   565→          <SectionLabel>Migration steps</SectionLabel>
+   566→          <div className="mt-3 space-y-1.5">
+   567→            {d.migration.map((step, i) => {
+   568→              const checked = done[i] ?? false
+   569→              return (
+   570→                <label
+   571→                  key={i}
+   572→                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 px-3 py-2.5 transition-colors hover:border-primary/30"
+   573→                >
+   574→                  <Checkbox
+   575→                    checked={checked}
+   576→                    onCheckedChange={() => toggle(i)}
+   577→                    className="mt-0.5"
+   578→                    aria-label={`Migration step ${i + 1}`}
+   579→                  />
+   580→                  <span className="font-mono text-[11px] text-muted-foreground">{String(i + 1).padStart(2, '0')}</span>
+   581→                  <span className={cn('text-xs leading-snug', checked && 'text-muted-foreground line-through')}>
+   582→                    {step}
+   583→                  </span>
+   584→                </label>
+   585→              )
+   586→            })}
+   587→          </div>
+   588→        </section>
+   589→
+   590→        {/* CTA */}
+   591→        <div className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
+   592→          <Button
+   593→            onClick={() => {
+   594→              toast({ title: 'Experiment draft created from this proposal (demo)' })
+   595→              onNavigate?.('experiments')
+   596→            }}
+   597→          >
+   598→            Create experiment from this proposal
+   599→          </Button>
+   600→          <p className="font-mono text-[11px] text-muted-foreground">opens experiments with a draft EXP</p>
+   601→        </div>
+   602→      </div>
+   603→    </Panel>
+   604→  )
+   605→}
+   606→
+   607→/* -------------------------------------------------------------------- view */
+   608→
+   609→export default function SimulatorView({ onNavigate }: ViewProps) {
+   610→  const [mode, setMode] = useState<Mode>('add-dep')
+   611→  const [target, setTarget] = useState('')
+   612→  const [file, setFile] = useState('')
+   613→
+   614→  const graph = useGraph()
+   615→  const blast: BlastEntry[] = useMemo(() => graph.data?.blast ?? [], [graph.data])
+   616→  // Catalogs are payload-driven per workspace; defaults derive during render
+   617→  // so a workspace switch never shows stale selections.
+   618→  const addDepOptions = graph.data?.catalog?.addDeps ?? []
+   619→  const activeTarget = target || addDepOptions[0]?.id || ''
+   620→  const splitSource = graph.data?.catalog?.splitCandidates[0] ?? ''
+   621→  const activeFile = file || blast[0]?.file || ''
+   622→  const addDepQuery = useImpact('add-dep', activeTarget)
+   623→  const editFileQuery = useImpact('edit-file', activeFile)
+   624→  const splitQuery = useImpact('split-crate', splitSource)
+   625→
+   626→  return (
+   627→    <div className="space-y-5">
+   628→      <SectionHeading
+   629→        eyebrow="Engineering Cost Calculator"
+   630→        title="What will this change cost?"
+   631→        description="Estimates derived from build telemetry × graph traversal — verified only through experiments."
+   632→        actions={<MeasurementBadge status="estimated" />}
+   633→      />
+   634→
+   635→      <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+   636→        <TabsList className="h-auto flex-wrap">
+   637→          <TabsTrigger value="add-dep">Add a dependency</TabsTrigger>
+   638→          <TabsTrigger value="edit-file">Edit a source file</TabsTrigger>
+   639→          <TabsTrigger value="split-crate">Split a crate</TabsTrigger>
+   640→        </TabsList>
+   641→
+   642→        <TabsContent value="add-dep" className="mt-4">
+   643→          <div className="grid gap-4 lg:grid-cols-3">
+   644→            <div className="space-y-2 lg:col-span-1" role="radiogroup" aria-label="Dependency catalog">
+   645→              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Catalog</p>
+   646→              {graph.isPending &&
+   647→                Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+   648→              {addDepOptions.map((opt) => (
+   649→                <CatalogCard
+   650→                  key={opt.id}
+   651→                  id={opt.id}
+   652→                  version={opt.version}
+   653→                  active={activeTarget === opt.id}
+   654→                  onSelect={() => setTarget(opt.id)}
+   655→                />
+   656→              ))}
+   657→            </div>
+   658→            <div className="lg:col-span-2">
+   659→              <AddDepReport query={addDepQuery} />
+   660→            </div>
+   661→          </div>
+   662→        </TabsContent>
+   663→
+   664→        <TabsContent value="edit-file" className="mt-4">
+   665→          <div className="grid gap-4 lg:grid-cols-5">
+   666→            <div className="space-y-2 lg:col-span-2" role="radiogroup" aria-label="High-traffic source files">
+   667→              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+   668→                High-traffic files
+   669→              </p>
+   670→              {graph.isPending &&
+   671→                Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+   672→              {graph.isError && (
+   673→                <QueryError message={graph.error?.message ?? 'graph unavailable'} onRetry={() => graph.refetch()} />
+   674→              )}
+   675→              {blast.map((b) => (
+   676→                <button
+   677→                  key={b.file}
+   678→                  type="button"
+   679→                  role="radio"
+   680→                  aria-checked={b.file === activeFile}
+   681→                  onClick={() => setFile(b.file)}
+   682→                  className={cn(
+   683→                    'w-full rounded-lg border p-3 text-left transition-colors',
+   684→                    b.file === activeFile
+   685→                      ? 'border-primary/60 bg-primary/10'
+   686→                      : 'border-border/70 bg-card hover:border-primary/30',
+   687→                  )}
+   688→                >
+   689→                  <p className="truncate font-mono text-[11px]">{b.file}</p>
+   690→                  <div className="mt-1.5 flex items-center gap-2">
+   691→                    <Badge variant="outline" className="font-mono text-[10px]">
+   692→                      {b.crate}
+   693→                    </Badge>
+   694→                    <span className="font-mono text-[11px] text-muted-foreground">{b.affectedWorkspace} crates</span>
+   695→                  </div>
+   696→                </button>
+   697→              ))}
+   698→            </div>
+   699→            <div className="lg:col-span-3">
+   700→              <EditFileReport query={editFileQuery} onNavigate={onNavigate} />
+   701→            </div>
+   702→          </div>
+   703→        </TabsContent>
+   704→
+   705→        <TabsContent value="split-crate" className="mt-4">
+   706→          <SplitReport query={splitQuery} onNavigate={onNavigate} />
+   707→        </TabsContent>
+   708→      </Tabs>
+   709→
+   710→      <p className="font-mono text-[11px] text-muted-foreground">
+   711→        All figures estimated (Gate 21) · ferrix experiment converts estimates into measured, verified results.
+   712→      </p>
+   713→    </div>
+   714→  )
+   715→}
+   716→
