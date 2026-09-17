@@ -45,37 +45,39 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* light mode: warm paper + rust/amber — the Ferrix identity, daylight edition (issue #43) */
+  --background: oklch(0.977 0.005 85);
+  --foreground: oklch(0.24 0.012 60);
+  --card: oklch(0.995 0.003 85);
+  --card-foreground: oklch(0.24 0.012 60);
+  --popover: oklch(0.995 0.003 85);
+  --popover-foreground: oklch(0.24 0.012 60);
+  --primary: oklch(0.55 0.17 45);
+  --primary-foreground: oklch(0.985 0.005 85);
+  --secondary: oklch(0.945 0.008 80);
+  --secondary-foreground: oklch(0.3 0.015 60);
+  --muted: oklch(0.945 0.008 80);
+  --muted-foreground: oklch(0.5 0.015 65);
+  --accent: oklch(0.935 0.02 75);
+  --accent-foreground: oklch(0.3 0.015 60);
+  --destructive: oklch(0.505 0.213 27.518);
+  --border: oklch(0.895 0.01 75);
+  --input: oklch(0.895 0.01 75);
+  --ring: oklch(0.55 0.17 45 / 55%);
+  --chart-1: oklch(0.55 0.17 45);
+  --chart-2: oklch(0.555 0.163 48.998);
+  --chart-3: oklch(0.508 0.118 165.612);
+  --chart-4: oklch(0.505 0.213 27.518);
+  --chart-5: oklch(0.491 0.269 301.924);
+  --sidebar: oklch(0.955 0.007 82);
+  --sidebar-foreground: oklch(0.24 0.012 60);
+  --sidebar-primary: oklch(0.55 0.17 45);
+  --sidebar-primary-foreground: oklch(0.985 0.005 85);
+  --sidebar-accent: oklch(0.93 0.018 75);
+  --sidebar-accent-foreground: oklch(0.3 0.015 60);
+  --sidebar-border: oklch(0.89 0.01 75);
+  --sidebar-ring: oklch(0.55 0.17 45 / 55%);
+  color-scheme: light;
 }
 
 .dark {
@@ -115,11 +117,61 @@
 
 /* ---------- Ferrix utilities ---------- */
 
+/*
+ * Light-mode palette overrides (issue #43).
+ *
+ * Tailwind v4 palette utilities compile to `var(--color-<step>)`, so remapping
+ * the handful of LIGHT steps the UI uses (200–400 range) to their darker
+ * 600–700 cousins adapts all ~330 hardcoded palette utilities at once —
+ * readable rust/amber/emerald on warm paper, zero component churn.
+ * Dark mode keeps Tailwind's defaults.
+ */
+html:not(.dark) {
+  /* amber: 200/300/400/500 → 600/700 family */
+  --color-amber-200: oklch(0.666 0.179 58.318);
+  --color-amber-300: oklch(0.555 0.163 48.998);
+  --color-amber-400: oklch(0.628 0.188 61.4);
+  --color-amber-500: oklch(0.666 0.179 58.318);
+  /* emerald: 200/300/400/500 → 600/700 family */
+  --color-emerald-200: oklch(0.596 0.145 163.225);
+  --color-emerald-300: oklch(0.508 0.118 165.612);
+  --color-emerald-400: oklch(0.596 0.145 163.225);
+  --color-emerald-500: oklch(0.596 0.145 163.225);
+  /* orange: 300/500 → 600/700 family */
+  --color-orange-300: oklch(0.553 0.195 38.402);
+  --color-orange-500: oklch(0.646 0.222 41.116);
+  /* red: 300/400/500 → 600/700 family (50 stays — light tint bg) */
+  --color-red-300: oklch(0.505 0.213 27.518);
+  --color-red-400: oklch(0.577 0.245 27.325);
+  --color-red-500: oklch(0.577 0.245 27.325);
+  /* teal: 300/500 → 600/700 family */
+  --color-teal-300: oklch(0.511 0.096 186.391);
+  --color-teal-500: oklch(0.6 0.08 184.704);
+  /* violet: 300/400/500 → 600/700 family */
+  --color-violet-300: oklch(0.491 0.269 301.924);
+  --color-violet-400: oklch(0.541 0.281 293.009);
+  --color-violet-500: oklch(0.541 0.281 293.009);
+  /* zinc: 200/300/400/500 → 500/600/700 family (borders, muted dots) */
+  --color-zinc-200: oklch(0.552 0.016 285.938);
+  --color-zinc-300: oklch(0.442 0.017 285.786);
+  --color-zinc-400: oklch(0.442 0.017 285.786);
+  --color-zinc-500: oklch(0.37 0.013 285.805);
+  /* light scrollbar */
+  scrollbar-color: oklch(0.78 0.012 75) transparent;
+}
+
 .bg-grid {
   background-image:
     linear-gradient(to right, oklch(1 0 0 / 2.5%) 1px, transparent 1px),
     linear-gradient(to bottom, oklch(1 0 0 / 2.5%) 1px, transparent 1px);
   background-size: 30px 30px;
+}
+
+/* light mode: flip the grid to dark hairlines on paper */
+html:not(.dark) .bg-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.24 0.012 60 / 4%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.24 0.012 60 / 4%) 1px, transparent 1px);
 }
 
 .text-glow {
@@ -157,6 +209,13 @@
   background:
     linear-gradient(to right, oklch(0.72 0.16 45 / 3%), transparent 55%),
     oklch(0.14 0.005 60 / 45%);
+}
+
+/* light mode: same idea with a warm tint on paper */
+html:not(.dark) .diff-body {
+  background:
+    linear-gradient(to right, oklch(0.55 0.17 45 / 4%), transparent 55%),
+    oklch(0.55 0.17 45 / 5%);
 }
 
 /* gradient hairline on top of the status footer (issue #39) */
@@ -238,6 +297,18 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.46 0.02 55);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* light-mode scrollbars (issue #43) */
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: oklch(0.8 0.015 75);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.72 0.02 70);
   border: 2px solid transparent;
   background-clip: content-box;
 }
