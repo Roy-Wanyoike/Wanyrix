@@ -12,6 +12,7 @@ import PRView from '@/components/ferrix/views/pr-view'
 import ExperimentsView from '@/components/ferrix/views/experiments-view'
 import ScorecardView from '@/components/ferrix/views/scorecard-view'
 import IssuesView from '@/components/ferrix/views/issues-view'
+import { useWorkspaceStore } from '@/lib/ferrix/workspace-store'
 import type { ViewId } from '@/lib/ferrix/types'
 
 const VIEWS: Record<ViewId, React.ComponentType<{ onNavigate?: (v: ViewId) => void }>> = {
@@ -28,13 +29,14 @@ const VIEWS: Record<ViewId, React.ComponentType<{ onNavigate?: (v: ViewId) => vo
 
 export default function Home() {
   const [view, setView] = useState<ViewId>('overview')
+  const activeWs = useWorkspaceStore((s) => s.active)
   const ActiveView = VIEWS[view]
 
   return (
     <AppShell activeView={view} onNavigate={setView}>
       <AnimatePresence mode="wait">
         <motion.div
-          key={view}
+          key={`${activeWs}:${view}`}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}

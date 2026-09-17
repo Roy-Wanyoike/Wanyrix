@@ -1357,6 +1357,27 @@ export const ISSUES: IssueItem[] = [
     verification: 'exported JSON parses and round-trips the payload · markdown mirrors verdict + gates',
     repoUrl: REPO_URL,
   },
+  {
+    id: 'FER-114',
+    ghIssue: 34,
+    title: 'Functional workspace switcher — per-workspace datasets',
+    gate: 'Gate 21 · Honest measurement scope',
+    labels: ['frontend', 'api', 'workspaces'],
+    state: 'merged',
+    pr: {
+      number: 35,
+      branch: 'feat/round4-workspace-switcher',
+      title: 'feat: workspace switcher with per-workspace datasets',
+      checks: [
+        { name: 'lint', status: 'pass' },
+        { name: 'browser-qa', status: 'pass' },
+      ],
+      additions: 1039,
+      deletions: 122,
+    },
+    verification: 'helios ⇄ atlas round-trip on overview/doctor/graph/simulator/experiments · persisted selection',
+    repoUrl: REPO_URL,
+  },
 ]
 
 // ---------------------------------------------------------------------------
