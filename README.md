@@ -1,107 +1,122 @@
+<div align="center">
+
 # Wanyrix — Engineering Intelligence Platform
 
+**Rust made software safer. Wanyrix makes Rust development easier to understand and operate.**
+
 [![CI](https://github.com/Roy-Wanyoike/wanyrix/actions/workflows/ci.yml/badge.svg)](https://github.com/Roy-Wanyoike/wanyrix/actions/workflows/ci.yml)
+![Rust](https://img.shields.io/badge/Rust-1.98-DEA584?logo=rust&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-262_passing-2EA043)
 
-> Rust made software safer. Wanyrix makes Rust development easier to understand and operate.
+</div>
 
-Wanyrix continuously understands a Rust workspace and explains **why development is slow,
-fragile, complicated, or difficult** — with evidence, calibrated confidence, and a
-verification path for every claim. It never presents an estimate as a measurement: only a
-run experiment can upgrade a claim to **verified**.
+---
 
-## What Wanyrix is
+Wanyrix continuously understands a Rust workspace and explains **why development is slow, fragile, complicated, or difficult** — with evidence, calibrated confidence, and a verification path for every claim. Its defining rule, enforced in code and pinned by tests:
 
-An engineering-intelligence layer that sits next to your Rust repositories. It observes
-builds, dependencies, diagnostics, and history, builds an **Engineering Graph** of the
-workspace, and turns that graph into evidence-backed **findings**, **recommendations**,
-and **experiments** — the OBSERVE → LEARN loop:
+> **Estimated ≠ Measured ≠ Verified.** Nothing upgrades its own status. Only a recorded experiment can make a claim *verified*.
+
+| | |
+| --- | --- |
+| 🧪 **262 automated tests** | 222 web (bun) + 40 engine (cargo) — unit, live-API contract, conformance, crash-recovery |
+| 🔍 **13 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
+| 🦀 **Real Rust engine** | `wanyrix-engine` v0.2: doctor · graph · health · synth · SQLite store (WAL + crash recovery) |
+| 🖥️ **18-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui, light/dark, mobile-clean (0 px overflow @ 390 px) |
+| 🤖 **Grounded AI, non-authoritative** | facts server-rendered; model output validated against evidence, violations redacted |
+| 🔒 **Local-first, zero telemetry** | state in your browser; the one scaffold telemetry snippet was found and removed |
+
+---
+
+## The loop
 
 ```text
-Engine → Collectors → W-EIR → Engineering Graph → Analyzers
-      → Findings → Recommendations → Experiments → Measurements → Verification
+        ┌──────────────────────────────────────────────────────────────┐
+        │                                                              │
+   Cargo ─▶ Collectors ─▶ W-EIR ─▶ Engineering Graph ─▶ Analyzers    │
+        │                                        │                    │
+        │                              Findings ◀─┘                    │
+        │                                 │                             │
+        │              Recommendations ───┤                             │
+        │                                 │                             │
+        │        Experiments ─▶ Measurements ─▶ Verification ──────────┘
+        │                    (the only path to "verified")
 ```
 
-- **W-EIR** (Wanyrix Engineering Intermediate Representation) is the normalized evidence
-  snapshot every other surface derives from — one source of truth, versioned contracts.
-- The **Engineering Graph** is the dependency backbone used for blast radius, duplicate
-  versions, hotspots, and impact estimation.
-- **Findings** are stable-ID, evidence-cited diagnoses (e.g. `FER-BLD-001`), never silent
-  fixes.
-- **Experiments** are the only path from `estimated` to `measured` to `verified`.
+- **W-EIR** — the normalized evidence snapshot every surface derives from. One source of truth, versioned contracts.
+- **Engineering Graph** — the dependency backbone behind blast radius, duplicate versions, hotspots, and impact estimation. All aggregates derive from a single edge list; no ghost nodes.
+- **Findings** — stable-ID, evidence-cited diagnoses (`FER-BLD-001`…), never silent fixes.
+- **Experiments** — the only road from *estimated* to *measured* to *verified*.
 
 ### Why it exists
 
-Rust teams lose days to incremental-build pathologies, duplicate dependency trees, and
-borrow-checker bottlenecks that no one can quantify. Wanyrix answers the questions
-engineers actually ask — *what will this change cost? why is CI slow? what is safe to
-touch?* — with numbers that carry their own epistemic status.
+Rust teams lose days to incremental-build pathologies, duplicate dependency trees, and borrow-checker bottlenecks nobody can quantify. Wanyrix answers the questions engineers actually ask — *what will this change cost? why is CI slow? what is safe to touch?* — with numbers that carry their own epistemic status.
 
 ### Who it is for
 
-Rust engineers, platform/build teams, and engineering managers who need honest,
-evidence-backed answers about workspace health instead of folklore.
+Rust engineers, platform/build teams, and engineering managers who want evidence instead of folklore. Investors: see [`docs/INVESTOR_OVERVIEW.md`](docs/INVESTOR_OVERVIEW.md). Recruiters: the [Engineering practice](#engineering-practice) section shows how this repo is built.
+
+---
 
 ## Honesty architecture (non-negotiable)
 
-1. **Estimated ≠ Measured ≠ Verified** — every number carries its status; nothing upgrades
-   itself. Verified requires a recorded experiment.
-2. **Evidence first** — every finding carries a stable ID, evidence items with source
-   attribution (`cargo build --timings`, `git log`, `cargo metadata graph`, …), and a
-   recommendation.
-3. **Calibrated confidence** — `deterministic / high / medium / estimated`.
-4. **AI is optional and grounded** — see [AI stance](#ai-stance).
+1. **Estimated ≠ Measured ≠ Verified** — every number carries its status; badge contrast is WCAG-AA tested in both themes.
+2. **Evidence first** — every finding carries a stable ID, evidence items with source attribution (`cargo build --timings`, `git log`, `cargo metadata`…), and a recommendation.
+3. **Calibrated confidence** — `deterministic / high / medium / estimated`, machine-checked.
+4. **AI is optional and grounded** — the FACT block is rendered server-side from evidence; the model may only fill `commentary / inference / recommendation / uncertainty`, and anything it asserts beyond the evidence is **stripped and reported**.
 5. **No silent modification** — patches are reviewable diffs behind explicit approval.
 
-## What this repository contains
+---
 
-This repo hosts the **Wanyrix platform** — the web dashboard (Next.js 16 · TypeScript ·
-Tailwind 4 · shadcn/ui · TanStack Query · zustand) over fixture workspaces
-(`helios-platform`, 47 crates · `atlas-consortium`), plus the **`wanyrix-engine` Rust
-crate** under [`engine/`](engine/README.md): a measured filesystem analyzer serving
-versioned JSON flavors (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`)
-that the web contracts mirror. Persistence/telemetry phases are tracked on the issue
-tracker.
+## Quickstart
 
-The UI exposes an 18-item information architecture: Overview · Repositories · Builds·Doctor ·
-Dependencies · Graph · Findings · Architecture · Impact Simulator · Diagnostics · PR Analysis ·
-Experiments · Runtime · History · AI · Policies·Gates · Issues & PRs · Organization · Settings.
-
-## Offline-first, online-enhanced
-
-- **Offline**: the deterministic core (doctor, graph, findings, simulator, gates) is fully
-  usable with zero network and zero AI. State persists locally (localStorage).
-- **Online**: the AI reasoning layer adds grounded explanations on top of the same
-  evidence. If the provider is unreachable, slow, or ungrounded, the product falls back to
-  a deterministic, evidence-rendered answer — it never blocks the workflow.
-
-## Run locally
+### Web dashboard
 
 ```bash
 bun install
-bun run dev          # http://localhost:3000
-bun run lint         # eslint
-bun run test         # bun test — 138 tests, incl. live API contract tests
+bun run dev            # → http://localhost:3000
+bun run test           # 222 tests (skips live-API tests with a clear note if the server is down)
 ```
 
-## First analysis (5-minute walkthrough)
+### Rust engine
 
-1. **Overview** — KPI grid, build-time trend, slowest crates for the active workspace.
-2. **Builds · Doctor** — run the scan; each finding lists evidence with sources, a
-   recommendation, and a verification path. Switch Human ⇄ `--json` modes.
-3. **Findings** — all findings with severity/section filters; open one for the evidence
-   table and its `FER-*` ID.
-4. **Experiments** — pick a finding, see baseline → candidate → measured delta; this is
-   how `estimated` becomes `verified`.
-5. **AI** — ask *why does this finding matter?* Answers are grounded in the same evidence
-   (see example below).
+```bash
+cd engine
+cargo build --release
+
+# Measure a real Rust workspace
+cargo run -- doctor --path /path/to/your/workspace --json   # wanyrix.doctor/v1
+cargo run -- graph --path /path/to/your/workspace --json    # wanyrix.graph/v1
+cargo run -- health --path /path/to/your/workspace --json   # wanyrix.health/v1
+
+# Generate a synthetic 500-crate workspace (deterministic — same seed, same tree)
+cargo run -- synth --crates 500 --seed 42 --out /tmp/synth500
+
+# Persist scan results (SQLite, WAL, crash-safe)
+cargo run -- store init --db scans.db
+cargo run -- doctor --path /tmp/synth500 --json | cargo run -- store save --db scans.db --scan -
+cargo run -- store list --db scans.db
+cargo run -- store fsck --db scans.db
+```
+
+Every subcommand: deterministic output for identical input, `generatedAt` last, exit `0` on success / `2` on scan failure. Measured 500-crate timings: [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md).
+
+### 5-minute tour
+
+1. **Overview** — KPI grid, build-time trend, slowest crates.
+2. **Builds · Doctor** — run a scan; every finding lists evidence, sources, recommendation, and verification path. Human ⇄ `--json` modes.
+3. **Findings** — severity/section filters; drill into any `FER-*` for its evidence table.
+4. **Experiments** — baseline → candidate → measured delta. This is how *estimated* becomes *verified*.
+5. **AI** — ask *why does this finding matter?* — grounded in the same evidence (real response below).
 
 Full task-oriented guide: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 
-## Example output (real API response)
+---
 
-`POST /api/wanyrix/explain` with
-`{"context":{"findingId":"FER-BLD-001"},"question":"Why does this matter for a Rust team?"}`
-(abridged — facts list truncated from 18 to 3; everything else verbatim from a live call):
+## Grounded AI — real API response
+
+`POST /api/wanyrix/explain` with `{"context":{"findingId":"FER-BLD-001"},"question":"Why does this matter for a Rust team?"}` (abridged — facts truncated from 18 to 3; everything else verbatim):
 
 ```json
 {
@@ -110,28 +125,24 @@ Full task-oriented guide: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
   "explanation": "OBSERVED FACT — common-runtime takes 18.3s to compile and blocks 41 downstream crates. … INFERENCE — … RECOMMENDATION — … UNCERTAINTY — …",
   "grounding": {
     "status": "registry",
-    "resolved": { "id": "FER-BLD-001", "registry": "findings" },
     "facts": [
       { "statement": "id: FER-BLD-001", "derivedFrom": "registry:findings.id" },
-      { "statement": "title: common-runtime sits on the critical path", "derivedFrom": "registry:findings.title" },
-      { "statement": "section: Build", "derivedFrom": "registry:findings.section" }
+      { "statement": "title: common-runtime sits on the critical path", "derivedFrom": "registry:findings.title" }
     ]
   },
   "ai": {
-    "commentary": "common-runtime takes 18.3s to compile and blocks 41 downstream crates. …",
-    "inference": "This creates a significant productivity bottleneck for the Rust team, …",
-    "recommendation": "Implement the architecture split into runtime-core and runtime-telemetry …",
+    "commentary": "…",
+    "inference": "…",
+    "recommendation": "…",
     "uncertainty": "While the estimated improvement is 12.4s, the actual measurement may vary. …"
   },
-  "disclaimer": "FACT statements above are rendered server-side from the evidence context and cannot be altered by the model. …",
-  "provenance": { "generatedBy": "ai-provider", "contextFields": ["registry:findings.id", "…"], "resolution": "context reference resolved against the findings registry → FER-BLD-001" }
+  "provenance": { "generatedBy": "ai-provider", "resolution": "context reference resolved against the findings registry → FER-BLD-001" }
 }
 ```
 
-`grounding.facts` is rendered **server-side** from context/registry fields — the model
-cannot write it. Model output is confined to `ai.*`, post-validated against the evidence
-(numbers, statuses, references), and redacted + reported in `groundingViolations` if it
-asserts anything the evidence does not contain.
+`grounding.facts` is rendered **server-side** — the model cannot write it. Model output is confined to `ai.*`, post-validated against the evidence, and redacted into `groundingViolations` if it asserts anything the evidence does not contain. Provider down → deterministic fallback. No AI feature is load-bearing.
+
+---
 
 ## API surface (13 routes, `/api/wanyrix/*`)
 
@@ -141,88 +152,88 @@ asserts anything the evidence does not contain.
 | `doctor`, `graph`, `diagnostics` | findings, dependency graph, borrow/async explainers |
 | `impact` | blast-radius / change-cost calculator (`estimated` by definition) |
 | `experiments`, `gates`, `issues`, `pr` | verification loop, release scorecard, traceability, PR regression guard |
-| `report` | workspace report — `?format=markdown\|json` (`wanyrix.markdown/v1` / `wanyrix.report/v1`) and machine flavors `?flavor=scorecard\|scan-history` (`wanyrix.release-scorecard/v1` / `wanyrix.scan-history/v1`) |
-| `explain` | grounded AI reasoning — `context`+`question` required → `400`; GET → `405` (`Allow: POST`); >256 KB body → `413`; unknown finding ID or unknown `kind` → `400` |
+| `report` | workspace report — `?format=markdown\|json` and machine flavors `?flavor=scorecard\|scan-history` |
+| `explain` | grounded AI — `context`+`question` ⇒ 400 if missing; GET ⇒ `405` (`Allow: POST`); >256 KB ⇒ `413` |
 
-Every workspace-scoped route validates `?ws=`: an unknown workspace id is a **404**
-`{error, knownWorkspaces}` — data is never silently served for the wrong workspace.
+Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{error, knownWorkspaces}` — data is never silently served for the wrong workspace. Error semantics: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · machine contract: [`docs/CLI.md`](docs/CLI.md).
 
-Error semantics and response shapes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-Machine-readable contract: [`docs/CLI.md`](docs/CLI.md) · full doc map: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+---
 
-## AI stance
+## Repository map
 
-- AI is **additive**: it explains deterministic evidence, never replaces it.
-- The FACT block is server-rendered; the model may only fill `ai.commentary`,
-  `ai.inference`, `ai.recommendation`, `ai.uncertainty`.
-- Every number/status/reference in model output is validated against the evidence context;
-  violations are redacted and the answer degrades to the deterministic one
-  (`grounded: false`, `groundingViolations` listed).
-- Provider down → deterministic fallback (Gate 18). No AI feature is load-bearing.
+```text
+├── src/                     # Web platform (Next.js 16 · TypeScript strict · Tailwind 4 · shadcn/ui)
+│   ├── app/api/wanyrix/     #   13 versioned API routes
+│   ├── components/wanyrix/  #   18-surface information architecture
+│   └── lib/wanyrix/         #   stores, contracts, fixtures (17 domain modules), exporters
+├── engine/                  # wanyrix-engine (Rust 2021, zero-dep core + rusqlite)
+│   └── tests/fixtures/      #   deterministic workspaces incl. cycles + synth-50
+├── tests/                   # bun test suite (unit + live API contracts)
+├── scripts/                 # brand gate, fixture generator, GitHub automation kit
+├── docs/                    # 16 documents (see map below)
+└── .github/workflows/ci.yml # CI: lint · tsc · tests · brand gate · cargo build/clippy/test
+```
+
+---
+
+## Engineering practice
+
+This repository is built the way it asks you to build software — with verifiable claims:
+
+- **262 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery.
+- **CI on every push/PR** — ESLint, `tsc --noEmit`, full test suite, legacy-token brand gate, `cargo build --locked` + `clippy -D warnings` + `cargo test --locked`.
+- **Contract-first** — all machine payloads are versioned (`wanyrix.*​/v1`); determinism is pinned by tests (same input ⇒ byte-identical output, timestamp last).
+- **Honesty is load-bearing** — the `estimated/verified` separation, workspace guards, and grounding redaction are *tested behaviors*, not documentation.
+- **Auditable process** — every release decision is re-derived against a 57-gate acceptance matrix; issues close with evidence comments.
+
+---
+
+## Offline-first, online-enhanced
+
+- **Offline** — the deterministic core (doctor, graph, findings, simulator, gates) is fully usable with zero network and zero AI. State persists locally.
+- **Online** — the AI layer adds grounded explanations over the same evidence; unreachable/ungrounded providers degrade to the deterministic answer and never block the workflow.
 
 ## Security & privacy
 
-- **Local-first**: workspaces, scan history, diff queue, and preferences live in your
-  browser's localStorage. No background sync, no product telemetry endpoints. (One
-  caveat: the Next.js scaffold wired Vercel's anonymous page-view snippet into the app
-  shell — that snippet has been **removed** (zero-telemetry policy enforced).
-  Details: [`docs/SECURITY.md`](docs/SECURITY.md).)
-- **AI explain** sends only what you explicitly submit (the `context` payload + question)
-  to the model provider, capped at 256 KB. Nothing else leaves the page.
-- **Cloud features are roadmap** (disabled today) — see [`docs/PRIVACY.md`](docs/PRIVACY.md)
-  and [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
+- **Local-first** — workspaces, scan history, diff queue, and preferences live in your browser's localStorage. No background sync, no product telemetry. (A scaffolded anonymous page-view snippet was discovered and **removed** — see [`docs/SECURITY.md`](docs/SECURITY.md).)
+- **AI explain** sends only what you explicitly submit (context payload + question), capped at 256 KB.
+- **Cloud features are roadmap** (disabled today) — [`docs/PRIVACY.md`](docs/PRIVACY.md), [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
 
-## Development
+## Documentation
 
-```bash
-bun run dev         # dev server on :3000 (logs in dev.log)
-bun run test        # unit + live API contract tests (bun test)
-bun run typecheck   # tsc --noEmit
-bun run lint        # eslint
-```
+| | | |
+| --- | --- | --- |
+| [User Guide](docs/USER_GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [CLI contract](docs/CLI.md) |
+| [W-EIR schema](docs/W-EIR.md) | [Security](docs/SECURITY.md) | [Privacy](docs/PRIVACY.md) |
+| [Performance](docs/PERFORMANCE.md) | [Development](docs/DEVELOPMENT.md) | [Contributing](docs/CONTRIBUTING.md) |
+| [Commercial model](docs/COMMERCIAL.md) | [Investor overview](docs/INVESTOR_OVERVIEW.md) | [Community guide](docs/RUST_COMMUNITY_GUIDE.md) |
+| [crates.io strategy](docs/CRATES_IO_STRATEGY.md) | [Open-source strategy](docs/OPEN_SOURCE_STRATEGY.md) | [Engine README](engine/README.md) |
 
-- Tests pin the honesty contracts (400/405/413, workspace guard, report schema,
-  estimate-vs-measured separation, migration goldens). The suite skips API tests with a
-  clear message if the dev server is down.
-- Docs map: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) ·
-  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/CLI.md`](docs/CLI.md) ·
-  [`docs/W-EIR.md`](docs/W-EIR.md) · [`docs/SECURITY.md`](docs/SECURITY.md) ·
-  [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) · [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) ·
-  [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`docs/PRIVACY.md`](docs/PRIVACY.md) ·
-  [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
+## Roadmap
 
-## Roadmap (condensed, phases 1–15)
+Phases 1–9 are demonstrated by this platform (engine v0.2 executes doctor · graph · health · synth · store). Open work, tracked on the [issue tracker](https://github.com/Roy-Wanyoike/wanyrix/issues):
 
-1. Core runtime · 2. Rust repository intelligence · 3. Engineering graph ·
-4. Build intelligence · 5. Findings & diagnosis · 6. Incremental intelligence ·
-7. Engineering experiments · 8. AI engineering intelligence · 9. Safe AI patches ·
-10. Architecture intelligence · 11. Runtime intelligence · 12. Historical & team
-intelligence · 13. Wanyrix Cloud · 14. Fleet & enterprise intelligence ·
-15. Product validation & commercialization.
+- **#58 — engine phase-2**: daemon, rustc telemetry, 500-crate budget gates (SQLite store + synth shipped)
+- **#53** — fixture-generator adoption across web fixtures *(generator shipped; adoption open)*
+- **#49** — product-core umbrella
 
-Phases 1–9 are demonstrated by this platform (engine-side execution pending — AUDIT-I8);
-phases 10–15 are design/roadmap. Roadmap features never destabilize the shipped core.
+Roadmap features never destabilize the shipped core. Release decision: **CONDITIONAL GO** — re-derived each round against a 57-gate acceptance matrix (32 PASS · 8 PARTIAL · 0 FAIL · 12 IN-PROGRESS · 5 N/A at last audit; zero CRITICAL/HIGH product defects open).
 
 ## Commercial model
 
-Free 90-day trial · Local / Cloud / Team / Enterprise packaging · billing is strictly
-separated from the local deterministic core. Pricing is a configurable proposal pending
-market validation — see [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
+Free 90-day trial · Local / Cloud / Team / Enterprise packaging · billing strictly separated from the local deterministic core. Pricing is a configurable proposal pending market validation — [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
 
 ## Governance & brand history
 
-- Work lands only through reviewed PRs referencing their issue (see **Issues & PRs**).
-  Release status: **CONDITIONAL GO** (scorecard fixture, 2026-09-17).
-- **Ferrix was renamed to Wanyrix** in 2026-09 — see
-  `docs/migrations/FERRIX_TO_WANYRIX.md`. Stable finding IDs retain their historic
-  `FER-` prefix; new registries use `WAN-`.
+- Work lands only through reviewed PRs referencing their issue; CI and the brand gate run on every change.
+- **Ferrix was renamed to Wanyrix** (2026-09) — see [`docs/migrations/FERRIX_TO_WANYRIX.md`](docs/migrations/FERRIX_TO_WANYRIX.md). Stable finding IDs keep their historic `FER-` prefix; new registries use `WAN-`.
 
 ## License
 
-Proprietary — © Wanyrix. All rights reserved. No license is granted with this repository.
+Proprietary — © Wanyrix. All rights reserved. Dual **MIT OR Apache-2.0** licensing of the deterministic core is the documented plan ([`docs/OPEN_SOURCE_STRATEGY.md`](docs/OPEN_SOURCE_STRATEGY.md)); it takes effect by explicit maintainer decision.
 
 ## Community, ecosystem & open source
 
-- [`docs/RUST_COMMUNITY_GUIDE.md`](docs/RUST_COMMUNITY_GUIDE.md) — how Wanyrix shows up in the Rust community: channels, launch sequencing, what is shareable today vs Roadmap, contribution pathways, triage labels, 90-day engagement calendar.
-- [`docs/CRATES_IO_STRATEGY.md`](docs/CRATES_IO_STRATEGY.md) — crates.io publication order (`wanyrix-protocol` → `wanyrix-core` → `wanyrix`), versioning/MSRV/feature-flag policy, docs.rs hygiene, per-release publish checklist, ecosystem integration inventory.
-- [`docs/OPEN_SOURCE_STRATEGY.md`](docs/OPEN_SOURCE_STRATEGY.md) — license recommendation (`MIT OR Apache-2.0`), open-core vs proprietary boundary, BDFL → council governance, trademark summary, security reporting, release cadence, community-health metrics.
+- [`docs/RUST_COMMUNITY_GUIDE.md`](docs/RUST_COMMUNITY_GUIDE.md) — channels, launch sequencing, what is shareable today vs roadmap, contribution pathways, triage labels, 90-day engagement calendar.
+- [`docs/CRATES_IO_STRATEGY.md`](docs/CRATES_IO_STRATEGY.md) — publication order (`wanyrix-protocol` → `wanyrix-core` → `wanyrix`), versioning/MSRV/feature-flag policy, publish checklist, ecosystem inventory.
+- [`docs/OPEN_SOURCE_STRATEGY.md`](docs/OPEN_SOURCE_STRATEGY.md) — license recommendation, open-core boundary, governance path, release cadence, community-health metrics.
