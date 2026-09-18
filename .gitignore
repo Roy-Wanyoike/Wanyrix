@@ -52,7 +52,7 @@ prompt
 server.log
 # Skills directory
 /skills/
-# ferrix sandbox (never commit secrets or local artifacts)
+# Wanyrix sandbox (never commit secrets or local artifacts)
 upload/
 dev.log
 server.log
