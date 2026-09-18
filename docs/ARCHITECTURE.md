@@ -1,0 +1,120 @@
+# Wanyrix Web Platform — Architecture
+
+Scope: this repository (web platform). The Rust engine is external — engine contracts are
+encoded here as fixtures and versioned API flavors (see "Engine boundary"; tracked in
+`docs/audits/issues/AUDIT-I8.md`).
+
+## Stack
+
+Next.js 16 (App Router) · TypeScript · Tailwind 4 · shadcn/ui · TanStack Query · zustand
+(persisted) · next-themes · recharts. Dev server `bun run dev` on port 3000; tests via
+`bun test`.
+
+## Shell & views
+
+- `src/components/wanyrix/app-shell.tsx` — topbar (workspace switcher, system status pill,
+  command palette), sidebar, mobile chips.
+- `src/components/wanyrix/nav-registry.ts` — **single source of truth** for navigation
+  (`NAV_GROUPS`, `NAV_ITEMS`, `VIEW_TITLES`); sidebar and palette consume it so they cannot
+  drift. 6 groups / 18 views over `ViewId` (18 members in `src/lib/wanyrix/types.ts`).
+- `src/components/wanyrix/views/*` — one component per view. Two views are legacy-hosted
+  overlays promoted to first-class: History (scan-history panel) and Findings (doctor
+  findings + detail sheet). Shared loading/error primitives in `shared.tsx`.
+- Overlays: explain dialog, CLI dialog, diff-queue sheet, storage dialog, finding sheet,
+  notifications — all stateless relative to stores except where noted below.
+
+## State: stores + legacy migration
+
+| Store | File | Persists |
+| --- | --- | --- |
+| workspace store | `workspace-store.ts` | active workspace id |
+| scan store | `scan-store.ts` | scan run history (`wanyrix.scan-history/v1` shape) |
+| diff store | `diff-store.ts` | diff queue entries |
+| AI status store | `ai-status-store.ts` | last explain outcome (grounded/deterministic) |
+
+- All persisted stores go through `legacy-migration.ts`
+  (`createJSONStorage(createMigratingStorage)`): copy-before-delete from legacy `ferrix.*`
+  keys, idempotent double-migration, quota-failure recovery, write-through
+  canonicalization. Golden-tested in `tests/unit/legacy-migration.test.ts` (regression for
+  AUDIT-I1's P0 bug: the storage *thunk* must be passed, not invoked).
+- Server data is fetched with TanStack Query (`hooks.ts`); no duplicate fetch caches.
+
+## API routes (13, under `src/app/api/wanyrix/`)
+
+`diagnostics` · `doctor` · `experiments` · `explain` · `gates` · `graph` · `health` ·
+`impact` · `issues` · `pr` · `report` · `storage` · `workspaces`
+
+### Error semantics
+
+| Status | When |
+| --- | --- |
+| `400` | by-design contract violations: `explain` without `context`+`question` or with unknown finding ID, invalid JSON, `report` with unknown `format`, `impact` with unknown `type` |
+| `404` | `impact` with unknown target |
+| `405` | wrong method on POST-only surfaces (`explain` is POST-only; GET → 405) |
+| `413` | `explain` body > 256 KB (rejected before any processing; limit named in the error) |
+| `200` | everything else; JSON endpoints always answer `application/json` |
+
+Deterministic GET routes are byte-identical across calls minus timestamps/storage GC
+fields. Known gaps tracked elsewhere (ENG-TCA-6: 405 lacks `Allow` header; ENG-TCA-1:
+`doctor` ignores `?ws=`; ENG-TCA-3: blast-radius math contradictions).
+
+## Fixture & contract versioning
+
+- Fixtures live in `src/lib/wanyrix/data.ts` (workspaces `helios-platform` 47 crates /
+  `atlas-consortium`; findings `FER-BLD-001…FER-ASY-012`; issues `WAN-*`; experiments
+  `EXP-*`; gates). `report.ts` assembles workspace reports from the same getters the
+  routes serve — no duplicated data paths.
+- Versioned machine flavors:
+  - `wanyrix.report/v1` — served by `/report` (`?format=json`), schema field on the wire.
+  - `wanyrix.scan-history/v1` and `wanyrix.release-scorecard/v1` — produced client-side
+    today (scan-history.tsx, scorecard-view.tsx); served-flavor endpoints are tracked
+    (ENG-TCA-2).
+- IDs are stable across surfaces (`FER-*` findings, `WAN-*` issues, `EXP-*` experiments)
+  so the registry, the graph, and the traceability board cross-reference without joins.
+
+## Honesty architecture (implementation view)
+
+- `measurementStatus: measured | estimated | verified` and `confidenceClass` are data, not
+  prose; the test suite asserts estimated/verified are never conflated.
+- Simulator output is always `estimated`; only experiment records can be `verified`
+  (Gate 21). Reports footer states what is simulated vs what a real engine measures.
+- Patches are new-proposal diffs behind approval (Gate 19); no auto-apply path exists.
+- AI explain (`explain/route.ts` + helpers in `report.ts`):
+  1. Contract: `context`+`question` required → 400; GET → 405; body > 256 KB → 413
+     (checked via `content-length` and actual bytes, before any model work).
+  2. Grounding: stable IDs (`FER-*`/`WAN-*`, bare or in `context.findingId`) resolve
+     server-side against the fixture registry; unknown → 400 `unknown finding '…'`.
+     Facts are derived **server-side** only from fields actually present; each fact
+     carries `derivedFrom` provenance.
+  3. Model output is confined to `ai.{commentary,inference,recommendation,uncertainty}`
+     (the model's "OBSERVED FACT" text is demoted to commentary — it can never write the
+     fact block) plus a static `disclaimer`.
+  4. Post-validation (`validateModelGrounding`): every number, status word
+     (measured/verified/proven/confirmed), `ID-like` and quoted reference in model text
+     must exist in the evidence corpus (derived facts + raw context + resolved registry
+     record). Violations → tokens redacted (`⟨removed: not in evidence⟩`),
+     `groundingViolations` listed, `grounded:false`, `ok:false`, `error` set, and
+     `fallback` carries the deterministic grounded answer.
+  5. Provider failure/timeout (30 s race) → same deterministic fallback with honest
+     labeling (Gate 18).
+  - Best-effort boundary: token-level validation catches invented numbers/statuses/
+    references; *semantic* misattribution of an evidence-true number (right value, wrong
+    claim) is mitigated by field confinement + rejection, not by understanding — the
+    deterministic answer replaces the model text on any violation, and `grounded:true`
+    only reflects post-validation success.
+
+## Engine boundary
+
+- The web platform never fabricates engine telemetry. Runtime view shows captured profiles
+  + explicit "not instrumented in this environment" empty states (AUDIT-I8).
+- Flavors above define what the real engine must emit; routes are thin over fixture
+  getters so swapping fixtures for engine calls is a data-layer change, not a contract
+  change.
+- Roadmap surfaces (CLI, daemon, sync, billing) have no runtime stubs pretending to work —
+  they are documented as roadmap (USER_GUIDE/COMMERCIAL), and Organization tier data is
+  explicitly badged fixture.
+
+## Verification
+
+`bun run lint` · `bun run typecheck` · `bun run test` (unit + live API contracts;
+suite skips API tests with a clear message if :3000 is unreachable).

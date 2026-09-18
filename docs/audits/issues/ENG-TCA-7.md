@@ -1,6 +1,6 @@
 # ENG-TCA-7 — `/explain` accepts unbounded payloads: 2 MB context stalls the caller for the full 30 s provider timeout before falling back
 
-**Type:** PERF / ROBUSTNESS (SDK-consumer facing) · **Severity:** P3 · **Status:** Open
+**Type:** PERF / ROBUSTNESS (SDK-consumer facing) · **Severity:** P3 · **Status:** FIXED — pending verification (Task 2-d)
 **Labels:** `ai`, `api`, `performance`, `offline`, `task-2-c-a`
 
 ## 1. Problem
@@ -73,6 +73,9 @@ Document the payload limit and offline fallback latency budget in the API refere
 
 ## 12. Definition of Done
 Size guard + truncation flag shipped, latency budget test green, docs updated.
+
+## 13. Resolution evidence (Task 2-d)
+FIXED — 256 KB body cap enforced pre-parse (content-length + byte count) → measured `413` in **0.008 s** (was 30.0 s) with the limit documented in the error body; prompt-side truncation at 48,000 chars flagged as `contextTruncated` + provenance note; live contract test added (tests/api/wanyrix-api.test.ts) asserting fast 413 with "256 KB" in the error; docs in docs/ARCHITECTURE.md + docs/PRIVACY.md.
 
 ## Ready-to-run filing
 ```bash

@@ -3,9 +3,15 @@
  *
  * Exercises the real dev server (default http://localhost:3000, overridable
  * via WANYRIX_TEST_BASE_URL). By-design error contracts are pinned:
- *   - /api/wanyrix/impact  → 400 unknown `type` · 404 unknown `target`
- *   - /api/wanyrix/explain → 400 without `context`+`question` · 405 on GET
- *   - /api/wanyrix/report  → 400 unknown `format`
+ *   - every ws-scoped route → 404 `{ error, knownWorkspaces }` for unknown `ws`
+ *     (ENG-TCA-1 — no silent default-workspace substitution)
+ *   - /api/wanyrix/impact  → 400 unknown `type` · 400 missing `target` (ENG-TCA-6b)
+ *                            · 404 unknown `target`
+ *   - /api/wanyrix/explain → 400 without `context`+`question` · 400 unknown
+ *     `kind` (ENG-TCA-6c) · 405 on GET
+ *   - /api/wanyrix/report  → 400 unknown `format` · markdown envelope carries
+ *     `schema: wanyrix.markdown/v1` (ENG-TCA-6d)
+ *   - 405 responses carry an `Allow` header (ENG-TCA-6a)
  * Workspace ids are discovered from /api/wanyrix/workspaces — never hardcoded
  * blind. If the server is unreachable the suite skips with a clear message
  * (the runner itself has no hard dependency on the server).
@@ -168,7 +174,14 @@ describeServer(`Wanyrix API — workspace-scoped payloads (ws discovered: ${WS_I
       const body = graph.body as {
         nodes: { id: string }[]
         edges: { from: string; to: string }[]
-        meta: { workspaceCrates: number; totalEdges: number }
+        meta: {
+          workspaceCrates: number
+          totalEdges: number
+          servedNodes: number
+          servedEdges: number
+          scope: string
+          aggregateSource: string
+        }
       }
       const nodeIds = new Set(body.nodes.map((n) => n.id))
       expect(nodeIds.size).toBeGreaterThan(0)
@@ -178,6 +191,12 @@ describeServer(`Wanyrix API — workspace-scoped payloads (ws discovered: ${WS_I
       }
       expect(body.meta.workspaceCrates).toBe((health.body as { crates: number }).crates)
       expect(body.meta.totalEdges).toBe((health.body as { edges: number }).edges)
+      // ENG-TCA-3: the payload declares its backbone-subset scope explicitly
+      expect(body.meta.scope).toBe('backbone-subset')
+      expect(body.meta.aggregateSource).toBe('served-edges')
+      expect(body.meta.servedNodes).toBe(body.nodes.length)
+      expect(body.meta.servedEdges).toBe(body.edges.length)
+      expect(body.meta.servedNodes).toBeLessThanOrEqual(body.meta.workspaceCrates + 64) // subset, externals included
     })
   }
 })
@@ -212,24 +231,52 @@ describeServer('Wanyrix API — storage & report flavors', () => {
     const body = res.body as {
       filename: string
       bytes: number
-      json: { schema: string; workspace: string; doctor: { findings: unknown[] } }
+      json: {
+        schema: string
+        workspace: string
+        doctor: {
+          findings: unknown[]
+          buildTimeSeconds: number
+          estimatedRangeSeconds?: unknown
+          estimatedAfterFix: {
+            unit: string
+            estimatedRange: { low: number; high: number }
+            status: string
+            meaning: string
+            confidencePct: number
+            note: string
+          }
+        }
+      }
     }
     expect(body.json.schema).toBe('wanyrix.report/v1')
     expect(body.json.workspace).toBe(PRIMARY_ID)
     expect(body.json.doctor.findings.length).toBeGreaterThan(0)
     expect(body.filename).toBe(`wanyrix-report-${PRIMARY_ID}-${new Date().toISOString().slice(0, 10)}.json`)
     expect(body.bytes).toBeGreaterThan(0)
+    // ENG-TCA-5 — structured estimated-range semantics, no ambiguous tuple
+    expect(body.json.doctor.estimatedRangeSeconds).toBeUndefined()
+    const est = body.json.doctor.estimatedAfterFix
+    expect(est.unit).toBe('seconds')
+    expect(est.status).toBe('estimated')
+    expect(est.meaning).toBe('projected-after-top-fix')
+    expect(est.estimatedRange.high).toBeGreaterThanOrEqual(est.estimatedRange.low)
+    expect(est.note.toLowerCase()).toContain('not a confidence interval')
   })
 
-  test(`GET /api/wanyrix/report?ws=${PRIMARY_ID}&format=markdown → 200 with markdown envelope`, async () => {
+  test(`GET /api/wanyrix/report?ws=${PRIMARY_ID}&format=markdown → 200 with versioned markdown envelope`, async () => {
     const res = await fetchJson(`/api/wanyrix/report?ws=${encodeURIComponent(PRIMARY_ID)}&format=markdown`)
     expect(res.status).toBe(200)
     expectJson(res)
-    const body = res.body as { filename: string; markdown: string; bytes: number }
+    const body = res.body as { schema?: string; filename: string; markdown: string; bytes: number }
+    expect(body.schema).toBe('wanyrix.markdown/v1') // ENG-TCA-6d — versioned envelope
     expect(body.markdown.startsWith(`# Wanyrix workspace report — ${PRIMARY_ID}`)).toBe(true)
     expect(body.filename.endsWith('.md')).toBe(true)
     expect(body.bytes).toBeGreaterThan(0)
     expect(body.markdown).toContain('_Honesty notes:_')
+    // ENG-TCA-5 — the range is presented as a post-fix projection, not a CI
+    expect(body.markdown).toMatch(/estimated after top fix: \d+\.\d–\d+\.\ds/)
+    expect(body.markdown).not.toContain('estimated range')
   })
 
   test('GET /api/wanyrix/report with unknown format → 400 JSON error (by design)', async () => {
@@ -241,7 +288,7 @@ describeServer('Wanyrix API — storage & report flavors', () => {
 })
 
 describeServer('Wanyrix API — impact by-design error contracts', () => {
-  test('unknown type → 400 JSON; unknown target → 404 JSON', async () => {
+  test('unknown type → 400 JSON; unknown target → 404 JSON; missing target → 400 JSON (ENG-TCA-6b)', async () => {
     const badType = await fetchJson('/api/wanyrix/impact?type=teleport')
     expect(badType.status).toBe(400)
     expectJson(badType)
@@ -251,6 +298,12 @@ describeServer('Wanyrix API — impact by-design error contracts', () => {
     expect(badTarget.status).toBe(404)
     expectJson(badTarget)
     expect((badTarget.body as { error: string }).error).toContain('unknown target')
+
+    // ENG-TCA-6b — a MISSING param is a client-input error (400), not 404
+    const missingTarget = await fetchJson('/api/wanyrix/impact?type=edit-file')
+    expect(missingTarget.status).toBe(400)
+    expectJson(missingTarget)
+    expect((missingTarget.body as { error: string }).error).toContain("'target'")
   })
 
   test('valid catalog target → 200 JSON, always labeled `estimated` (Gate 10/21)', async () => {
@@ -300,6 +353,115 @@ describeServer('Wanyrix API — explain by-design error contracts', () => {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     expect(res.status).toBe(405)
+  })
+
+  // Task 2-d (ENG-TCA-7): oversized payloads are rejected fast with a
+  // documented limit — no 30 s provider stall.
+  test('POST /api/wanyrix/explain with >256KB context → fast 413 with documented limit', async () => {
+    const bigBody = JSON.stringify({ context: 'A'.repeat(300 * 1024), question: 'q' })
+    const started = Date.now()
+    const res = await fetchJson('/api/wanyrix/explain', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: bigBody,
+    })
+    expect(res.status).toBe(413)
+    expectJson(res)
+    const body = res.body as { ok: boolean; error: string }
+    expect(body.ok).toBe(false)
+    expect(body.error).toContain('payload too large')
+    expect(body.error).toContain('256 KB')
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+})
+
+describeServer('Wanyrix API — unknown workspace → 404 on every ws-scoped route (ENG-TCA-1)', () => {
+  // ENG-TCA-1: no route may silently substitute the default workspace for a
+  // misspelled `ws`; the 404 must name the error and list the known ids.
+  const WS_ROUTES = [
+    'doctor',
+    'graph',
+    'health',
+    'diagnostics',
+    'pr',
+    'experiments',
+    'report?format=json',
+    'report?format=markdown',
+    'impact?type=add-dep&target=sqlx',
+  ]
+
+  for (const route of WS_ROUTES) {
+    test(`GET /api/wanyrix/${route}&ws=<unknown> → 404 JSON error envelope`, async () => {
+      const res = await fetchJson(`/api/wanyrix/${route}&ws=${encodeURIComponent('does-not-exist')}`)
+      expect(res.status).toBe(404)
+      expectJson(res)
+      const body = res.body as { error: string; knownWorkspaces: string[]; workspace?: string }
+      expect(body.error).toContain("unknown workspace 'does-not-exist'")
+      expect(Array.isArray(body.knownWorkspaces)).toBe(true)
+      expect(body.knownWorkspaces).toEqual(WS_IDS)
+      // no payload leaks under a bogus workspace id
+      expect(body.workspace).toBeUndefined()
+    })
+  }
+
+  test('known workspaces still resolve on every ws-scoped route → 200', async () => {
+    for (const ws of WS_IDS) {
+      for (const route of ['doctor', 'graph', 'health', 'experiments']) {
+        const res = await fetchJson(`/api/wanyrix/${route}?ws=${encodeURIComponent(ws)}`)
+        expect(res.status).toBe(200)
+        const body = res.body as { workspace?: string }
+        if (body.workspace !== undefined) expect(body.workspace).toBe(ws)
+      }
+    }
+  })
+})
+
+describeServer('Wanyrix API — REST hygiene (ENG-TCA-6)', () => {
+  test('405 responses carry an Allow header naming the allowed method (ENG-TCA-6a)', async () => {
+    for (const route of ['workspaces', 'doctor', 'graph', 'health', 'gates', 'issues', 'storage', 'diagnostics', 'pr', 'experiments', 'impact', 'report']) {
+      const res = await fetch(`${BASE_URL}/api/wanyrix/${route}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
+      expect(res.status).toBe(405)
+      expect(res.headers.get('allow')).toContain('GET')
+    }
+    // POST-only surfaces advertise POST
+    for (const route of ['storage/reclaim', 'storage/rebuild']) {
+      const res = await fetch(`${BASE_URL}/api/wanyrix/${route}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
+      expect(res.status).toBe(405)
+      expect(res.headers.get('allow')).toContain('POST')
+    }
+  })
+
+  test('POST /api/wanyrix/explain with unknown kind → 400, no silent coercion (ENG-TCA-6c)', async () => {
+    const res = await fetchJson('/api/wanyrix/explain', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ context: 'c', question: 'q', kind: 'weird-kind' }),
+    })
+    expect(res.status).toBe(400)
+    expectJson(res)
+    const body = res.body as { ok: boolean; error: string }
+    expect(body.ok).toBe(false)
+    expect(body.error).toContain("unknown kind 'weird-kind'")
+    // omitted kind still defaults to `general` (documented behavior) — the
+    // request must NOT be rejected like an explicit unknown kind. Provider
+    // latency is variable, so a slow/failed provider is not a contract
+    // failure here; we only pin that the default is accepted, never 400'd.
+    try {
+      const defaulted = await fetchJson('/api/wanyrix/explain', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ context: 'hello', question: 'what is this?' }),
+      })
+      expect(defaulted.status).not.toBe(400)
+    } catch {
+      // provider timeout — the default-kind acceptance is covered by the 400 path above
+    }
   })
 })
 

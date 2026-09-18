@@ -15,6 +15,7 @@ import {
   getExperiments,
   getGraphPayload,
   getHealth,
+  getImpact,
   getPRAnalysis,
   getWorkspaces,
 } from '../../src/lib/wanyrix/data'
@@ -132,6 +133,138 @@ describe('graph fixtures — structural integrity', () => {
   }
 })
 
+/**
+ * ENG-TCA-3 reconciliation — the golden property the QA cross-check script
+ * (Task 2-c-a) demanded: EVERY claimed number inside one /graph payload is
+ * recomputable from the payload's own edge list. Nothing is hand-typed.
+ */
+describe('graph fixtures — derived aggregates reconcile with the served edges (ENG-TCA-3)', () => {
+  for (const ws of WS_IDS) {
+    test(`[${ws}] fanIn/fanOut/downstream/blast/duplicates/impact all recompute from edges`, () => {
+      const graph = getGraphPayload(ws)
+      const health = getHealth(ws)
+      const nodes = graph.nodes
+      const ids = new Set(nodes.map((n) => n.id))
+      const kindOf = new Map(nodes.map((n) => [n.id, n.kind]))
+
+      // degrees + reverse adjacency from the SERVED edges
+      const inDeg = new Map<string, number>()
+      const outDeg = new Map<string, number>()
+      const dependents = new Map<string, string[]>()
+      for (const n of nodes) {
+        inDeg.set(n.id, 0)
+        outDeg.set(n.id, 0)
+        dependents.set(n.id, [])
+      }
+      for (const e of graph.edges) {
+        inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1)
+        outDeg.set(e.from, (outDeg.get(e.from) ?? 0) + 1)
+        dependents.get(e.to)?.push(e.from)
+      }
+
+      // transitive workspace-kind dependent closure (downstream / blast radius)
+      const closure = (id: string): string[] => {
+        const seen = new Set<string>([id])
+        const queue = [...(dependents.get(id) ?? [])]
+        while (queue.length > 0) {
+          const cur = queue.shift() as string
+          if (seen.has(cur)) continue
+          seen.add(cur)
+          for (const next of dependents.get(cur) ?? []) if (!seen.has(next)) queue.push(next)
+        }
+        seen.delete(id)
+        return [...seen].filter((x) => kindOf.get(x) === 'workspace')
+      }
+
+      // 1. every node's fanIn/fanOut == served edge degrees
+      for (const n of nodes) {
+        expect(n.fanIn).toBe(inDeg.get(n.id))
+        expect(n.fanOut).toBe(outDeg.get(n.id))
+      }
+
+      // 2. every node's downstream == its workspace closure, within workspace size
+      for (const n of nodes) {
+        expect(n.downstream).toBe(closure(n.id).length)
+        expect(n.downstream).toBeLessThanOrEqual(graph.meta.workspaceCrates)
+        expect(n.downstream).toBeGreaterThanOrEqual(0)
+      }
+
+      // 3. blast.affectedWorkspace == nodes[crate].downstream == closure; chain is a real path
+      for (const b of graph.blast) {
+        const node = nodes.find((n) => n.id === b.crate)
+        expect(node).toBeDefined()
+        expect(b.affectedWorkspace).toBe(node?.downstream)
+        expect(b.affectedWorkspace).toBe(closure(b.crate).length)
+        expect(b.affectedWorkspace).toBeGreaterThan(0)
+        expect(b.chain[0]).toBe(b.crate)
+        for (const step of b.chain) expect(ids.has(step)).toBe(true)
+        for (let i = 0; i + 1 < b.chain.length; i += 1) {
+          // chain walks DEPENDENTS: chain[i+1] depends on chain[i]
+          expect(graph.edges.some((e) => e.from === b.chain[i + 1] && e.to === b.chain[i])).toBe(true)
+        }
+      }
+
+      // 4. duplicate groups: name + every dependent resolve to nodes via served edges
+      for (const d of graph.duplicates) {
+        expect(ids.has(d.name)).toBe(true)
+        expect(d.dependents.length).toBeGreaterThan(0)
+        for (const label of d.dependents) {
+          const head = label.replace(/ \([\w-]+\)$/, '')
+          expect(ids.has(head)).toBe(true)
+          expect(graph.edges.some((e) => e.from === head && e.to === d.name)).toBe(true)
+        }
+      }
+
+      // 5. meta declares the subset relationship explicitly
+      expect(graph.meta.scope).toBe('backbone-subset')
+      expect(graph.meta.aggregateSource).toBe('served-edges')
+      expect(graph.meta.servedNodes).toBe(nodes.length)
+      expect(graph.meta.servedEdges).toBe(graph.edges.length)
+      expect(graph.meta.workspaceCrates).toBe(health.crates)
+
+      // 6. health.slowestCrates downstream agrees with the graph (no parallel truths)
+      for (const s of health.slowestCrates) {
+        const node = nodes.find((n) => n.id === s.name)
+        expect(node).toBeDefined()
+        expect(s.downstream).toBe(node?.downstream)
+      }
+    })
+
+    test(`[${ws}] impact upgrade scenarios derive duplicateBefore + recompileCrates (ENG-TCA-3)`, () => {
+      const graph = getGraphPayload(ws)
+      const nodes = graph.nodes
+      const kindOf = new Map(nodes.map((n) => [n.id, n.kind]))
+      const dependents = new Map<string, string[]>(nodes.map((n) => [n.id, []]))
+      for (const e of graph.edges) dependents.get(e.to)?.push(e.from)
+      const closureSize = (id: string): number => {
+        const seen = new Set<string>([id])
+        const queue = [...(dependents.get(id) ?? [])]
+        while (queue.length > 0) {
+          const cur = queue.shift() as string
+          if (seen.has(cur)) continue
+          seen.add(cur)
+          for (const next of dependents.get(cur) ?? []) if (!seen.has(next)) queue.push(next)
+        }
+        seen.delete(id)
+        return [...seen].filter((x) => kindOf.get(x) === 'workspace').length
+      }
+
+      for (const u of graph.catalog?.upgrades ?? []) {
+        const r = getImpact('upgrade-dep', u.id, ws) as {
+          duplicateBefore: boolean
+          recompileCrates: number
+        } | null
+        expect(r).not.toBeNull()
+        // duplicateBefore derives from the SAME payload's duplicates list
+        expect(r?.duplicateBefore).toBe(graph.duplicates.some((d) => d.name === u.id))
+        // recompileCrates derives from the served closure and respects workspace size
+        expect(r?.recompileCrates).toBe(closureSize(u.id))
+        expect(r?.recompileCrates).toBeLessThanOrEqual(graph.meta.workspaceCrates)
+      }
+    })
+  }
+})
+
 /* --------------------------------------------------------------------- PR -- */
 
 describe('PR analysis fixtures', () => {
@@ -188,6 +321,56 @@ describe('Estimated / Measured / Verified are never conflated (Gate 21 / Gate 7)
       expect(f.confidencePct).toBe(source.confidence)
       expect(MEASUREMENT_STATUSES as readonly string[]).toContain(f.measurementStatus)
     }
+  })
+})
+
+/* ------------------------------------------------------- estimated range --- */
+
+describe('estimatedRange semantics survive the machine flavors (ENG-TCA-5)', () => {
+  test('json flavor carries structured estimatedAfterFix — not a CI around buildTime', () => {
+    for (const ws of WS_IDS) {
+      const doctor = getDoctor(ws)
+      const { json } = buildWorkspaceJsonReport(ws, FROZEN_NOW)
+
+      // the ambiguous flat tuple is gone
+      expect((json.doctor as Record<string, unknown>)['estimatedRangeSeconds']).toBeUndefined()
+
+      const est = json.doctor.estimatedAfterFix
+      expect(est.unit).toBe('seconds')
+      expect(est.status).toBe('estimated')
+      expect(est.meaning).toBe('projected-after-top-fix')
+      expect(est.estimatedRange.low).toBe(doctor.estimatedRange[0])
+      expect(est.estimatedRange.high).toBe(doctor.estimatedRange[1])
+      expect(est.estimatedRange.high).toBeGreaterThanOrEqual(est.estimatedRange.low)
+      expect(est.confidencePct).toBe(doctor.confidence)
+      expect(est.note.toLowerCase()).toContain('not a confidence interval')
+
+      // structured current-build value travels with an explicit unit
+      expect(json.doctor.buildTime).toEqual({ value: doctor.buildTime, unit: 'seconds' })
+      expect(json.doctor.buildTimeSeconds).toBe(doctor.buildTime)
+
+      // the projection may legitimately sit OUTSIDE the measured build time —
+      // the payload documents that relationship explicitly instead of leaving
+      // consumers to misread the range as an interval
+      const outside = doctor.buildTime < est.estimatedRange.low || doctor.buildTime > est.estimatedRange.high
+      if (outside) expect(est.note.toLowerCase()).toContain('may legitimately fall outside')
+    }
+  })
+
+  test('markdown flavor says "estimated after top fix" — human wording kept', () => {
+    for (const ws of WS_IDS) {
+      const doctor = getDoctor(ws)
+      const { markdown } = buildWorkspaceReport(ws, FROZEN_NOW)
+      expect(markdown).toContain(
+        `(estimated after top fix: ${doctor.estimatedRange[0].toFixed(1)}–${doctor.estimatedRange[1].toFixed(1)}s · confidence ${doctor.confidence}%)`,
+      )
+      expect(markdown).not.toContain('estimated range')
+    }
+  })
+
+  test('markdown envelope carries the wanyrix.markdown/v1 schema marker (ENG-TCA-6d)', () => {
+    const bundle = buildWorkspaceReport(WS_IDS[0], FROZEN_NOW)
+    expect(bundle.schema).toBe('wanyrix.markdown/v1')
   })
 })
 

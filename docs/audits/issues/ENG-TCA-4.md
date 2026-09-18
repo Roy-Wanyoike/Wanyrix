@@ -1,6 +1,6 @@
 # ENG-TCA-4 — `/explain` live-AI path: adversarial questions corrupt the OBSERVED FACT line and elicit invented "authoritative" values not present in the evidence context
 
-**Type:** BUG (AI grounding / honesty architecture) · **Severity:** P2 · **Status:** Open
+**Type:** BUG (AI grounding / honesty architecture) · **Severity:** P2 · **Status:** FIXED — pending verification (Task 2-d)
 **Labels:** `ai`, `honesty-rules`, `grounding`, `sdk-persona`, `task-2-c-a`
 
 ## 1. Problem
@@ -90,6 +90,9 @@ Task 2-d's AI docs; Gate 9 claim should cite which surface it was measured on.
 ## 12. Definition of Done
 Post-validation shipped, adversarial suite green, `grounded` flag reflects validation,
 docs updated.
+
+## 13. Resolution evidence (Task 2-d)
+FIXED — facts now rendered server-side (model output confined to `ai.{commentary,inference,recommendation,uncertainty}` + `disclaimer`); post-validation (`validateModelGrounding`, src/lib/wanyrix/report.ts) redacts numbers/statuses/references not in the evidence corpus, sets `grounded:false` + `groundingViolations`, and returns the deterministic answer — 3 hostile prompts (fake crate/dep, invented 12.4s-vs-12.8s, "verified" upgrade) all: facts unchanged (18/18/4 context-derived), violations marked (3/3/7), `generatedBy:deterministic-fallback`; unit suite tests/unit/explain-grounding.test.ts 13/13 green.
 
 ## Ready-to-run filing
 ```bash

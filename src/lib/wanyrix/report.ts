@@ -40,6 +40,8 @@ function severityRank(s: string): number {
 }
 
 export interface ReportBundle {
+  /** envelope schema marker so machine consumers can pin the markdown format (ENG-TCA-6d) */
+  schema: 'wanyrix.markdown/v1'
   filename: string
   markdown: string
   bytes: number
@@ -68,8 +70,24 @@ export interface WorkspaceJsonReport {
   }
   doctor: {
     profile: string
+    /** current dev-profile build time (build telemetry), in seconds */
     buildTimeSeconds: number
-    estimatedRangeSeconds: [number, number]
+    /** structured form of the current build time (ENG-TCA-5) */
+    buildTime: { value: number; unit: 'seconds' }
+    /**
+     * ESTIMATED build time AFTER applying the top-priority fix — a projection
+     * with explicit semantics, NOT a confidence interval around
+     * buildTimeSeconds (buildTime may legitimately fall outside the range).
+     * Replaces the ambiguous flat `estimatedRangeSeconds` tuple (ENG-TCA-5).
+     */
+    estimatedAfterFix: {
+      unit: 'seconds'
+      estimatedRange: { low: number; high: number }
+      status: 'estimated'
+      meaning: 'projected-after-top-fix'
+      confidencePct: number
+      note: string
+    }
     confidencePct: number
     scannedAt: string
     criticalPath: { name: string; seconds: number; kind: string }[]
@@ -156,7 +174,15 @@ export function buildWorkspaceJsonReport(ws: string, now = new Date()): ReportJs
     doctor: {
       profile: doctor.profile,
       buildTimeSeconds: doctor.buildTime,
-      estimatedRangeSeconds: doctor.estimatedRange,
+      buildTime: { value: doctor.buildTime, unit: 'seconds' },
+      estimatedAfterFix: {
+        unit: 'seconds',
+        estimatedRange: { low: doctor.estimatedRange[0], high: doctor.estimatedRange[1] },
+        status: 'estimated',
+        meaning: 'projected-after-top-fix',
+        confidencePct: doctor.confidence,
+        note: 'Estimated build time AFTER applying the top-priority fix — a projection, not a confidence interval; buildTimeSeconds may legitimately fall outside this range.',
+      },
       confidencePct: doctor.confidence,
       scannedAt: doctor.scannedAt,
       criticalPath: doctor.criticalPath.map((s) => ({ name: s.name, seconds: s.seconds, kind: s.kind })),
@@ -288,7 +314,7 @@ export function buildWorkspaceReport(ws: string, now = new Date()): ReportBundle
     `- Profile: \`${doctor.profile}\` · Toolchain: \`${doctor.toolchain}\``,
   )
   push(
-    `- Build time: **${doctor.buildTime.toFixed(1)}s** (estimated range ${doctor.estimatedRange[0].toFixed(1)}–${doctor.estimatedRange[1].toFixed(1)}s · confidence ${doctor.confidence}%)`,
+    `- Build time: **${doctor.buildTime.toFixed(1)}s** (estimated after top fix: ${doctor.estimatedRange[0].toFixed(1)}–${doctor.estimatedRange[1].toFixed(1)}s · confidence ${doctor.confidence}%)`,
   )
   push(`- Scanned at: ${doctor.scannedAt}`)
   if (doctor.summary) {
@@ -338,7 +364,9 @@ export function buildWorkspaceReport(ws: string, now = new Date()): ReportBundle
   // ------------------------------------------------------------ graph
   push('## Dependency graph')
   push()
-  push(`Backbone: ${graph.meta.workspaceCrates} crates · ${graph.meta.totalEdges} edges · last scan ${graph.meta.lastScan}`)
+  push(
+    `Served backbone: ${graph.meta.servedNodes} nodes · ${graph.meta.servedEdges} edges (subset of the full ${graph.meta.workspaceCrates}-crate workspace graph · ${graph.meta.totalEdges} edges) · per-node aggregates computed from the served edges · last scan ${graph.meta.lastScan}`,
+  )
   push()
   if (graph.duplicates.length > 0) {
     push('### Duplicate versions (cargo tree -d)')
@@ -430,5 +458,158 @@ export function buildWorkspaceReport(ws: string, now = new Date()): ReportBundle
 
   const markdown = L.join('\n')
   const filename = `wanyrix-report-${ws}-${now.toISOString().slice(0, 10)}.md`
-  return { filename, markdown, bytes: new TextEncoder().encode(markdown).length }
+  return { schema: 'wanyrix.markdown/v1', filename, markdown, bytes: new TextEncoder().encode(markdown).length }
+}
+
+/* ========================================================================= */
+/*  Explain-route grounding helpers (Task 2-d — ENG-TCA-4 / ENG-TCA-7).       */
+/*  Pure functions: parse the model's labeled sections, validate every       */
+/*  number/status/reference against the server-derived evidence corpus, and  */
+/*  redact violations. The server-rendered FACT block never passes through   */
+/*  the model; these helpers only police the model's own labeled fields.     */
+/* ========================================================================= */
+
+/** Hard request cap for POST /api/wanyrix/explain (ENG-TCA-7). */
+export const EXPLAIN_MAX_BODY_BYTES = 256 * 1024 // 256 KB
+
+/** Characters of evidence context forwarded to the AI provider (prompt cap). */
+export const EXPLAIN_MAX_PROMPT_CONTEXT_CHARS = 48_000
+
+/** The four model-owned fields. There is deliberately NO `fact` field: facts
+ *  are rendered server-side from context and are not model-writable. */
+export interface ExplainModelSections {
+  /** model prose under OBSERVED FACT — demoted to commentary, never evidence */
+  commentary: string
+  inference: string
+  recommendation: string
+  uncertainty: string
+}
+
+export interface GroundingViolation {
+  kind: 'number' | 'status' | 'reference'
+  /** the offending token as it appeared in the model text */
+  token: string
+  /** which model field carried it */
+  field: keyof ExplainModelSections
+  detail: string
+}
+
+const SECTION_LABELS: { key: keyof ExplainModelSections; re: RegExp }[] = [
+  { key: 'commentary', re: /OBSERVED\s*FACT\s*[—:-]/i },
+  { key: 'inference', re: /INFERENCE\s*[—:-]/i },
+  { key: 'recommendation', re: /RECOMMENDATION\s*[—:-]/i },
+  { key: 'uncertainty', re: /UNCERTAINTY\s*[—:-]/i },
+]
+
+/**
+ * Split the model's answer into its labeled sections. Any text under the
+ * OBSERVED FACT label is stored as `commentary` — the model cannot write into
+ * the response's server-rendered fact block, so the strongest epistemic label
+ * it can reach is commentary (ENG-TCA-4).
+ */
+export function parseModelSections(text: string): ExplainModelSections {
+  const out: ExplainModelSections = { commentary: '', inference: '', recommendation: '', uncertainty: '' }
+  if (!text) return out
+
+  // Locate every label occurrence with its position.
+  const hits: { key: keyof ExplainModelSections; start: number; end: number }[] = []
+  for (const { key, re } of SECTION_LABELS) {
+    const global = new RegExp(re.source, 'gi')
+    let m: RegExpExecArray | null
+    while ((m = global.exec(text)) !== null) {
+      hits.push({ key, start: m.index, end: m.index + m[0].length })
+    }
+  }
+  if (hits.length === 0) {
+    // No labels at all — the whole text is commentary.
+    out.commentary = text.trim()
+    return out
+  }
+  hits.sort((a, b) => a.start - b.start)
+  if (hits[0].start > 0) out.commentary = `${text.slice(0, hits[0].start).trim()}\n${out.commentary}`.trim()
+  for (let i = 0; i < hits.length; i++) {
+    const body = text.slice(hits[i].end, i + 1 < hits.length ? hits[i + 1].start : undefined).trim()
+    out[hits[i].key] = out[hits[i].key] ? `${out[hits[i].key]}\n${body}` : body
+  }
+  return out
+}
+
+const NUMBER_RE = /\d+(?:\.\d+)?/g
+const STATUS_WORD_RE = /\b(measured|verified|proven|confirmed)\b/i
+/** EXP-014 / FER-BLD-001 / WAN-110 — stable registry-style ids. */
+const ID_LIKE_RE = /\b[A-Z]{2,}-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\b/g
+/** Quoted or backticked names ('totally-real-crate-xyz'). */
+const QUOTED_NAME_RE = /['"`]([a-z0-9][a-z0-9-]{5,})['"`]/g
+
+/**
+ * Validate the model's own fields against the evidence corpus (fact statements
+ * + raw context + resolved registry record, stringified). Returns every token
+ * the model asserted that the evidence does not contain.
+ */
+export function validateModelGrounding(
+  sections: ExplainModelSections,
+  evidenceCorpus: string,
+): GroundingViolation[] {
+  const violations: GroundingViolation[] = []
+  const corpus = evidenceCorpus.toLowerCase()
+  const fields: (keyof ExplainModelSections)[] = ['commentary', 'inference', 'recommendation', 'uncertainty']
+
+  for (const field of fields) {
+    const text = sections[field]
+    if (!text) continue
+
+    // 1. numbers — every number the model asserts must exist in the evidence
+    const seen = new Set<string>()
+    for (const m of text.match(NUMBER_RE) ?? []) {
+      if (seen.has(m)) continue
+      seen.add(m)
+      if (!corpus.includes(m.toLowerCase())) {
+        violations.push({ kind: 'number', token: m, field, detail: `number ${m} does not appear in the evidence context` })
+      }
+    }
+
+    // 2. status words — never upgrade: measured/verified/proven/confirmed must
+    //    already be established by the evidence corpus
+    const status = text.match(STATUS_WORD_RE)
+    if (status && !corpus.includes(status[1].toLowerCase())) {
+      violations.push({
+        kind: 'status',
+        token: status[1],
+        field,
+        detail: `claims "${status[1]}" but the evidence context never establishes that status`,
+      })
+    }
+
+    // 3. id-like references (EXP-014, FER-BLD-001, …) must exist in the corpus
+    const seenIds = new Set<string>()
+    for (const m of text.match(ID_LIKE_RE) ?? []) {
+      if (seenIds.has(m)) continue
+      seenIds.add(m)
+      if (!corpus.includes(m.toLowerCase())) {
+        violations.push({ kind: 'reference', token: m, field, detail: `references ${m}, which is not present in the evidence context` })
+      }
+    }
+
+    // 4. quoted hyphenated names ('totally-real-crate-xyz') must exist too
+    const seenNames = new Set<string>()
+    for (const m of text.matchAll(QUOTED_NAME_RE)) {
+      const name = m[1]
+      if (!name || seenNames.has(name)) continue
+      seenNames.add(name)
+      if (!corpus.includes(name.toLowerCase())) {
+        violations.push({ kind: 'reference', token: name, field, detail: `names "${name}", which is not present in the evidence context` })
+      }
+    }
+  }
+  return violations
+}
+
+/** Redact violating tokens in place so quarantined model text is safe to inspect. */
+export function redactViolations(sections: ExplainModelSections, violations: GroundingViolation[]): ExplainModelSections {
+  const out: ExplainModelSections = { ...sections }
+  for (const v of violations) {
+    const token = v.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out[v.field] = out[v.field].replace(new RegExp(token, 'g'), '⟨removed: not in evidence⟩')
+  }
+  return out
 }

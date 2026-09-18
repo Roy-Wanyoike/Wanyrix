@@ -1,6 +1,6 @@
 # AUDIT-I7 — `explain` AI route: shallow grounding with id-only context; GET contract undocumented
 
-**Type:** PARTIAL_IMPLEMENTATION · **Severity:** P3 · **Status:** Open
+**Type:** PARTIAL_IMPLEMENTATION · **Severity:** P3 · **Status:** FIXED — pending verification (Task 2-d)
 **Labels:** `ai`, `api`, `honesty-rules`, `audit-2026-09-18`
 
 ## 1. Problem
@@ -50,6 +50,9 @@ AUDIT-I4 for tests; none otherwise.
 
 ## 12. Definition of Done
 Grounded path + explicit unknown-ID error shipped, tests green, documented.
+
+## 13. Resolution evidence (Task 2-d)
+FIXED — server-side registry resolution + per-fact `derivedFrom` provenance shipped: live probe `POST /explain {"context":{"findingId":"FER-BLD-001"},…}` → 200 `grounding.status:"registry"`, 18 facts each with provenance, `grounded:true`; unknown id → 400 `unknown finding '…'`; contract tests 105/105 green; documented in docs/ARCHITECTURE.md + README.md.
 
 ## Ready-to-run filing
 ```bash

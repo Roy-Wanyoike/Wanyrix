@@ -29,7 +29,6 @@ export const WORKSPACE = {
   name: 'helios-platform',
   description: 'Payments platform · 47 workspace crates · rustc 1.84.1 · dev profile',
   crates: 47,
-  backboneNodes: 36,
   edges: 212,
   toolchain: 'rustc 1.84.1 (a07f3eb) · cargo 1.84.0',
   profile: 'dev',
@@ -364,81 +363,86 @@ export const DOCTOR: DoctorReport = {
 // Engineering graph
 // ---------------------------------------------------------------------------
 
-const W = (over: Partial<GraphNode> & { id: string }): GraphNode => ({
+/**
+ * Raw node fixture — WITHOUT the derived aggregates. ENG-TCA-3: fanIn/fanOut
+ * and downstream are computed from the served edge list at module load
+ * (see computeGraphMath) and must never be hand-typed here.
+ */
+type RawGraphNode = Omit<GraphNode, 'fanIn' | 'fanOut' | 'downstream'>
+
+const W = (over: Partial<RawGraphNode> & { id: string }): RawGraphNode => ({
   band: 'lib',
   kind: 'workspace',
   buildTime: 4,
-  fanIn: 1,
-  fanOut: 2,
-  downstream: 1,
   changeFreq: 5,
   ...over,
 })
 
-const E = (id: string, buildTime: number, over: Partial<GraphNode> = {}): GraphNode => ({
+const E = (id: string, buildTime: number, over: Partial<RawGraphNode> = {}): RawGraphNode => ({
   id,
   band: 'external',
   kind: 'external',
   buildTime,
-  fanIn: 1,
-  fanOut: 0,
-  downstream: 0,
   changeFreq: 0,
   ...over,
 })
 
-const P = (id: string, buildTime: number, over: Partial<GraphNode> = {}): GraphNode => ({
+const P = (id: string, buildTime: number, over: Partial<RawGraphNode> = {}): RawGraphNode => ({
   id,
   band: 'external',
   kind: 'proc-macro',
   buildTime,
-  fanIn: 1,
-  fanOut: 0,
-  downstream: 0,
   changeFreq: 0,
   ...over,
 })
 
-export const GRAPH_NODES: GraphNode[] = [
+const RAW_GRAPH_NODES: RawGraphNode[] = [
   // bins
-  W({ id: 'gateway', band: 'bin', buildTime: 9.8, fanIn: 0, fanOut: 5, downstream: 0, changeFreq: 14 }),
-  W({ id: 'api', band: 'bin', buildTime: 12.7, fanIn: 1, fanOut: 6, downstream: 0, changeFreq: 38, critical: true }),
-  W({ id: 'worker', band: 'bin', buildTime: 11.2, fanIn: 0, fanOut: 5, downstream: 0, changeFreq: 21 }),
-  W({ id: 'cli', band: 'bin', buildTime: 6.4, fanIn: 0, fanOut: 4, downstream: 0, changeFreq: 9 }),
+  W({ id: 'gateway', band: 'bin', buildTime: 9.8, changeFreq: 14 }),
+  W({ id: 'api', band: 'bin', buildTime: 12.7, changeFreq: 38, critical: true }),
+  W({ id: 'worker', band: 'bin', buildTime: 11.2, changeFreq: 21 }),
+  W({ id: 'cli', band: 'bin', buildTime: 6.4, changeFreq: 9 }),
   // libs
-  W({ id: 'payments-core', buildTime: 10.4, fanIn: 2, fanOut: 5, downstream: 3, changeFreq: 17 }),
-  W({ id: 'auth', buildTime: 7.1, fanIn: 2, fanOut: 3, downstream: 2, changeFreq: 8 }),
-  W({ id: 'database', buildTime: 8.9, fanIn: 4, fanOut: 3, downstream: 6, changeFreq: 19 }),
-  W({ id: 'http-client', buildTime: 5.2, fanIn: 3, fanOut: 3, downstream: 5, changeFreq: 6 }),
-  W({ id: 'common-runtime', buildTime: 18.3, fanIn: 2, fanOut: 3, downstream: 38, changeFreq: 23, critical: true }),
-  W({ id: 'telemetry', buildTime: 4.1, fanIn: 4, fanOut: 2, downstream: 9, changeFreq: 4 }),
-  W({ id: 'cache', buildTime: 3.6, fanIn: 1, fanOut: 2, downstream: 1, changeFreq: 2 }),
-  W({ id: 'config', buildTime: 2.2, fanIn: 2, fanOut: 1, downstream: 8, changeFreq: 3 }),
-  W({ id: 'common', buildTime: 6.8, fanIn: 11, fanOut: 4, downstream: 41, changeFreq: 31, critical: true }),
+  W({ id: 'payments-core', buildTime: 10.4, changeFreq: 17 }),
+  W({ id: 'auth', buildTime: 7.1, changeFreq: 8 }),
+  W({ id: 'database', buildTime: 8.9, changeFreq: 19 }),
+  W({ id: 'http-client', buildTime: 5.2, changeFreq: 6 }),
+  W({ id: 'common-runtime', buildTime: 18.3, changeFreq: 23, critical: true }),
+  W({ id: 'telemetry', buildTime: 4.1, changeFreq: 4 }),
+  W({ id: 'cache', buildTime: 3.6, changeFreq: 2 }),
+  W({ id: 'config', buildTime: 2.2, changeFreq: 3 }),
+  W({ id: 'common', buildTime: 6.8, changeFreq: 31, critical: true }),
+  // full-workspace crates referenced by findings/duplicates/upgrade notes —
+  // served so every reference resolves against the graph (ENG-TCA-3)
+  W({ id: 'legacy-cache', buildTime: 2.4, changeFreq: 1 }),
+  W({ id: 'old-sdk', buildTime: 3.1, changeFreq: 0 }),
   // external
-  E('tokio', 8.2, { fanIn: 5, downstream: 41, versions: ['1.34.2', '1.40.0'], duplicate: true }),
-  E('syn', 7.8, { fanIn: 4, downstream: 14, kind: 'external' }),
-  E('serde', 6.1, { fanIn: 1, downstream: 41, versions: ['1.0.203', '1.0.210'], duplicate: true }),
-  E('sqlx', 9.6, { fanIn: 1, downstream: 6 }),
-  E('reqwest', 5.8, { fanIn: 1, downstream: 5 }),
-  E('tracing', 2.4, { fanIn: 3, downstream: 12 }),
-  E('tonic', 6.9, { fanIn: 1, downstream: 3 }),
-  E('prost', 4.4, { fanIn: 1, downstream: 3 }),
-  E('hyper', 5.3, { fanIn: 3, downstream: 5 }),
-  E('tower', 3.2, { fanIn: 1, downstream: 5 }),
-  E('rustls', 4.9, { fanIn: 2, downstream: 5 }),
-  E('ring', 3.8, { fanIn: 2, downstream: 5 }),
-  E('uuid', 2.1, { fanIn: 1, downstream: 41, versions: ['0.8.2', '1.8.0'], duplicate: true }),
-  E('anyhow', 1.2, { fanIn: 1, downstream: 41 }),
-  E('thiserror', 1.1, { fanIn: 1, downstream: 41 }),
-  E('clap', 3.1, { fanIn: 1, downstream: 1 }),
-  P('serde_derive', 5.4, { fanIn: 1, downstream: 41 }),
-  P('tokio-macros', 2.8, { fanIn: 1, downstream: 41 }),
-  P('sqlx-macros', 6.2, { fanIn: 1, downstream: 6 }),
-  P('thiserror-impl', 1.4, { fanIn: 1, downstream: 41 }),
-  P('clap_derive', 2.2, { fanIn: 1, downstream: 1 }),
-  E('proc-macro2', 1.5, { fanIn: 4, downstream: 14 }),
-  E('quote', 1.9, { fanIn: 4, downstream: 14 }),
+  E('tokio', 8.2, { versions: ['1.34.2', '1.40.0'], duplicate: true }),
+  E('syn', 7.8),
+  E('serde', 6.1, { versions: ['1.0.203', '1.0.210'], duplicate: true }),
+  E('sqlx', 9.6),
+  E('reqwest', 5.8),
+  E('tracing', 2.4),
+  E('tonic', 6.9),
+  E('prost', 4.4),
+  E('hyper', 5.3),
+  E('tower', 3.2),
+  E('rustls', 4.9),
+  E('ring', 3.8),
+  E('uuid', 2.1, { versions: ['0.8.2', '1.8.0'], duplicate: true }),
+  E('anyhow', 1.2),
+  E('thiserror', 1.1),
+  E('clap', 3.1),
+  P('serde_derive', 5.4),
+  P('tokio-macros', 2.8),
+  P('sqlx-macros', 6.2),
+  P('thiserror-impl', 1.4),
+  P('clap_derive', 2.2),
+  E('proc-macro2', 1.5),
+  E('quote', 1.9),
+  // reqwest's wasm client target binds through wasm-bindgen — served so the
+  // wasm-bindgen upgrade scenario derives its recompile count from the graph
+  E('wasm-bindgen', 1.6),
 ]
 
 export const GRAPH_EDGES: GraphEdge[] = [
@@ -510,71 +514,198 @@ export const GRAPH_EDGES: GraphEdge[] = [
   { from: 'clap_derive', to: 'syn' },
   { from: 'syn', to: 'proc-macro2' },
   { from: 'quote', to: 'proc-macro2' },
+  // full-workspace crates that were previously ghost references (ENG-TCA-3)
+  { from: 'legacy-cache', to: 'tokio' }, // pins tokio 1.34.2 (FER-BLD-002)
+  { from: 'legacy-cache', to: 'uuid' }, // pins uuid 0.8.2 (FER-BLD-002)
+  { from: 'old-sdk', to: 'serde' }, // old-sdk 2.1 pins serde 1.0.203
+  { from: 'reqwest', to: 'wasm-bindgen' }, // wasm client target
 ]
 
-export const DUPLICATES: DuplicateGroup[] = [
-  {
-    name: 'tokio',
-    versions: ['1.34.2', '1.40.0'],
-    dependents: ['sqlx 0.7 (pinned)', 'legacy-cache'],
-    wastedSeconds: 8.2,
-  },
-  {
-    name: 'serde',
-    versions: ['1.0.203', '1.0.210'],
-    dependents: ['old-sdk 2.1', 'common (workspace)'],
-    wastedSeconds: 6.1,
-  },
-  {
-    name: 'uuid',
-    versions: ['0.8.2', '1.8.0'],
-    dependents: ['legacy-cache'],
-    wastedSeconds: 2.1,
-  },
+// ---------------------------------------------------------------------------
+// Graph math — the single source of truth for every derived aggregate.
+// ---------------------------------------------------------------------------
+// Edge direction follows cargo semantics: `from` DEPENDS ON `to`. All per-node
+// numbers are COMPUTED from the served edge list at module load (ENG-TCA-3):
+//   - fanIn / fanOut  = served in/out degrees (direct dependents / dependencies)
+//   - downstream      = served WORKSPACE-kind crates that transitively depend
+//                       on the node (reverse reachability over `edges`)
+//   - blast           = the same closure, restated per analyzed file
+//   - duplicates[].dependents = direct in-edge sources, kind-annotated
+// Nothing below may be hand-typed; narrative numbers that describe the FULL
+// workspace (47 crates · 212 edges) live in the doctor findings and are
+// reconciled by GraphPayload.meta's explicit subset declaration.
+
+export interface DerivedGraphMath {
+  /** direct dependents (in-degree over the served edges) */
+  fanIn: Record<string, number>
+  /** direct dependencies (out-degree over the served edges) */
+  fanOut: Record<string, number>
+  /** workspace-kind crates that transitively depend on the key node */
+  downstream: Record<string, number>
+  /** direct dependent ids, in deterministic node order */
+  dependents: Record<string, string[]>
+  /** deterministic sample invalidation path: crate → … → a node with no dependents */
+  chainToRoot: (crate: string) => string[]
+  /** the workspace blast radius of a crate (= downstream[crate]) */
+  workspaceBlastRadius: (crate: string) => number
+}
+
+function computeGraphMath(nodes: RawGraphNode[], edges: GraphEdge[]): DerivedGraphMath {
+  const order = new Map(nodes.map((n, i) => [n.id, i]))
+  const kind = new Map(nodes.map((n) => [n.id, n.kind]))
+  const byNodeOrder = (a: string, b: string) => (order.get(a) ?? 0) - (order.get(b) ?? 0)
+
+  const dependents: Record<string, string[]> = {}
+  const dependencies: Record<string, string[]> = {}
+  for (const n of nodes) {
+    dependents[n.id] = []
+    dependencies[n.id] = []
+  }
+  for (const e of edges) {
+    dependents[e.to]?.push(e.from)
+    dependencies[e.from]?.push(e.to)
+  }
+  for (const id of Object.keys(dependents)) {
+    dependents[id].sort(byNodeOrder)
+    dependencies[id].sort(byNodeOrder)
+  }
+
+  // transitive dependents (reverse reachability), workspace-kind only
+  const downstream: Record<string, number> = {}
+  for (const n of nodes) {
+    const seen = new Set<string>([n.id])
+    const queue = [...dependents[n.id]]
+    while (queue.length > 0) {
+      const cur = queue.shift() as string
+      if (seen.has(cur)) continue
+      seen.add(cur)
+      for (const next of dependents[cur] ?? []) if (!seen.has(next)) queue.push(next)
+    }
+    seen.delete(n.id)
+    downstream[n.id] = [...seen].filter((id) => kind.get(id) === 'workspace').length
+  }
+
+  const chainCache = new Map<string, string[]>()
+  const chainToRoot = (crate: string): string[] => {
+    const cached = chainCache.get(crate)
+    if (cached) return cached
+    // BFS across dependents; the first path reaching a node with no dependents
+    // (a bin) is the deterministic sample chain served as `chain`.
+    const prev = new Map<string, string | null>([[crate, null]])
+    const queue = [crate]
+    let end: string | null = null
+    while (queue.length > 0) {
+      const cur = queue.shift() as string
+      if (cur !== crate && (dependents[cur] ?? []).length === 0) {
+        end = cur
+        break
+      }
+      for (const d of dependents[cur] ?? []) {
+        if (!prev.has(d)) {
+          prev.set(d, cur)
+          queue.push(d)
+        }
+      }
+    }
+    const chain: string[] = []
+    let cur: string | null | undefined = end ?? crate
+    while (cur) {
+      chain.unshift(cur)
+      cur = prev.get(cur) ?? null
+    }
+    chainCache.set(crate, chain)
+    return chain
+  }
+
+  return {
+    fanIn: Object.fromEntries(nodes.map((n) => [n.id, dependents[n.id].length])),
+    fanOut: Object.fromEntries(nodes.map((n) => [n.id, dependencies[n.id].length])),
+    downstream,
+    dependents,
+    chainToRoot,
+    workspaceBlastRadius: (crate: string) => downstream[crate] ?? 0,
+  }
+}
+
+const HELIOS_MATH = computeGraphMath(RAW_GRAPH_NODES, GRAPH_EDGES)
+
+const withDerivedAggregates = (n: RawGraphNode, math: DerivedGraphMath): GraphNode => ({
+  ...n,
+  fanIn: math.fanIn[n.id] ?? 0,
+  fanOut: math.fanOut[n.id] ?? 0,
+  downstream: math.downstream[n.id] ?? 0,
+})
+
+/** Served helios backbone nodes — fanIn/fanOut/downstream derived from GRAPH_EDGES. */
+export const GRAPH_NODES: GraphNode[] = RAW_GRAPH_NODES.map((n) => withDerivedAggregates(n, HELIOS_MATH))
+
+/**
+ * Duplicate-version groups. `dependents` is DERIVED from the served edge list
+ * (direct in-edge sources, kind-annotated) so every label resolves to a node —
+ * ENG-TCA-3 removed the hand-typed lists that referenced unserved crates.
+ */
+const RAW_DUPLICATES: Omit<DuplicateGroup, 'dependents'>[] = [
+  { name: 'tokio', versions: ['1.34.2', '1.40.0'], wastedSeconds: 8.2 },
+  { name: 'serde', versions: ['1.0.203', '1.0.210'], wastedSeconds: 6.1 },
+  { name: 'uuid', versions: ['0.8.2', '1.8.0'], wastedSeconds: 2.1 },
 ]
 
-export const BLAST: BlastEntry[] = [
+function deriveDependents(
+  name: string,
+  math: DerivedGraphMath,
+  nodes: RawGraphNode[],
+): string[] {
+  return (math.dependents[name] ?? []).map((id) => {
+    const node = nodes.find((n) => n.id === id)
+    return node ? `${id} (${node.kind})` : id
+  })
+}
+
+export const DUPLICATES: DuplicateGroup[] = RAW_DUPLICATES.map((d) => ({
+  ...d,
+  dependents: deriveDependents(d.name, HELIOS_MATH, RAW_GRAPH_NODES),
+}))
+
+/** Blast entries without the derived numbers — those come from the edge closure. */
+const RAW_BLAST: Omit<BlastEntry, 'affectedWorkspace' | 'chain'>[] = [
   {
     file: 'common/src/error.rs',
     crate: 'common',
-    affectedWorkspace: 41,
-    chain: ['common', 'api', 'auth', 'gateway', 'worker', 'cli'],
     incrementalDelta: 12.8,
     suggestion: 'Move error abstractions into common-types (FER-WRK-007).',
   },
   {
     file: 'common-runtime/src/scheduler.rs',
     crate: 'common-runtime',
-    affectedWorkspace: 38,
-    chain: ['common-runtime', 'api', 'payments-core', 'gateway'],
     incrementalDelta: 18.3,
     suggestion: 'Split scheduler into runtime-telemetry (FER-BLD-001).',
   },
   {
     file: 'database/src/pool.rs',
     crate: 'database',
-    affectedWorkspace: 22,
-    chain: ['database', 'api', 'worker', 'cli', 'payments-core'],
     incrementalDelta: 9.6,
     suggestion: 'Isolate sqlx behind database-impl (see PR #184 suggestions).',
   },
   {
     file: 'api/src/routes.rs',
     crate: 'api',
-    affectedWorkspace: 2,
-    chain: ['api', 'gateway'],
     incrementalDelta: 13.1,
     suggestion: 'Cheap downstream — good place for iteration.',
   },
   {
     file: 'telemetry/src/otlp.rs',
     crate: 'telemetry',
-    affectedWorkspace: 12,
-    chain: ['telemetry', 'api', 'worker', 'gateway'],
     incrementalDelta: 4.4,
     suggestion: 'Consider feature-gating the OTLP exporter.',
   },
 ]
+
+/** served blast entries — affectedWorkspace == nodes[crate].downstream == edge closure. */
+export const BLAST: BlastEntry[] = RAW_BLAST.map((b) => ({
+  ...b,
+  affectedWorkspace: HELIOS_MATH.workspaceBlastRadius(b.crate),
+  chain: HELIOS_MATH.chainToRoot(b.crate),
+}))
 
 // ---------------------------------------------------------------------------
 // Impact simulation catalogs
@@ -735,15 +866,16 @@ export const SPLIT_SIM = {
   source: 'common',
   before: {
     buildSeconds: 42.1,
-    fanOut: 11,
-    downstream: 41,
+    // derived from the served graph (ENG-TCA-3): direct dependents + workspace closure
+    fanOut: HELIOS_MATH.dependents['common']?.length ?? 0,
+    downstream: HELIOS_MATH.workspaceBlastRadius('common'),
     modules: ['types', 'database', 'http', 'auth', 'utilities'],
   },
   proposal: {
     crates: [
-      { name: 'common-types', downstream: 41, buildSeconds: 8.4, modules: ['types', 'error', 'ids'] },
-      { name: 'common-db', downstream: 12, buildSeconds: 11.2, modules: ['database', 'pool'] },
-      { name: 'common-http', downstream: 9, buildSeconds: 9.6, modules: ['http', 'middleware'] },
+      { name: 'common-types', downstream: 4, buildSeconds: 8.4, modules: ['types', 'error', 'ids'] },
+      { name: 'common-db', downstream: 2, buildSeconds: 11.2, modules: ['database', 'pool'] },
+      { name: 'common-http', downstream: 1, buildSeconds: 9.6, modules: ['http', 'middleware'] },
     ],
     buildSeconds: 29.2,
   },
@@ -753,7 +885,7 @@ export const SPLIT_SIM = {
     'Re-point fan-out-heavy crates to common-types first (api, gateway)',
     'Move database + pool modules into common-db behind a trait',
     'Extract http middleware into common-http',
-    'Verify: blast radius of common/src/error.rs drops 41 → ≤12 crates',
+    `Verify: served-backbone blast radius of common/src/error.rs drops ${HELIOS_MATH.workspaceBlastRadius('common')} → ≤4 crates`,
   ],
 }
 
@@ -1515,12 +1647,14 @@ export const HEALTH: HealthPayload = {
     { month: 'Sep', clean: 87.4, incremental: 16.9 },
   ],
   slowestCrates: [
-    { name: 'common-runtime', seconds: 18.3, downstream: 38 },
-    { name: 'api', seconds: 12.7, downstream: 0 },
-    { name: 'worker', seconds: 11.2, downstream: 0 },
-    { name: 'payments-core', seconds: 10.4, downstream: 3 },
-    { name: 'gateway', seconds: 9.8, downstream: 0 },
-    { name: 'database', seconds: 8.9, downstream: 6 },
+    // downstream is the served-graph workspace closure (ENG-TCA-3 — derived,
+    // never hand-typed, so /health cannot contradict /graph)
+    { name: 'common-runtime', seconds: 18.3, downstream: HELIOS_MATH.workspaceBlastRadius('common-runtime') },
+    { name: 'api', seconds: 12.7, downstream: HELIOS_MATH.workspaceBlastRadius('api') },
+    { name: 'worker', seconds: 11.2, downstream: HELIOS_MATH.workspaceBlastRadius('worker') },
+    { name: 'payments-core', seconds: 10.4, downstream: HELIOS_MATH.workspaceBlastRadius('payments-core') },
+    { name: 'gateway', seconds: 9.8, downstream: HELIOS_MATH.workspaceBlastRadius('gateway') },
+    { name: 'database', seconds: 8.9, downstream: HELIOS_MATH.workspaceBlastRadius('database') },
   ],
   activity: [
     {
@@ -1594,7 +1728,6 @@ export const WORKSPACE_ATLAS = {
   name: 'atlas-consortium',
   description: 'Data infrastructure consortium · 23 workspace crates · rustc 1.83.0 · dev profile',
   crates: 23,
-  backboneNodes: 24,
   edges: 96,
   toolchain: 'rustc 1.83.0 (9b1d2c4) · cargo 1.83.0',
   profile: 'dev',
@@ -1833,151 +1966,171 @@ export const DOCTOR_ATLAS: DoctorReport = {
 
 // --------------------------------------------------------------- atlas: graph
 
-const W_A = (over: Partial<GraphNode> & { id: string }): GraphNode => ({
+const W_A = (over: Partial<RawGraphNode> & { id: string }): RawGraphNode => ({
   band: 'lib',
   kind: 'workspace',
   buildTime: 3,
-  fanIn: 1,
-  fanOut: 2,
-  downstream: 1,
   changeFreq: 5,
   ...over,
 })
 
-const E_A = (id: string, buildTime: number, over: Partial<GraphNode> = {}): GraphNode => ({
+const E_A = (id: string, buildTime: number, over: Partial<RawGraphNode> = {}): RawGraphNode => ({
   id,
   band: 'external',
   kind: 'external',
   buildTime,
-  fanIn: 1,
-  fanOut: 0,
-  downstream: 0,
   changeFreq: 0,
   ...over,
 })
 
-export const GRAPH_NODES_ATLAS: GraphNode[] = [
-  W_A({ id: 'atlas-cli', band: 'bin', buildTime: 2.1, fanIn: 0, fanOut: 3, downstream: 0, changeFreq: 6 }),
-  W_A({ id: 'atlas-server', band: 'bin', buildTime: 3.4, fanIn: 0, fanOut: 4, downstream: 0, changeFreq: 9 }),
-  W_A({ id: 'atlas-ingest', buildTime: 5.8, fanIn: 2, fanOut: 3, downstream: 6, changeFreq: 14 }),
-  W_A({ id: 'atlas-query', buildTime: 9.6, fanIn: 3, fanOut: 4, downstream: 8, changeFreq: 19, critical: true }),
-  W_A({ id: 'atlas-store', buildTime: 14.2, fanIn: 4, fanOut: 6, downstream: 18, changeFreq: 41, critical: true }),
-  W_A({ id: 'atlas-common', buildTime: 4.6, fanIn: 11, fanOut: 8, downstream: 18, changeFreq: 28, critical: true }),
-  W_A({ id: 'atlas-schema', buildTime: 2.2, fanIn: 9, fanOut: 0, downstream: 12, changeFreq: 3 }),
-  W_A({ id: 'atlas-bytes', buildTime: 1.4, fanIn: 7, fanOut: 0, downstream: 9, changeFreq: 2 }),
-  W_A({ id: 'atlas-parquet', buildTime: 3.7, fanIn: 2, fanOut: 2, downstream: 4, changeFreq: 7 }),
-  W_A({ id: 'atlas-lsm', buildTime: 6.1, fanIn: 2, fanOut: 2, downstream: 5, changeFreq: 22 }),
-  W_A({ id: 'atlas-sst', buildTime: 3.2, fanIn: 3, fanOut: 1, downstream: 4, changeFreq: 8 }),
-  W_A({ id: 'atlas-compaction', buildTime: 2.9, fanIn: 2, fanOut: 1, downstream: 2, changeFreq: 6 }),
-  W_A({ id: 'atlas-planner', buildTime: 4.8, fanIn: 2, fanOut: 2, downstream: 3, changeFreq: 12 }),
-  W_A({ id: 'atlas-exec', buildTime: 3.6, fanIn: 2, fanOut: 1, downstream: 2, changeFreq: 9 }),
-  W_A({ id: 'atlas-proto', kind: 'proc-macro', buildTime: 1.8, fanIn: 6, fanOut: 0, downstream: 10, changeFreq: 1 }),
-  W_A({ id: 'atlas-testkit', band: 'bin', buildTime: 1.9, fanIn: 0, fanOut: 2, downstream: 0, changeFreq: 4 }),
-  E_A('tokio', 4.4, { fanIn: 14, downstream: 16 }),
-  E_A('arrow', 5.2, { fanIn: 4, downstream: 6, duplicate: true, versions: ['53.3.0', '54.2.0'] }),
-  E_A('parquet', 3.9, { fanIn: 3, downstream: 4 }),
-  E_A('datafusion', 6.4, { fanIn: 2, downstream: 3 }),
-  E_A('serde', 2.1, { fanIn: 18, downstream: 21 }),
-  E_A('thiserror', 0.8, { fanIn: 12, downstream: 15 }),
-  E_A('prost', 1.6, { fanIn: 4, downstream: 8, kind: 'proc-macro' }),
-  E_A('clap', 1.2, { fanIn: 2, downstream: 2 }),
+const RAW_GRAPH_NODES_ATLAS: RawGraphNode[] = [
+  W_A({ id: 'atlas-cli', band: 'bin', buildTime: 2.1, changeFreq: 6 }),
+  W_A({ id: 'atlas-server', band: 'bin', buildTime: 3.4, changeFreq: 9 }),
+  W_A({ id: 'atlas-ingest', buildTime: 5.8, changeFreq: 14 }),
+  W_A({ id: 'atlas-query', buildTime: 9.6, changeFreq: 19, critical: true }),
+  W_A({ id: 'atlas-store', buildTime: 14.2, changeFreq: 41, critical: true }),
+  W_A({ id: 'atlas-common', buildTime: 4.6, changeFreq: 28, critical: true }),
+  W_A({ id: 'atlas-schema', buildTime: 2.2, changeFreq: 3 }),
+  W_A({ id: 'atlas-bytes', buildTime: 1.4, changeFreq: 2 }),
+  W_A({ id: 'atlas-parquet', buildTime: 3.7, changeFreq: 7 }),
+  W_A({ id: 'atlas-lsm', buildTime: 6.1, changeFreq: 22 }),
+  W_A({ id: 'atlas-sst', buildTime: 3.2, changeFreq: 8 }),
+  W_A({ id: 'atlas-compaction', buildTime: 2.9, changeFreq: 6 }),
+  W_A({ id: 'atlas-planner', buildTime: 4.8, changeFreq: 12 }),
+  W_A({ id: 'atlas-exec', buildTime: 3.6, changeFreq: 9 }),
+  W_A({ id: 'atlas-proto', kind: 'proc-macro', buildTime: 1.8, changeFreq: 1 }),
+  W_A({ id: 'atlas-testkit', band: 'bin', buildTime: 1.9, changeFreq: 4 }),
+  E_A('tokio', 4.4),
+  E_A('arrow', 5.2, { duplicate: true, versions: ['53.3.0', '54.2.0'] }),
+  E_A('parquet', 3.9),
+  E_A('datafusion', 6.4),
+  E_A('serde', 2.1),
+  E_A('thiserror', 0.8),
+  E_A('prost', 1.6),
+  E_A('clap', 1.2),
+  // the bytes duplicate group (DUPLICATES_ATLAS) — served so its dependents
+  // resolve against the graph and its upgrade scenario derives recompile counts
+  E_A('bytes', 0.5, { duplicate: true, versions: ['1.8.0', '1.9.0'] }),
+  // sqlx is touched only by atlas-store (see ATLAS_UPGRADE_CATALOG.sqlx note)
+  E_A('sqlx', 2.6),
 ]
 
+/**
+ * Served atlas backbone edges. Direction follows cargo semantics (`from`
+ * DEPENDS ON `to`) — the previous list mixed this with an invalidation-flow
+ * direction, which is why derived numbers could not reconcile (ENG-TCA-3).
+ * The hub wiring makes ATL-WRK-005's claim derivable: 11 workspace crates
+ * depend directly on atlas-common.
+ */
 export const GRAPH_EDGES_ATLAS: GraphEdge[] = [
+  // hub: 11 direct dependents of atlas-common (ATL-WRK-005)
+  { from: 'atlas-ingest', to: 'atlas-common' },
+  { from: 'atlas-query', to: 'atlas-common' },
+  { from: 'atlas-store', to: 'atlas-common' },
+  { from: 'atlas-lsm', to: 'atlas-common' },
+  { from: 'atlas-sst', to: 'atlas-common' },
+  { from: 'atlas-cli', to: 'atlas-common' },
+  { from: 'atlas-server', to: 'atlas-common' },
+  { from: 'atlas-compaction', to: 'atlas-common' },
+  { from: 'atlas-planner', to: 'atlas-common' },
+  { from: 'atlas-exec', to: 'atlas-common' },
+  { from: 'atlas-testkit', to: 'atlas-common' },
+  // the stable extracts are dependencies of the hub
   { from: 'atlas-common', to: 'atlas-schema' },
   { from: 'atlas-common', to: 'atlas-bytes' },
-  { from: 'atlas-common', to: 'atlas-proto' },
-  { from: 'atlas-common', to: 'atlas-lsm' },
-  { from: 'atlas-common', to: 'atlas-sst' },
-  { from: 'atlas-common', to: 'atlas-planner' },
-  { from: 'atlas-common', to: 'atlas-ingest' },
-  { from: 'atlas-common', to: 'atlas-query' },
-  { from: 'atlas-lsm', to: 'atlas-store' },
-  { from: 'atlas-sst', to: 'atlas-lsm' },
+  // store engine internals
+  { from: 'atlas-store', to: 'atlas-lsm' },
+  { from: 'atlas-lsm', to: 'atlas-sst' },
   { from: 'atlas-compaction', to: 'atlas-lsm' },
-  { from: 'atlas-store', to: 'atlas-query' },
-  { from: 'atlas-store', to: 'atlas-server' },
-  { from: 'atlas-store', to: 'atlas-ingest' },
+  // query engine
   { from: 'atlas-query', to: 'atlas-planner' },
   { from: 'atlas-query', to: 'atlas-exec' },
-  { from: 'atlas-query', to: 'atlas-server' },
   { from: 'atlas-planner', to: 'atlas-exec' },
-  { from: 'atlas-parquet', to: 'atlas-ingest' },
-  { from: 'atlas-parquet', to: 'atlas-query' },
-  { from: 'atlas-schema', to: 'atlas-ingest' },
-  { from: 'atlas-schema', to: 'atlas-query' },
-  { from: 'atlas-schema', to: 'atlas-parquet' },
-  { from: 'atlas-bytes', to: 'atlas-sst' },
-  { from: 'atlas-bytes', to: 'atlas-lsm' },
-  { from: 'atlas-proto', to: 'atlas-server' },
-  { from: 'atlas-ingest', to: 'atlas-server' },
+  // service topology
+  { from: 'atlas-server', to: 'atlas-store' },
+  { from: 'atlas-server', to: 'atlas-ingest' },
+  { from: 'atlas-server', to: 'atlas-proto' },
+  { from: 'atlas-ingest', to: 'atlas-parquet' },
+  { from: 'atlas-ingest', to: 'atlas-schema' },
+  { from: 'atlas-query', to: 'atlas-parquet' },
   { from: 'atlas-cli', to: 'atlas-query' },
   { from: 'atlas-cli', to: 'atlas-store' },
   { from: 'atlas-testkit', to: 'atlas-lsm' },
   { from: 'atlas-testkit', to: 'atlas-planner' },
-  { from: 'tokio', to: 'atlas-store' },
-  { from: 'tokio', to: 'atlas-ingest' },
-  { from: 'tokio', to: 'atlas-server' },
-  { from: 'arrow', to: 'atlas-query' },
-  { from: 'arrow', to: 'parquet' },
-  { from: 'parquet', to: 'atlas-parquet' },
-  { from: 'datafusion', to: 'atlas-query' },
-  { from: 'datafusion', to: 'atlas-cli' },
-  { from: 'serde', to: 'atlas-common' },
-  { from: 'thiserror', to: 'atlas-common' },
-  { from: 'prost', to: 'atlas-proto' },
-  { from: 'clap', to: 'atlas-cli' },
+  // externals — workspace crates depend on them
+  { from: 'atlas-store', to: 'tokio' },
+  { from: 'atlas-ingest', to: 'tokio' },
+  { from: 'atlas-server', to: 'tokio' },
+  { from: 'atlas-query', to: 'datafusion' },
+  { from: 'atlas-cli', to: 'datafusion' },
+  { from: 'datafusion', to: 'arrow' }, // arrow 54.2 path (ATL-DEP-003)
+  { from: 'atlas-ingest', to: 'parquet' },
+  { from: 'parquet', to: 'arrow' }, // arrow 53.3 path (ATL-DEP-003)
+  { from: 'atlas-parquet', to: 'parquet' },
+  { from: 'atlas-parquet', to: 'arrow' },
+  { from: 'atlas-common', to: 'serde' },
+  { from: 'atlas-common', to: 'thiserror' },
+  { from: 'atlas-proto', to: 'prost' },
+  { from: 'atlas-cli', to: 'clap' },
+  { from: 'atlas-store', to: 'sqlx' }, // the only sqlx toucher (ATLAS_UPGRADE_CATALOG.sqlx)
+  { from: 'sqlx', to: 'tokio' },
+  // bytes duplicate group dependents (DUPLICATES_ATLAS)
+  { from: 'atlas-common', to: 'bytes' },
+  { from: 'atlas-lsm', to: 'bytes' },
+  { from: 'tokio', to: 'bytes' },
+  { from: 'prost', to: 'bytes' },
 ]
 
-export const DUPLICATES_ATLAS: DuplicateGroup[] = [
-  {
-    name: 'arrow',
-    versions: ['53.3.0', '54.2.0'],
-    dependents: ['atlas-ingest', 'atlas-query', 'atlas-parquet'],
-    wastedSeconds: 4.1,
-  },
-  {
-    name: 'bytes',
-    versions: ['1.8.0', '1.9.0'],
-    dependents: ['atlas-common', 'atlas-lsm', 'tokio', 'prost'],
-    wastedSeconds: 0.6,
-  },
+const ATLAS_MATH = computeGraphMath(RAW_GRAPH_NODES_ATLAS, GRAPH_EDGES_ATLAS)
+
+/** Served atlas backbone nodes — fanIn/fanOut/downstream derived from GRAPH_EDGES_ATLAS. */
+export const GRAPH_NODES_ATLAS: GraphNode[] = RAW_GRAPH_NODES_ATLAS.map((n) =>
+  withDerivedAggregates(n, ATLAS_MATH),
+)
+
+const RAW_DUPLICATES_ATLAS: Omit<DuplicateGroup, 'dependents'>[] = [
+  { name: 'arrow', versions: ['53.3.0', '54.2.0'], wastedSeconds: 4.1 },
+  { name: 'bytes', versions: ['1.8.0', '1.9.0'], wastedSeconds: 0.6 },
 ]
 
-export const BLAST_ATLAS: BlastEntry[] = [
+export const DUPLICATES_ATLAS: DuplicateGroup[] = RAW_DUPLICATES_ATLAS.map((d) => ({
+  ...d,
+  dependents: deriveDependents(d.name, ATLAS_MATH, RAW_GRAPH_NODES_ATLAS),
+}))
+
+const RAW_BLAST_ATLAS: Omit<BlastEntry, 'affectedWorkspace' | 'chain'>[] = [
   {
     file: 'atlas-common/src/bytes.rs',
     crate: 'atlas-common',
-    affectedWorkspace: 18,
-    chain: ['atlas-common', 'atlas-lsm', 'atlas-store', 'atlas-query', 'atlas-server'],
     incrementalDelta: 11.8,
     suggestion: 'Extract atlas-bytes (stable) — expect fan-out to drop to ≤5 (ATL-WRK-005).',
   },
   {
     file: 'atlas-store/src/lsm/memtable.rs',
     crate: 'atlas-store',
-    affectedWorkspace: 12,
-    chain: ['atlas-store', 'atlas-query', 'atlas-server'],
     incrementalDelta: 14.2,
     suggestion: 'The memtable trait is volatile — isolate behind atlas-store-core.',
   },
   {
     file: 'atlas-schema/src/record.rs',
     crate: 'atlas-schema',
-    affectedWorkspace: 12,
-    chain: ['atlas-schema', 'atlas-common', 'atlas-query', 'atlas-ingest'],
     incrementalDelta: 5.4,
     suggestion: 'Schema derives churn — move procedural macros to atlas-proto and version the record wire format.',
   },
   {
     file: 'atlas-ingest/src/writer.rs',
     crate: 'atlas-ingest',
-    affectedWorkspace: 4,
-    chain: ['atlas-ingest', 'atlas-server'],
     incrementalDelta: 2.8,
     suggestion: 'Writer internals are self-contained — safe to iterate quickly (also see ATL-ASY-007).',
   },
 ]
+
+/** served blast entries — affectedWorkspace == nodes[crate].downstream == edge closure. */
+export const BLAST_ATLAS: BlastEntry[] = RAW_BLAST_ATLAS.map((b) => ({
+  ...b,
+  affectedWorkspace: ATLAS_MATH.workspaceBlastRadius(b.crate),
+  chain: ATLAS_MATH.chainToRoot(b.crate),
+}))
 
 const ATLAS_ADD_DEP_CATALOG: Record<
   string,
@@ -2106,7 +2259,6 @@ const UPGRADE_CATALOG: Record<
       kind: 'partial',
       note: 'Unifies the 1.40 lineage on 1.41.1 — the 1.34.2 pin (sqlx 0.7 · legacy-cache) needs its own migration before the tree is clean.',
     },
-    recompileCrates: 46,
     cleanDelta: 0.8,
     incrementalDelta: 0.2,
     ciDelta: 3,
@@ -2114,13 +2266,13 @@ const UPGRADE_CATALOG: Record<
     migrations: [],
     notes: [
       'Semver-minor — all 1.x APIs stable; no source changes expected',
-      'tokio is linked into 46/47 workspace crates — one bump recompiles nearly everything',
+      `tokio reaches ${HELIOS_MATH.workspaceBlastRadius('tokio')} workspace crates on the served backbone — one bump recompiles all of them`,
       'New: tokio::task::JoinSet::poll_next stabilizations used by the ingest pipeline',
     ],
     suggestions: [
-      'cargo update -p tokio && cargo test -p helios-store (runtime crate is the risk surface)',
+      'cargo update -p tokio && cargo test -p common-runtime (runtime crate is the risk surface)',
       'Stage the bump separately from feature work to isolate telemetry noise',
-      'Run wanyrix doctor after the bump — critical-path numbers shift when 46 crates recompile',
+      'Run wanyrix doctor after the bump — critical-path numbers shift when the tokio lineage recompiles',
     ],
   },
   serde: {
@@ -2131,7 +2283,6 @@ const UPGRADE_CATALOG: Record<
       kind: 'partial',
       note: 'Moves the modern lineage to 1.0.215 — old-sdk 2.1 still pins 1.0.203; dropping that pin is what fully unifies the tree.',
     },
-    recompileCrates: 52,
     cleanDelta: 0.3,
     incrementalDelta: 0.1,
     ciDelta: 2,
@@ -2139,7 +2290,7 @@ const UPGRADE_CATALOG: Record<
     migrations: [],
     notes: [
       'Patch release — bugfix + performance only; zero expected API impact',
-      'serde_derive (proc-macro) changes version → 52 crates recompile despite the patch',
+      `serde_derive (proc-macro) changes version → ${HELIOS_MATH.workspaceBlastRadius('serde')} backbone crates recompile despite the patch`,
     ],
     suggestions: [
       'Bump freely in the same PR as dependency hygiene work — noise is low',
@@ -2150,7 +2301,6 @@ const UPGRADE_CATALOG: Record<
     from: '0.2.95',
     to: '0.2.100',
     semver: 'patch',
-    recompileCrates: 38,
     cleanDelta: 0.4,
     incrementalDelta: 0.1,
     ciDelta: 2,
@@ -2170,7 +2320,6 @@ const UPGRADE_CATALOG: Record<
     from: '0.14.31',
     to: '1.5.2',
     semver: 'major',
-    recompileCrates: 23,
     cleanDelta: 1.2,
     incrementalDelta: 0.5,
     ciDelta: 6,
@@ -2199,12 +2348,12 @@ const UPGRADE_CATALOG: Record<
       },
     ],
     notes: [
-      '23 crates compile against hyper directly (helios-server, gateway, ws transport)',
+      `${HELIOS_MATH.workspaceBlastRadius('hyper')} workspace crates compile against hyper on the served backbone (via reqwest and tonic)`,
       'Existing reqwest 0.12 already vendors hyper 1.x — tree gains ONE hyper instead of two if 0.14 is dropped',
       'tonic version must be co-bumped: tonic 0.12 requires hyper 1.x',
     ],
     suggestions: [
-      'Land behind a transport feature gate; migrate helios-gateway first (lowest fan-in)',
+      'Land behind a transport feature gate; migrate the lowest-fan-in consumer first',
       'Check tonic/hyper compatibility matrix before writing code',
       'Use the Impact Simulator split-crate view after migration — gateway fan-out will have changed',
     ],
@@ -2216,14 +2365,16 @@ const UPGRADE_CATALOG: Record<
  * `resolves` (round 10) marks scenarios that close a duplicate-version group:
  * 'full' = the upgrade unifies the tree; 'partial' = one lineage moves but a
  * pin elsewhere keeps the duplicate alive — surfaced honestly in the UI.
+ *
+ * ENG-TCA-3: `duplicateBefore` and `recompileCrates` are NOT stored here —
+ * they are derived at serve time from the workspace's duplicates list and the
+ * served graph closure, so they can never contradict the graph payload.
  */
 interface UpgradeCatalogEntry {
   from: string
   to: string
   semver: 'major' | 'minor' | 'patch'
-  duplicateBefore?: boolean
   resolves?: { kind: 'full' | 'partial'; note: string }
-  recompileCrates: number
   cleanDelta: number
   incrementalDelta: number
   ciDelta: number
@@ -2241,12 +2392,10 @@ const ATLAS_UPGRADE_CATALOG: Record<
     from: '1.8.0',
     to: '1.9.0',
     semver: 'minor',
-    duplicateBefore: true,
     resolves: {
       kind: 'full',
       note: 'Unifying on 1.9.0 removes the duplicate artifact introduced by PR #97 buffer-pool vendoring — cargo tree -d goes clean.',
     },
-    recompileCrates: 6,
     cleanDelta: -0.6,
     incrementalDelta: -2.1,
     ciDelta: -4.0,
@@ -2268,7 +2417,6 @@ const ATLAS_UPGRADE_CATALOG: Record<
     from: '0.8.2',
     to: '0.8.6',
     semver: 'patch',
-    recompileCrates: 9,
     cleanDelta: 0.2,
     incrementalDelta: 0.1,
     ciDelta: 1,
@@ -2276,7 +2424,7 @@ const ATLAS_UPGRADE_CATALOG: Record<
     migrations: [],
     notes: [
       'Patch series: query macro caching fix — first compile after bump may be slower once',
-      'atlas-store is the only crate touching sqlx directly; 9 crates recompile through the types module',
+      `atlas-store is the only crate touching sqlx directly; ${ATLAS_MATH.workspaceBlastRadius('sqlx')} crates recompile through the types module`,
     ],
     suggestions: [
       'cargo update -p sqlx && cargo sqlx prepare (offline query data must be regenerated)',
@@ -2286,7 +2434,6 @@ const ATLAS_UPGRADE_CATALOG: Record<
     from: '0.13.3',
     to: '0.13.4',
     semver: 'patch',
-    recompileCrates: 5,
     cleanDelta: 0.1,
     incrementalDelta: 0.1,
     ciDelta: 1,
@@ -2304,15 +2451,16 @@ const SPLIT_SIM_ATLAS = {
   source: 'atlas-common',
   before: {
     buildSeconds: 24.6,
-    fanOut: 8,
-    downstream: 18,
+    // derived from the served graph (ENG-TCA-3): direct dependents + workspace closure
+    fanOut: ATLAS_MATH.dependents['atlas-common']?.length ?? 0,
+    downstream: ATLAS_MATH.workspaceBlastRadius('atlas-common'),
     modules: ['bytes', 'schema', 'proto', 'glue'],
   },
   proposal: {
     crates: [
-      { name: 'atlas-bytes', downstream: 9, buildSeconds: 3.1, modules: ['bytes'] },
-      { name: 'atlas-schema', downstream: 12, buildSeconds: 6.4, modules: ['schema', 'proto'] },
-      { name: 'atlas-common', downstream: 4, buildSeconds: 8.9, modules: ['glue'] },
+      { name: 'atlas-bytes', downstream: 3, buildSeconds: 3.1, modules: ['bytes'] },
+      { name: 'atlas-schema', downstream: 2, buildSeconds: 6.4, modules: ['schema', 'proto'] },
+      { name: 'atlas-common', downstream: 1, buildSeconds: 8.9, modules: ['glue'] },
     ],
     buildSeconds: 18.4,
   },
@@ -2322,7 +2470,7 @@ const SPLIT_SIM_ATLAS = {
     'Re-point atlas-lsm + atlas-sst to atlas-bytes first',
     'Move schema + proto into atlas-schema behind a versioned wire format',
     'Keep glue code in atlas-common (volatile, low fan-out)',
-    'Verify: blast radius of atlas-common drops 18 → ≤4 crates',
+    `Verify: served-backbone blast radius of atlas-common drops ${ATLAS_MATH.workspaceBlastRadius('atlas-common')} → ≤4 crates`,
   ],
 }
 
@@ -2351,12 +2499,14 @@ export const HEALTH_ATLAS: HealthPayload = {
     { month: 'Sep', clean: 52.8, incremental: 12.1 },
   ],
   slowestCrates: [
-    { name: 'atlas-store', seconds: 14.2, downstream: 18 },
-    { name: 'atlas-query', seconds: 9.6, downstream: 8 },
-    { name: 'atlas-lsm', seconds: 6.1, downstream: 5 },
-    { name: 'atlas-planner', seconds: 4.8, downstream: 3 },
-    { name: 'atlas-common', seconds: 4.6, downstream: 18 },
-    { name: 'atlas-ingest', seconds: 5.8, downstream: 6 },
+    // downstream is the served-graph workspace closure (ENG-TCA-3 — derived,
+    // never hand-typed, so /health cannot contradict /graph)
+    { name: 'atlas-store', seconds: 14.2, downstream: ATLAS_MATH.workspaceBlastRadius('atlas-store') },
+    { name: 'atlas-query', seconds: 9.6, downstream: ATLAS_MATH.workspaceBlastRadius('atlas-query') },
+    { name: 'atlas-lsm', seconds: 6.1, downstream: ATLAS_MATH.workspaceBlastRadius('atlas-lsm') },
+    { name: 'atlas-planner', seconds: 4.8, downstream: ATLAS_MATH.workspaceBlastRadius('atlas-planner') },
+    { name: 'atlas-common', seconds: 4.6, downstream: ATLAS_MATH.workspaceBlastRadius('atlas-common') },
+    { name: 'atlas-ingest', seconds: 5.8, downstream: ATLAS_MATH.workspaceBlastRadius('atlas-ingest') },
   ],
   activity: [
     {
@@ -2641,6 +2791,11 @@ export function getGraphPayload(ws: string): GraphPayload {
         workspaceCrates: WORKSPACE_ATLAS.crates,
         totalEdges: WORKSPACE_ATLAS.edges,
         lastScan: WORKSPACE_ATLAS.lastScan,
+        scope: 'backbone-subset',
+        servedNodes: GRAPH_NODES_ATLAS.length,
+        servedEdges: GRAPH_EDGES_ATLAS.length,
+        aggregateSource: 'served-edges',
+        note: 'The served node/edge set is the analysis backbone subset of the full workspace graph. fanIn/fanOut are served edge degrees; downstream and blast.affectedWorkspace count served workspace-kind crates that transitively depend on a node. Full-workspace narrative numbers (doctor findings, health activity) refer to workspaceCrates/totalEdges above.',
       },
       catalog: {
         addDeps: Object.entries(ATLAS_ADD_DEP_CATALOG).map(([id, v]) => ({ id, version: v.version })),
@@ -2659,6 +2814,11 @@ export function getGraphPayload(ws: string): GraphPayload {
       workspaceCrates: WORKSPACE.crates,
       totalEdges: WORKSPACE.edges,
       lastScan: WORKSPACE.lastScan,
+      scope: 'backbone-subset',
+      servedNodes: GRAPH_NODES.length,
+      servedEdges: GRAPH_EDGES.length,
+      aggregateSource: 'served-edges',
+      note: 'The served node/edge set is the analysis backbone subset of the full workspace graph. fanIn/fanOut are served edge degrees; downstream and blast.affectedWorkspace count served workspace-kind crates that transitively depend on a node. Full-workspace narrative numbers (doctor findings, health activity) refer to workspaceCrates/totalEdges above.',
     },
     catalog: {
       addDeps: Object.entries(ADD_DEP_CATALOG).map(([id, v]) => ({ id, version: v.version })),
@@ -2718,11 +2878,16 @@ export function getImpact(
     const catalog = atlas ? ATLAS_UPGRADE_CATALOG : UPGRADE_CATALOG
     const entry = catalog[target]
     if (!entry) return null
+    const duplicates = atlas ? DUPLICATES_ATLAS : DUPLICATES
+    const math = atlas ? ATLAS_MATH : HELIOS_MATH
     return {
       kind: 'upgrade-dep',
       crate: target,
-      duplicateBefore: entry.duplicateBefore ?? false,
+      // ENG-TCA-3: derived from the workspace's duplicates list + served graph
+      // closure — a hand-typed value could contradict the /graph payload.
+      duplicateBefore: duplicates.some((d) => d.name === target),
       ...entry,
+      recompileCrates: math.workspaceBlastRadius(target),
       measurementStatus: 'estimated',
     }
   }

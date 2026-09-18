@@ -176,6 +176,8 @@ export function useExplain(): UseMutationResult<ExplainResponse, Error, ExplainR
 /* ------------------------------------------------- workspace report export */
 
 export interface ReportBundle {
+  /** envelope schema marker (`wanyrix.markdown/v1` — ENG-TCA-6d) */
+  schema?: string
   filename: string
   markdown: string
   bytes: number

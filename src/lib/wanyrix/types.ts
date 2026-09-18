@@ -68,7 +68,13 @@ export interface DoctorReport {
   workspace: string
   profile: string
   toolchain: string
+  /** current dev-profile build time (build telemetry) — NOT inside estimatedRange */
   buildTime: number
+  /**
+   * ESTIMATED build time AFTER applying the top-priority fix — a projection,
+   * never a confidence interval around `buildTime` (buildTime may legitimately
+   * fall outside it). UI label: "Estimated after fixes". ENG-TCA-5.
+   */
   estimatedRange: [number, number]
   confidence: number
   criticalPath: CriticalPathSegment[]
@@ -93,8 +99,15 @@ export interface GraphNode {
   band: GraphBand
   kind: 'workspace' | 'external' | 'proc-macro'
   buildTime: number
+  /** direct dependents — in-degree over the served edge list (ENG-TCA-3: derived, never hand-typed) */
   fanIn: number
+  /** direct dependencies — out-degree over the served edge list (ENG-TCA-3: derived) */
   fanOut: number
+  /**
+   * served WORKSPACE-kind crates that transitively depend on this node
+   * (reverse reachability over the served edges). Derived from `edges` —
+   * ENG-TCA-3.
+   */
   downstream: number
   changeFreq: number
   versions?: string[]
@@ -117,7 +130,13 @@ export interface DuplicateGroup {
 export interface BlastEntry {
   file: string
   crate: string
+  /**
+   * workspace blast radius of `crate` — equal to the matching GraphNode's
+   * `downstream` (the workspace-kind transitive-dependent closure over the
+   * served edges). Derived, never hand-typed — ENG-TCA-3.
+   */
   affectedWorkspace: number
+  /** deterministic sample invalidation path: crate → … → a node with no dependents */
   chain: string[]
   incrementalDelta: number
   suggestion: string
@@ -155,7 +174,20 @@ export interface GraphPayload {
   edges: GraphEdge[]
   duplicates: DuplicateGroup[]
   blast: BlastEntry[]
-  meta: { workspaceCrates: number; totalEdges: number; lastScan: string }
+  meta: {
+    /** full-workspace totals (agrees with /health and /workspaces) */
+    workspaceCrates: number
+    totalEdges: number
+    lastScan: string
+    /** the served node/edge set is the analysis backbone subset of the full graph (ENG-TCA-3) */
+    scope: 'backbone-subset'
+    servedNodes: number
+    servedEdges: number
+    /** every per-node aggregate is computed from `edges` — never hand-typed */
+    aggregateSource: 'served-edges'
+    /** human-readable reconciliation note (subset semantics) */
+    note: string
+  }
   /** optional per-workspace simulator catalogs (issue #34) */
   catalog?: ImpactCatalog
   /** crate name → upgrade scenario that resolves (fully or partially) the duplicate (round 10) */
