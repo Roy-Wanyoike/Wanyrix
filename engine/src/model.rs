@@ -183,6 +183,14 @@ pub enum EngineError {
     /// The synthetic-workspace generator was asked for something outside
     /// its documented operating range (e.g. a crate count above the cap).
     Synth(String),
+    /// The local analysis daemon could not bind/connect/serve, or a
+    /// `daemon call` got an `ok:false` response. The transport detail is
+    /// preserved verbatim — never swallowed.
+    Daemon(String),
+    /// Telemetry ingestion rejected an operation (unreadable input/output
+    /// path). Malformed diagnostic LINES are never an error — they are
+    /// counted in the report (`meta.summary.malformedLines`).
+    Telemetry(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -198,6 +206,8 @@ impl std::fmt::Display for EngineError {
             EngineError::Json(e) => write!(f, "report serialization error: {e}"),
             EngineError::Store(e) => write!(f, "scan store error: {e}"),
             EngineError::Synth(e) => write!(f, "synthetic workspace error: {e}"),
+            EngineError::Daemon(e) => write!(f, "daemon error: {e}"),
+            EngineError::Telemetry(e) => write!(f, "telemetry error: {e}"),
         }
     }
 }

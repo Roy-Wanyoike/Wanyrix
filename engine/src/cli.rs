@@ -10,8 +10,7 @@ use crate::graph::{build_graph, Graph};
 use crate::health::build_health;
 use crate::model::{EngineError, WorkspaceScan};
 use crate::scan::scan_workspace;
-use crate::store;
-use crate::synth;
+use crate::{daemon, store, synth, telemetry};
 use crate::timestamp::iso8601_now;
 
 #[derive(Parser)]
@@ -19,7 +18,7 @@ use crate::timestamp::iso8601_now;
     name = "wanyrix",
     version,
     about = "Wanyrix engineering-intelligence engine (honesty-first: every value is measured or explicitly labeled not-measured)",
-    long_about = "Wanyrix engine — filesystem-manifest analysis for Rust workspaces plus local scan persistence.\n\nFlavors: doctor (findings), graph (dependency graph + recompute impact), health (KPI summary derived from doctor+graph), store (SQLite scan history, WAL-backed), synth (deterministic synthetic fixture workspaces).\n\nHonesty contract: all analysis output is MEASURED from the filesystem; the store persists exactly what doctor measured; nothing is simulated; absent telemetry is labeled, never fabricated."
+    long_about = "Wanyrix engine — filesystem-manifest analysis for Rust workspaces, local scan persistence, an incremental analysis daemon, rustc telemetry ingestion and synthetic fixture generation.\n\nFlavors: doctor (findings), graph (dependency graph + recompute impact), health (KPI summary derived from doctor+graph), store (SQLite scan history, WAL-backed), daemon (persistent in-process scan cache over a local Unix socket), telemetry (redacted rustc JSON diagnostics ingest), synth (deterministic synthetic fixture workspaces).\n\nHonesty contract: all analysis output is MEASURED from the filesystem; the store persists exactly what doctor measured; the daemon serves cached measured scans invalidated by a manifest fingerprint; telemetry ingestion redacts source and secrets by default; nothing is simulated; absent telemetry is labeled, never fabricated."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -76,6 +75,19 @@ pub enum Command {
         #[arg(long, default_value_t = synth::DEFAULT_SEED)]
         seed: u64,
     },
+    /// Local analysis daemon (wanyrix.daemon/v1): one measured scan kept
+    /// in memory, served over a Unix domain socket. No TCP, no network.
+    Daemon {
+        #[command(subcommand)]
+        cmd: DaemonCmd,
+    },
+    /// Ingest rustc JSON diagnostics (cargo build --message-format=json)
+    /// into a redacted, aggregated wanyrix.telemetry/v1 report. Redaction
+    /// is default-on: source snippets are dropped unconditionally.
+    Telemetry {
+        #[command(subcommand)]
+        cmd: TelemetryCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -111,6 +123,59 @@ pub enum StoreCmd {
         /// Delete orphaned/inconsistent rows instead of only reporting them.
         #[arg(long)]
         repair: bool,
+    },
+}
+
+/// Subcommands for `wanyrix daemon`.
+#[derive(Subcommand)]
+pub enum DaemonCmd {
+    /// Bind the socket and serve requests until a `shutdown` request (or
+    /// `--max-requests`) stops the loop. Refuses to steal a live socket.
+    Start {
+        /// Unix domain socket path (created with mode 0600).
+        #[arg(long)]
+        socket: PathBuf,
+        /// Stop after serving N requests (0 = serve until shutdown).
+        #[arg(long, default_value_t = 0)]
+        max_requests: u64,
+    },
+    /// Send ONE request to a running daemon and print the response frame.
+    /// Exit code 2 when the frame reports ok:false.
+    Call {
+        /// Unix domain socket the daemon is listening on.
+        #[arg(long)]
+        socket: PathBuf,
+        /// status | doctor | graph | health | shutdown
+        #[arg(long)]
+        method: String,
+        /// Workspace to analyze (doctor/graph/health only).
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Pretty-print the response frame.
+        #[arg(long)]
+        pretty: bool,
+    },
+}
+
+/// Subcommands for `wanyrix telemetry`.
+#[derive(Subcommand)]
+pub enum TelemetryCmd {
+    /// Ingest a rustc/cargo JSON diagnostics stream (one JSON object per
+    /// line; `-` reads stdin) and emit the redacted report.
+    Ingest {
+        /// Input file path, or `-` for stdin.
+        #[arg(long)]
+        input: String,
+        /// Write the report here instead of stdout (parent dirs created).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Keep full span file paths (basenames are the default; source
+        /// snippets are dropped either way — this switch cannot restore them).
+        #[arg(long)]
+        keep_paths: bool,
+        /// Emit aggregates only (omit the per-diagnostic array).
+        #[arg(long)]
+        summary_only: bool,
     },
 }
 
@@ -241,6 +306,50 @@ pub fn synth_run(crates: usize, out: &Path, seed: u64) -> Result<String, EngineE
         outcome.dep_edges,
         outcome.files_written,
     ))
+}
+
+/// Run a `wanyrix daemon …` subcommand.
+///
+/// `start` blocks until the loop stops and prints the measured server
+/// summary. `call` sends one request, prints the response frame, and
+/// returns an error (exit 2) when the frame reports `ok:false` — scripts
+/// get an honest exit code, never a green shell around a red payload.
+pub fn daemon_run(cmd: DaemonCmd) -> Result<String, EngineError> {
+    match cmd {
+        DaemonCmd::Start { socket, max_requests } => {
+            let report = daemon::run_server(&socket, &daemon::ServerOptions { max_requests })?;
+            Ok(daemon::human_server_summary(&report))
+        }
+        DaemonCmd::Call { socket, method, path, pretty } => {
+            let line = daemon::client_request_line(&method, Some(&path))?;
+            let response = daemon::call(&socket, &line)?;
+            let value: serde_json::Value = serde_json::from_str(&response)
+                .map_err(|e| EngineError::Daemon(format!("daemon response is not valid JSON: {e}")))?;
+            let printed = if pretty {
+                serde_json::to_string_pretty(&value).map_err(|e| EngineError::Json(e.to_string()))?
+            } else {
+                response
+            };
+            if value.get("ok").and_then(serde_json::Value::as_bool) == Some(true) {
+                Ok(printed)
+            } else {
+                let err = value.get("error");
+                let code = err.and_then(|e| e.get("code")).and_then(serde_json::Value::as_str).unwrap_or("unknown");
+                let message = err.and_then(|e| e.get("message")).and_then(serde_json::Value::as_str).unwrap_or("no message");
+                Err(EngineError::Daemon(format!("daemon responded ok=false [{code}]: {message}")))
+            }
+        }
+    }
+}
+
+/// Run a `wanyrix telemetry …` subcommand.
+pub fn telemetry_run(cmd: TelemetryCmd) -> Result<String, EngineError> {
+    match cmd {
+        TelemetryCmd::Ingest { input, out, keep_paths, summary_only } => {
+            let opts = telemetry::IngestOptions { keep_paths, summary_only };
+            telemetry::ingest_run(&input, out.as_deref(), &opts)
+        }
+    }
 }
 
 /// Human-readable summary (used when --json is absent). Deterministic.

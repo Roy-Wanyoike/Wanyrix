@@ -33,6 +33,46 @@
 - **Runs**: 3 per configuration, **median** reported (all samples shown
   for the in-process harness — no sample was discarded or cherry-picked).
 
+## Results — daemon incremental analysis + memory budget (issue #58 tranche 2, engine v0.3.0)
+
+Measured on the same sandbox runner under the same honesty note as above
+(relative evidence only; the STRUCTURAL guarantee — zero manifests parsed,
+zero findings recomputed on a cache hit — is pinned by unit tests in
+`src/daemon.rs`, which is the part that cannot drift with machine speed).
+
+- **Fixture**: `wanyrix synth --crates 500 --seed 42` (501 manifests + 500
+  source stubs), analyzed via the in-process harness
+  `tests/perf_probe.rs::measure_daemon_incremental_on_synth500`
+  (`cargo test --release --test perf_probe -- --ignored --nocapture`).
+- **Warm hit definition**: a `doctor` request answered from the daemon's
+  cache after a content-fingerprint match over all 501 measured files —
+  the fingerprint READS + HASHES every measured file (parallel), and
+  reuses the serialized report VALUES; it never re-parses, re-analyzes or
+  re-serializes the payload from scratch.
+
+| Configuration | Samples (ms) | **Median (ms)** |
+| --- | --- | --- |
+| `doctor` COLD — fresh daemon state, full measured scan (run A) | [64, 67, 78] | **67** |
+| `doctor` WARM — fingerprint cache hit, 0 manifests parsed (run A) | [15, 16, 17] | **16** |
+| `doctor` COLD (run B, quieter box) | [38, 42, 50] | **42** |
+| `doctor` WARM (run B) | [14, 14, 15] | **14** |
+
+- Measured wall-clock reduction: **66.7%–76.1%** across the two runs
+  (~3–4× faster warm). The dominant remaining warm cost is the fingerprint
+  pass reading 501 files — deliberate: it is what makes a stale hit
+  IMPOSSIBLE. On machines with faster page caches the warm path shrinks
+  further; no threshold is asserted anywhere.
+
+**Memory (measured via `/proc/<pid>/status` on the release binary, and
+enforced by `tests/daemon_ipc.rs` on Linux with a hard 100 MB gate):**
+
+| Daemon state | VmRSS |
+| --- | --- |
+| Idle (listening, nothing scanned) | **1,848 kB** |
+| After one cold doctor scan of the 500-crate workspace | **17,608 kB** |
+
+Issue-#58 budget: idle < 100 MB — met with ~54× headroom.
+
 ## Results — synthetic 500-crate workspace (seed 42, release profile)
 
 | Operation (release) | Samples (ms) | **Median (ms)** |

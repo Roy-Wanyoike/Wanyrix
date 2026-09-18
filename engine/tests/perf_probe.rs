@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use wanyrix_engine::cli;
+use wanyrix_engine::daemon::DaemonState;
 use wanyrix_engine::graph::build_graph;
 use wanyrix_engine::report;
 use wanyrix_engine::scan::scan_workspace;
@@ -126,6 +127,60 @@ fn measure_engine_on_synth500() {
     println!("MEASURED store save x{} (full doctor payload, 2 commits): {:?} ms → median {} ms", RUNS, save_samples, save_median);
     println!("MEASURED store list x{}: {:?} ms → median {} ms", RUNS, list_samples, list_median);
     println!("timing note: wall-clock Instant deltas on the sandbox runner; relative evidence only — see engine/BENCHMARKS.md honesty note");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Incremental-analysis evidence (issue #58): the daemon serves a warm
+/// doctor response from the manifest-fingerprint cache — the measured
+/// inputs are re-HASHED (read), but never re-PARSED or re-ANALYZED. The
+/// cold/warm delta below is wall-clock Instant evidence on this machine;
+/// the STRUCTURAL guarantee (zero manifests parsed on a hit) is pinned by
+/// unit tests, which is the part that cannot drift with machine speed.
+#[test]
+#[ignore = "measurement harness: cargo test --release --test perf_probe -- --ignored --nocapture"]
+fn measure_daemon_incremental_on_synth500() {
+    let dir = std::env::temp_dir().join(format!("wanyrix-perf-daemon-{}", std::process::id()));
+    let outcome = synth::synth(&dir, CRATES, SEED).unwrap();
+    assert_eq!(outcome.crates_written, CRATES);
+
+    let request = format!(
+        r#"{{"id":"perf","method":"doctor","params":{{"path":"{}"}}}}"#,
+        dir.display()
+    );
+    let fixed_now = "2026-01-01T00:00:00Z";
+
+    let mut cold_samples: Vec<u128> = Vec::new();
+    let mut warm_samples: Vec<u128> = Vec::new();
+    for _ in 0..RUNS {
+        // Cold: fresh daemon state ⇒ fingerprint walk + full scan + analyze + serialize.
+        let mut cold_state = DaemonState::new();
+        let t = Instant::now();
+        let cold_response = cold_state.handle_request(&request, fixed_now);
+        cold_samples.push(t.elapsed().as_millis());
+        // Warm: same state ⇒ fingerprint walk + cached scan + serialize.
+        let t = Instant::now();
+        let warm_response = cold_state.handle_request(&request, fixed_now);
+        warm_samples.push(t.elapsed().as_millis());
+        // Correctness of what is measured: warm must be a cache hit with a
+        // payload identical to the cold one (same fixed `now` ⇒ identical
+        // envelope; only the frame's `cached` flag may differ).
+        assert!(cold_response.contains("\"cached\":false"));
+        assert!(warm_response.contains("\"cached\":true"));
+        let cold_v: serde_json::Value = serde_json::from_str(&cold_response).unwrap();
+        let warm_v: serde_json::Value = serde_json::from_str(&warm_response).unwrap();
+        assert_eq!(cold_v["data"], warm_v["data"], "cached payload is identical to the cold payload");
+    }
+
+    let cold_median = median(&mut cold_samples);
+    let warm_median = median(&mut warm_samples);
+    let reduction = 100.0 * (1.0 - warm_median as f64 / cold_median as f64);
+
+    println!("\n===== MEASURED — daemon incremental analysis on synthetic {}-crate workspace (seed {}) =====", CRATES, SEED);
+    println!("MEASURED doctor COLD (full measured scan) x{}: {:?} ms → median {} ms", RUNS, cold_samples, cold_median);
+    println!("MEASURED doctor WARM (fingerprint cache hit, 0 manifests parsed) x{}: {:?} ms → median {} ms", RUNS, warm_samples, warm_median);
+    println!("MEASURED wall-clock reduction: {:.1}% ({} ms → {} ms; structural guarantee: 0 manifests parsed on a hit — pinned by unit tests)", reduction, cold_median, warm_median);
+    println!("timing note: relative evidence only; the fingerprint check reads every measured file (hash), skipping parse + analysis + graph + report assembly");
 
     std::fs::remove_dir_all(&dir).ok();
 }

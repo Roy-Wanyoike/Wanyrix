@@ -382,6 +382,130 @@ fn read_toolchain(root: &Path) -> String {
     "unspecified (no rust-toolchain.toml)".to_owned()
 }
 
+/// Fingerprint of every input the engine MEASURES, for incremental
+/// re-analysis (daemon cache, GitHub issue #58 tranche 2).
+///
+/// Walks `root` with the exact same skip rules as [`scan_workspace`] (same
+/// `is_skipped_dir`, same depth guard, no symlinked dirs), collects every
+/// `Cargo.toml` / `rust-toolchain.toml` / plain `rust-toolchain`, sorts the
+/// root-relative paths (so readdir order cannot leak into the value), and
+/// hashes each file's CONTENT together with its path (FNV-1a 64-bit,
+/// dependency-free).
+///
+/// Why content, not mtime: mtime granularity is filesystem-dependent (some
+/// overlay/CIFS filesystems have second-level granularity), so a
+/// same-length rewrite inside one timestamp tick could evade an
+/// mtime-based key and serve a STALE cache hit — unacceptable under the
+/// honesty contract. A content hash makes the invalidation key complete
+/// and filesystem-independent: identical contents ⇒ identical fingerprint
+/// (a no-op rewrite may legitimately hit the cache — the measured inputs
+/// did not change), ANY content change ⇒ different fingerprint ⇒ full
+/// re-scan. The check cost is one read per measured file; parsing, finding
+/// analysis, graph construction and report assembly are all skipped on a
+/// hit. A file that vanishes between walk and read is skipped — its
+/// fingerprint simply differs, and the caller re-scans from the filesystem.
+pub fn manifest_fingerprint(root: &Path) -> Result<u64, EngineError> {
+    let root = root.canonicalize().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => EngineError::PathNotFound(root.to_path_buf()),
+        _ => EngineError::Io(e),
+    })?;
+    if !root.is_dir() {
+        return Err(EngineError::PathNotFound(root));
+    }
+
+    let mut paths: Vec<String> = Vec::new();
+    let mut stack: Vec<(PathBuf, usize)> = vec![(root.clone(), 0)];
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_symlink() {
+                continue;
+            }
+            if ft.is_dir() {
+                if is_skipped_dir(&name) || depth >= MAX_DEPTH {
+                    continue;
+                }
+                stack.push((path, depth + 1));
+            } else if name == "Cargo.toml" || name == "rust-toolchain.toml" || name == "rust-toolchain" {
+                paths.push(rel_forward(&root, &path));
+            }
+        }
+    }
+    if paths.is_empty() {
+        return Err(EngineError::NoManifests(root));
+    }
+    paths.sort();
+
+    // Read + hash in parallel (the fingerprint check must stay cheap or the
+    // daemon's incremental win evaporates); the MERGE below is strictly
+    // path-ordered, so readdir/scheduling order can never leak into the
+    // value — identical contents always yield the identical fingerprint.
+    let chunks: Vec<Vec<String>> = {
+        let workers = std::thread::available_parallelism()
+            .map(|n| n.get().clamp(1, 16))
+            .unwrap_or(4);
+        let target = paths.len().div_ceil(workers).max(1);
+        paths.chunks(target).map(<[String]>::to_vec).collect()
+    };
+    let per_path: Vec<(String, u64)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = chunks
+            .into_iter()
+            .map(|chunk| {
+                let root = &root;
+                scope.spawn(move || {
+                    chunk
+                        .into_iter()
+                        .map(|rel| {
+                            let h = match std::fs::read(root.join(&rel)) {
+                                Ok(bytes) => fnv1a(&bytes),
+                                Err(_) => fnv1a(b"<vanished>"),
+                            };
+                            (rel, h)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let mut all: Vec<(String, u64)> = Vec::new();
+        for h in handles {
+            all.extend(h.join().unwrap_or_default());
+        }
+        all.sort_by(|a, b| a.0.cmp(&b.0));
+        all
+    });
+
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a offset basis
+    let mix = |bytes: &[u8], hash: &mut u64| {
+        for b in bytes {
+            *hash ^= u64::from(*b);
+            *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        // field separator so ("ab","c") can never collide with ("a","bc")
+        *hash ^= 0xff;
+        *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    };
+    for (rel, content_hash) in &per_path {
+        mix(rel.as_bytes(), &mut hash);
+        mix(&content_hash.to_le_bytes(), &mut hash);
+    }
+    Ok(hash)
+}
+
+/// FNV-1a 64-bit over raw bytes.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in bytes {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -475,6 +599,68 @@ mod tests {
         assert_eq!(scan.path_deps.len(), 1);
         assert!(!scan.path_deps[0].escaped);
         assert!(!scan.path_deps[0].has_version);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn fingerprint_is_stable_for_an_unchanged_workspace() {
+        let fp1 = manifest_fingerprint(&fixture("tiny-ws")).unwrap();
+        let fp2 = manifest_fingerprint(&fixture("tiny-ws")).unwrap();
+        assert_eq!(fp1, fp2);
+        assert_ne!(fp1, 0);
+    }
+
+    #[test]
+    fn fingerprint_covers_every_file_the_engine_measures() {
+        let dir = std::env::temp_dir().join(format!("wanyrix-fp-surface-{}", std::process::id()));
+        let crate_dir = dir.join("a");
+        std::fs::create_dir_all(&crate_dir).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"a\"]\n").unwrap();
+        std::fs::write(
+            crate_dir.join("Cargo.toml"),
+            "[package]\nname = \"a\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        let base = manifest_fingerprint(&dir).unwrap();
+
+        // Manifest content change (same length, different byte) ⇒ different.
+        let manifest = crate_dir.join("Cargo.toml");
+        std::fs::write(&manifest, "[package]\nname = \"a\"\nversion = \"0.1.1\"\nlicense = \"MIT\"\ndescription = \"x\"\n").unwrap();
+        assert_ne!(manifest_fingerprint(&dir).unwrap(), base, "manifest content is measured");
+        std::fs::write(&manifest, "[package]\nname = \"a\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\ndescription = \"x\"\n").unwrap();
+        assert_eq!(manifest_fingerprint(&dir).unwrap(), base, "content hash: restoring the bytes restores the fingerprint");
+
+        // New manifest ⇒ different.
+        let b = dir.join("b");
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(b.join("Cargo.toml"), "[package]\nname = \"b\"\nversion = \"0.1.0\"\n").unwrap();
+        let with_b = manifest_fingerprint(&dir).unwrap();
+        assert_ne!(with_b, base);
+
+        // rust-toolchain.toml ⇒ measured (it feeds the toolchain field).
+        std::fs::write(dir.join("rust-toolchain.toml"), "[toolchain]\nchannel = \"stable\"\n").unwrap();
+        assert_ne!(manifest_fingerprint(&dir).unwrap(), with_b, "toolchain file is measured");
+
+        // Source files and target/ artifacts are NOT part of the surface.
+        let base_now = manifest_fingerprint(&dir).unwrap();
+        std::fs::create_dir_all(crate_dir.join("src")).unwrap();
+        std::fs::write(crate_dir.join("src/lib.rs"), "pub fn changed() {}").unwrap();
+        std::fs::create_dir_all(dir.join("target/debug")).unwrap();
+        std::fs::write(dir.join("target/debug/junk"), "build artifact").unwrap();
+        assert_eq!(manifest_fingerprint(&dir).unwrap(), base_now, "engine reads no .rs source and no target/");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn fingerprint_errors_track_scan_errors() {
+        assert!(matches!(
+            manifest_fingerprint(&std::path::PathBuf::from("/wanyrix/no/such/dir")),
+            Err(EngineError::PathNotFound(_))
+        ));
+        let dir = std::env::temp_dir().join(format!("wanyrix-fp-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(matches!(manifest_fingerprint(&dir), Err(EngineError::NoManifests(_))));
         std::fs::remove_dir_all(&dir).ok();
     }
 }

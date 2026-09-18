@@ -8,19 +8,24 @@
 //!
 //! Phase-2 slice (GitHub issue #58): [`store`] persists exactly what
 //! `doctor --json` measured into a WAL-backed SQLite database (two-phase
-//! commit + `fsck` for crash detection), and [`synth`] generates
+//! commit + `fsck` for crash detection), [`synth`] generates
 //! deterministic synthetic workspaces so scale claims can be measured, not
-//! asserted.
+//! asserted, [`daemon`] serves cached measured scans over a local Unix
+//! socket (manifest-fingerprint invalidation — the incremental-analysis
+//! surface), and [`telemetry`] ingests rustc JSON diagnostics with
+//! default-on source/secret redaction.
 //!
 //! # Honesty contract (the product's core identity — Gate 21 / Gate 7)
 //!
 //! 1. Everything emitted is MEASURED from the real filesystem. Nothing is
-//!    simulated, no defaults are invented, no network is contacted.
+//!    simulated, no defaults are invented, no network is contacted (the
+//!    [`daemon`] speaks only over a local Unix socket; [`telemetry`] reads
+//!    local rustc/cargo JSON streams and redacts them before emission).
 //! 2. Findings are `measurementStatus: "measured"`,
 //!    `confidenceClass: "deterministic"`. The engine never emits
 //!    `verified` (nothing here was benchmark-verified) and never claims a
 //!    timing (`impactSeconds` stays unset).
-//! 3. Fields the web contract requires but engine v1 cannot measure (build
+//! 3. Fields the web contract requires but the engine cannot measure (build
 //!    times, cache hit rates, change frequency) are emitted as 0 with an
 //!    explicit `not-measured` status — a visible zero plus a status, never
 //!    an estimate in disguise.
@@ -29,17 +34,23 @@
 //!
 //! # Layout
 //!
-//! - [`scan`] — directory walk + manifest parsing (measured inputs)
+//! - [`scan`] — directory walk + manifest parsing (measured inputs) + the
+//!   manifest fingerprint used for incremental re-analysis
 //! - [`analysis`] — doctor rules (`FER-ENG-*` finding registry)
 //! - [`graph`] — graph aggregates + Tarjan SCC (single edge source)
 //! - [`health`] — KPI summary derived from doctor + graph
 //! - [`report`] — the three versioned JSON envelopes
 //! - [`store`] — SQLite persistence for doctor scans (WAL, crash-tested)
+//! - [`daemon`] — local Unix-socket server serving cached measured scans
+//!   (`wanyrix.daemon/v1`; fingerprint invalidation, mode-0600 socket)
+//! - [`telemetry`] — rustc JSON diagnostics ingest with default-on
+//!   source/secret redaction (`wanyrix.telemetry/v1`)
 //! - [`synth`] — deterministic synthetic workspace generator (fixtures)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
 pub mod analysis;
 pub mod cli;
+pub mod daemon;
 pub mod graph;
 pub mod health;
 pub mod manifest;
@@ -49,6 +60,7 @@ pub mod report;
 pub mod scan;
 pub mod store;
 pub mod synth;
+pub mod telemetry;
 pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
@@ -58,6 +70,7 @@ pub use report::{DoctorReport, GraphReport, HealthReport};
 pub use scan::scan_workspace;
 pub use store::{ScanRow, SaveOutcome, STORE_SCHEMA_VERSION};
 pub use synth::{SynthOutcome, SynthPlan, DEFAULT_SEED, MAX_CRATES};
+pub use telemetry::{TelemetryReport, TELEMETRY_SCHEMA};
 
 #[cfg(test)]
 mod tests {

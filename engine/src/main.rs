@@ -58,5 +58,7 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
         }
         Command::Store { cmd } => cli::store_run(cmd),
         Command::Synth { crates, out, seed } => cli::synth_run(crates, &out, seed),
+        Command::Daemon { cmd } => cli::daemon_run(cmd),
+        Command::Telemetry { cmd } => cli::telemetry_run(cmd),
     }
 }

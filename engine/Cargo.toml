@@ -1,6 +1,6 @@
 [package]
 name = "wanyrix-engine"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Wanyrix engineering-intelligence engine — filesystem-measured doctor/graph/health analysis for Rust workspaces (honesty-first: measured vs estimated is never conflated)."
 license = "MIT OR Apache-2.0"
@@ -9,14 +9,17 @@ license = "MIT OR Apache-2.0"
 name = "wanyrix"
 path = "src/main.rs"
 
-# Dependency policy (engine phase-2): minimal by design — no daemon, no
-# telemetry, no network calls anywhere. `toml` is required to parse real
+# Dependency policy (engine phase-2): minimal by design — no network
+# anywhere (the daemon speaks only over a Unix domain socket; telemetry
+# ingestion reads local JSON streams). `toml` is required to parse real
 # Cargo.toml manifests faithfully (inline tables, [[bin]], inheritance);
 # hand-rolling TOML would trade correctness for a smaller tree. `rusqlite`
 # (bundled — the C SQLite is compiled from source into the binary, so no
 # system library is ever probed) is required for local scan persistence;
 # it touches no network and stores only what `wanyrix doctor --json`
-# already measured.
+# already measured. clap drives the CLI. No other dependencies — the
+# fingerprint, the daemon protocol and the secret scrubber are
+# hand-rolled to keep the tree auditable.
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
