@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  web:
+    name: Web platform (lint · types · tests · brand gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
+      - name: Unit + contract tests
+        run: bun run test
+
+      - name: Brand gate (legacy-token guard)
+        run: bash scripts/check-branding.sh
+
+  engine:
+    name: Rust engine (build · clippy · tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --locked -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked
