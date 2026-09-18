@@ -33,12 +33,13 @@ issue set is equally unverifiable from here (requires auth). Therefore:
 | [AUDIT-I2](AUDIT-I2.md) | Identity migration reported complete but never executed — process/integrity failure | PROCESS / BUG | **P0** | **FIXED in audit** |
 | [AUDIT-I3](AUDIT-I3.md) | Navigation 9/14 — Repositories, Findings, Architecture, Runtime, Organization, Settings missing | MISSING_FEATURE | P2 | **CLOSED** (Task 2-b: 18-item grouped IA, browser-verified) |
 | [AUDIT-I4](AUDIT-I4.md) | Zero automated tests (no framework installed) | TEST_GAP | **P1** | **CLOSED** (Task 2-a: `bun test` harness, 138 tests / 2,871 assertions green) |
-| [AUDIT-I5](AUDIT-I5.md) | GitHub unreachable from sandbox — rename + push + issue filing blocked | INTEGRATION_FAILURE | **P1** | Open (needs human) |
+| [AUDIT-I5](AUDIT-I5.md) | GitHub unreachable from sandbox — rename + push + issue filing blocked | INTEGRATION_FAILURE | **P1** | Open (needs human — re-verified Task 5-c: auth wall stands, api.github.com reachable; `scripts/github/` kit in flight) |
 | [AUDIT-I6](AUDIT-I6.md) | No product documentation tree (architecture, CLI reference, data contracts) | DOCUMENTATION | P3 | **CLOSED** (Task 2-d: README rebuild + USER_GUIDE/ARCHITECTURE/PRIVACY/COMMERCIAL) |
 | [AUDIT-I7](AUDIT-I7.md) | `explain` AI route: shallow grounding with id-only context; GET contract undocumented | PARTIAL_IMPLEMENTATION | P3 | **CLOSED** (Tasks 2-d+2-e: server-rendered facts, grounding validation, 413 cap, Allow header) |
 | [AUDIT-I8](AUDIT-I8.md) | Rust engine surfaces absent from repo (CLI binary, daemon, telemetry) — N/A or tracked | SCOPE NOTE | P3 | Open (platform repo) |
-| [AUDIT-I9](AUDIT-I9.md) | Stale Turbopack chunks after mass rename can serve pre-rename modules in dev | INFRASTRUCTURE | P4 | Open |
-| [AUDIT-I10](AUDIT-I10.md) | WAN-* ↔ GitHub issue/PR linkage is by-convention only (no automated traceability) | MISSING_FEATURE | P4 | Open |
+| [AUDIT-I9](AUDIT-I9.md) | Stale Turbopack chunks after mass rename can serve pre-rename modules in dev | INFRASTRUCTURE | P4 | **CLOSED** (Task 5-c: documentation-only; 0 stale ferrix vs 66 wanyrix chunks in `.next/dev`, recovery documented) |
+| [AUDIT-I10](AUDIT-I10.md) | WAN-* ↔ GitHub issue/PR linkage is by-convention only (no automated traceability) | MISSING_FEATURE | P4 | **PARTIAL** (Task 5-c: audit-ID→record→commit chain mapped; FINAL-2 fix indexed ENG-T3A-1 → chain half **CLOSED**; typed-ref feature open) |
+| [ENG-T3A-1](ENG-T3A-1.md) | @vercel/analytics contradicted no-telemetry claim | CODE_VS_DOC | P3 | **FIXED + verified** (removed from layout.tsx, commit 90e5ec4; indexed in registry by FINAL-2 fix) |
 
 Severity policy: P0 = breaks a shipped promise / data loss; P1 = blocks credible development; P2 = material product gap; P3 = quality/completeness; P4 = future/hygiene. Severities were assigned against evidence, not aspiration.
 
@@ -65,3 +66,94 @@ All defects found were fixed and browser/API-verified in the same round:
 doctor/experiments/simulator; doctor finding schema 19/19 clean; report flavor
 deterministic (byte-identical ×3); no console errors across all 18 views; mobile 390px
 clean; dark+light both AA on honesty badges.
+
+## Final-audit round (Task 5-c) — 57-gate acceptance audit findings
+
+Auditor: QA/Final Auditor (Task 5-c). Full matrix: `docs/audits/ACCEPTANCE_GATES.md`
+(tally: **29 PASS / 7 PARTIAL / 2 FAIL / 12 IN PROGRESS / 7 N/A-OUT-OF-SCOPE** = 57).
+Registry status columns updated this round for **I5 (note appended, still Open-needs-human),
+I9 (CLOSED, documentation-only), I10 (PARTIAL, chain mapped)** only — per edit-rights contract.
+
+**New gaps discovered by the gate audit: 2** (everything else that failed or is partial
+maps to an existing record — #38/#43/#44/#57 root cause = AUDIT-I5; engine gates #2/6–8/10–13/15/16/19/30 = AUDIT-I8 scope + Task 5-a; no duplication per Rule 4).
+
+### FINAL-1 — Investor overview artifact does not exist (Gate 56 FAIL)
+
+1. **Problem:** §70 Gate 56 "Investor overview is complete" has no artifact anywhere in the repo — no investor-facing document was ever produced (repo-wide grep: zero hits for investor overview material outside `docs/COMMERCIAL.md`'s internal architecture).
+2. **Evidence:** `docs/` listing (11 files, none investor-facing); `grep -rn "investor" docs/ README.md` → 0 hits; ACCEPTANCE_GATES.md #56 = FAIL.
+3. **Current behavior:** commercial architecture + 90-day trial model exist in `docs/COMMERCIAL.md` (Gates 54/55 PASS), but nothing distills them for investors.
+4. **Expected behavior:** an investor overview (product thesis, deterministic-core moat, trial→subscription model, roadmap phases) derived from COMMERCIAL.md + WANYRIX_BASELINE.md.
+5. **Root cause:** the doc-completion round (3-a) scoped engineering docs only; investor artifact was never assigned.
+6. **Implementation requirements:** author `docs/INVESTOR_OVERVIEW.md` from existing material (no new claims — every number must trace to COMMERCIAL.md/PERFORMANCE.md).
+7. **Acceptance criteria:** [ ] doc exists; [ ] every claim cites a source doc; [ ] linked from README docs map.
+8. **Tests required:** none (docs).
+9. **Security considerations:** must not disclose anything beyond what COMMERCIAL.md already discloses.
+10. **Performance considerations:** N/A.
+11. **Dependencies:** none blocking (COMMERCIAL.md complete).
+12. **Definition of Done:** document merged + indexed. **Severity:** LOW (business artifact; does not block web-platform engineering GO, listed in gates-blocking-GO for completeness).
+
+Ready-to-run filing:
+```bash
+gh issue create -R Roy-Wanyoike/wanyrix \
+  -t "docs: investor overview artifact missing (acceptance Gate 56)" \
+  -b "See docs/audits/issues/ISSUE_REGISTRY.md §Final-audit round FINAL-1; source material docs/COMMERCIAL.md" -l "documentation"
+```
+
+### FINAL-2 — ENG-T3A-1 is unindexed in this registry (traceability chain break, AUDIT-I10 residual)
+
+1. **Problem:** the issue record `ENG-T3A-1.md` (filed Task 3-a, FIXED + verified in commit `90e5ec4`) has **no row** in this registry's Index or Production-validation table — the one broken link in the otherwise-complete finding-ID → source record → commit chain (AUDIT-I10 mapping, Task 5-c).
+2. **Evidence:** `grep -c "ENG-T3A-1" docs/audits/issues/ISSUE_REGISTRY.md` → 0 (this round); file exists at `docs/audits/issues/ENG-T3A-1.md`; fix commit `90e5ec4` message names it.
+3. **Current behavior:** registry readers cannot discover the telemetry-conflict issue or its verified fix from the index.
+4. **Expected behavior:** every issue record on disk has exactly one registry row.
+5. **Root cause:** Task 3-a filed the record but registry-table edits were outside that agent's edit rights; no later round added the row.
+6. **Implementation requirements:** append one row to the Index (and/or Production-validation table): `ENG-T3A-1 | @vercel/analytics contradicted no-telemetry claim | CODE_VS_DOC | P3 | FIXED + verified (removed from layout.tsx, commit 90e5ec4)`.
+7. **Acceptance criteria:** [ ] ENG-T3A-1 row present; [ ] AUDIT-I10 re-checks grep ≥ 1 and can flip PARTIAL→CLOSED for the chain half.
+8. **Tests required:** none (registry hygiene); AUDIT-I10's grep check is the verification.
+9. **Security considerations:** none.
+10. **Performance considerations:** none.
+11. **Dependencies:** closes the last missing link named in AUDIT-I10's Task 5-c note.
+12. **Definition of Done:** row added; AUDIT-I10 chain half verifiable by grep. **Severity:** P4 (hygiene).
+
+Ready-to-run filing:
+```bash
+gh issue create -R Roy-Wanyoike/wanyrix \
+  -t "registry: index ENG-T3A-1 row (traceability chain break, AUDIT-I10 residual)" \
+  -b "See docs/audits/issues/ISSUE_REGISTRY.md §Final-audit round FINAL-2 and docs/audits/issues/AUDIT-I10.md" -l "traceability"
+```
+
+**Verdict carried forward:** web platform = CONDITIONAL GO (unchanged). Blocking conditions: AUDIT-I5 human GitHub step (also unblocks Gates 38/43/44/57), engine repo Task 5-a (12 IN-PROGRESS gates), FINAL-1 investor artifact.
+
+### FINAL-2 — RESOLVED (orchestrator, same round)
+
+- ENG-T3A-1 row appended to the Index (see above); `grep -c "ENG-T3A-1" ISSUE_REGISTRY.md` now ≥ 1 — the acceptance criterion of FINAL-2 is met, closing the chain half of AUDIT-I10 (typed-ref feature half remains open under I10).
+- AUDIT-I10 index-table status updated accordingly: chain-mapping half **CLOSED**, typed-ref half open.
+
+### FINAL-3 — Engine phase-2 surfaces not yet built (daemon, SQLite store, rustc telemetry, large-repo perf)
+
+1. **Problem:** `wanyrix-engine` v0.1.0 (landed this round under `engine/`, 25 tests green) covers measured filesystem manifest analysis only. The master contract's engine surface set also requires: long-lived daemon, SQLite persistence, rustc/telemetry collection, and 500-crate-scale performance characterization.
+2. **Evidence:** `engine/README.md` roadmap table lists daemon/SQLite/telemetry as NOT built; ACCEPTANCE_GATES #2, 6–8, 10–13, 15, 16, 19, 30 = IN PROGRESS pending these surfaces.
+3. **Current behavior:** `wanyrix doctor|graph|health` work per-invocation against a directory; no persistence between runs.
+4. **Expected behavior:** daemon with idle memory <100MB (gate 14), SQLite store surviving forced interruption (gate 31), telemetry pipeline excluding sensitive source by default (gate 41), 500-crate synthetic workspace analyzed within budget (gate 16).
+5. **Root cause:** phased build order — v0 proves the contract-conformance approach first; persistence/telemetry are the next phase.
+6. **Implementation requirements:** (a) SQLite store via rusqlite (bundled; gcc present in toolchain image) with WAL + interruption-recovery test; (b) daemon process with IPC matching `wanyrix.daemon/v1` schema (to be defined additively); (c) rustc JSON diagnostics capture with secret/source redaction default-on; (d) 500-crate synthetic fixture + timing characterization committed as evidence.
+7. **Acceptance criteria:** gates #10–14, 16, 19, 30, 31 flip IN PROGRESS→PASS with committed evidence; no regression in the 25 existing engine tests.
+8. **Tests required:** cargo test expansion incl. crash-recovery and redaction unit tests; soak evidence recorded in `docs/PERFORMANCE.md`.
+9. **Security considerations:** telemetry must exclude sensitive source by default (gate 41); store must not leak workspace paths across users.
+10. **Performance considerations:** incremental analysis ≥95% reduction where graph permits (gate 10); idle daemon <100MB (gate 14).
+11. **Documentation requirements:** engine/README roadmap table update per merged phase; W-EIR doc stays authoritative for schema versioning.
+12. **Definition of Done:** all listed engine gates PASS with evidence; issue closes via PR linkage. **Severity:** HIGH (product core), phased.
+
+Ready-to-run filing:
+```bash
+gh issue create -R Roy-Wanyoike/wanyrix \
+  -t "engine: phase-2 surfaces — daemon, SQLite store, rustc telemetry, 500-crate perf (FINAL-3)" \
+  -b "See docs/audits/issues/ISSUE_REGISTRY.md §Final-audit round FINAL-3 and engine/README.md roadmap" -l "engine"
+```
+
+### FINAL-1 — RESOLVED (orchestrator, same round as filing)
+
+- `docs/INVESTOR_OVERVIEW.md` produced (problem, measured component table, planned-not-built, market wedge, model, risks, ask placeholder) — gate #56 flipped FAIL→PASS in `docs/audits/ACCEPTANCE_GATES.md`. Closes on merge of the linked PR (`pr/final-1-investor-overview` branch prepared locally).
+
+### FINAL-2 — RESOLVED (orchestrator, same round as filing)
+
+- ENG-T3A-1 indexed in the registry table (grep acceptance criterion met); closes on merge of the linked PR (`pr/final-2-registry-index` branch prepared locally).

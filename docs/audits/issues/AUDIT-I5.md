@@ -60,3 +60,15 @@ gh issue create -R Roy-Wanyoike/wanyrix \
   -t "ops: GitHub-side rename + push checklist (audit AUDIT-2026-09-18)" \
   -b "See docs/audits/issues/AUDIT-I5.md" -l "devops"
 ```
+
+## Status note — Final-audit round (Task 5-c)
+
+Re-verified this round from the sandbox; the blocker is unchanged and **remains Open (needs a human with credentials)**:
+
+- `git ls-remote origin` → `fatal: could not read Username for 'https://github.com'` — fails at **authentication**, exactly as at baseline.
+- `https://api.github.com` → HTTP **403** in 0.11 s — the API endpoint is **network-reachable**; the 403 is the anonymous/no-auth response, confirming transport works and credentials do not exist here.
+- Local commit chain intact through `c9d4ee5`; everything remains staged as local commits.
+
+**Mitigation in flight:** the orchestrator is shipping a `scripts/github/` automation kit — `bootstrap` (remote/rename/first-push), `create-issues` (files every record in `docs/audits/issues/` from its embedded ready-to-run payload, duplicate-check first), and `create-prs` (with `Closes #N` linkage so merged PRs auto-close their issues). The entire issue+PR flow executes the moment a token exists; no manual `gh` typing required. (At the time this note was written the kit was not yet on disk under `scripts/` — it lands with the orchestrator's round; `scripts/` contained only `check-branding.sh`.)
+
+Gate impact: this issue is the root cause of ACCEPTANCE_GATES #38 (CI-enforced boundaries = FAIL), #43/#44 (clean-clone + 100-run record = PARTIAL), and #57 (GitHub-side issue verifiability = PARTIAL). See `docs/audits/ACCEPTANCE_GATES.md`.
