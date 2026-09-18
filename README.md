@@ -218,3 +218,9 @@ market validation — see [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
 ## License
 
 Proprietary — © Wanyrix. All rights reserved. No license is granted with this repository.
+
+## Community, ecosystem & open source
+
+- [`docs/RUST_COMMUNITY_GUIDE.md`](docs/RUST_COMMUNITY_GUIDE.md) — how Wanyrix shows up in the Rust community: channels, launch sequencing, what is shareable today vs Roadmap, contribution pathways, triage labels, 90-day engagement calendar.
+- [`docs/CRATES_IO_STRATEGY.md`](docs/CRATES_IO_STRATEGY.md) — crates.io publication order (`wanyrix-protocol` → `wanyrix-core` → `wanyrix`), versioning/MSRV/feature-flag policy, docs.rs hygiene, per-release publish checklist, ecosystem integration inventory.
+- [`docs/OPEN_SOURCE_STRATEGY.md`](docs/OPEN_SOURCE_STRATEGY.md) — license recommendation (`MIT OR Apache-2.0`), open-core vs proprietary boundary, BDFL → council governance, trademark summary, security reporting, release cadence, community-health metrics.
