@@ -1,0 +1,2002 @@
+     1→# WANYRIX — MASTER PRODUCT COMPLETION, VALIDATION & COMMERCIAL READINESS PROMPT
+     2→
+     3→## Mission
+     4→
+     5→You are the complete autonomous engineering, product, QA, security, SRE, UX, documentation, and commercialization team for:
+     6→
+     7→# Wanyrix — Engineering Intelligence Platform
+     8→
+     9→Wanyrix is an evidence-first engineering intelligence platform for Rust and performance-critical systems.
+    10→
+    11→Its purpose is to continuously help engineers:
+    12→
+    13→> OBSERVE → UNDERSTAND → DIAGNOSE → EXPLAIN → RECOMMEND → CHANGE → VERIFY → MEASURE → LEARN
+    14→
+    15→Wanyrix must be capable of running **fully offline/local-first** while also supporting a richer **online/cloud-connected mode**.
+    16→
+    17→The goal of this phase is not to merely verify that features exist.
+    18→
+    19→The goal is to determine whether Wanyrix is actually ready to be:
+    20→
+    21→* installed by a real developer
+    22→* used against a real Rust repository
+    23→* operated offline
+    24→* operated online
+    25→* trusted with engineering data
+    26→* used continuously
+    27→* demonstrated to developers
+    28→* deployed by teams
+    29→* eventually sold commercially
+    30→
+    31→Do not assume previous implementation is correct.
+    32→
+    33→Do not assume previous agents completed their work.
+    34→
+    35→Do not trust documentation over implementation.
+    36→
+    37→Do not trust implementation over tests.
+    38→
+    39→Do not trust tests without validating that they test the actual behavior.
+    40→
+    41→Everything must be discovered, verified, tested, and reconciled.
+    42→
+    43→---
+    44→
+    45→# 1. NON-NEGOTIABLE OPERATING PRINCIPLES
+    46→
+    47→Follow these principles throughout the entire execution.
+    48→
+    49→### Evidence over assumption
+    50→
+    51→Never declare something implemented merely because:
+    52→
+    53→* a file exists
+    54→* an endpoint exists
+    55→* a component exists
+    56→* a TODO was removed
+    57→* a test exists
+    58→* documentation claims it exists
+    59→
+    60→Verify actual behavior.
+    61→
+    62→### Local-first
+    63→
+    64→Wanyrix must provide meaningful engineering intelligence without requiring:
+    65→
+    66→* internet access
+    67→* cloud account
+    68→* API key
+    69→* AI provider
+    70→* hosted database
+    71→* hosted Wanyrix account
+    72→
+    73→The deterministic engineering core must remain functional offline.
+    74→
+    75→### Online-enhanced
+    76→
+    77→When connectivity exists, Wanyrix may provide:
+    78→
+    79→* cloud synchronization
+    80→* historical analytics
+    81→* team collaboration
+    82→* fleet intelligence
+    83→* hosted AI
+    84→* centralized policy
+    85→* organization management
+    86→* remote repositories
+    87→* telemetry aggregation
+    88→* enterprise features
+    89→
+    90→Online functionality must enhance Wanyrix rather than become a hidden dependency for core functionality.
+    91→
+    92→### AI is never the source of truth
+    93→
+    94→AI may:
+    95→
+    96→* explain evidence
+    97→* summarize evidence
+    98→* generate investigation paths
+    99→* propose recommendations
+   100→* propose patches
+   101→
+   102→AI must never:
+   103→
+   104→* invent measurements
+   105→* invent files
+   106→* invent dependencies
+   107→* invent build results
+   108→* claim verification without verification
+   109→* modify source code silently
+   110→* override deterministic evidence
+   111→
+   112→### No silent data transmission
+   113→
+   114→Source code, repository information, telemetry, credentials, or sensitive engineering data must never leave the local environment unexpectedly.
+   115→
+   116→Every online transmission path must be:
+   117→
+   118→* explicit
+   119→* documented
+   120→* configurable
+   121→* auditable
+   122→* secure
+   123→
+   124→### No incomplete work
+   125→
+   126→Do not leave:
+   127→
+   128→* unresolved implementation gaps
+   129→* placeholder production features
+   130→* broken tests
+   131→* unexplained failures
+   132→* undocumented behavior
+   133→* abandoned TODOs
+   134→* knowingly broken workflows
+   135→
+   136→If something cannot be completed in this phase, create a GitHub issue with an explicit reason, dependency, owner, and release impact.
+   137→
+   138→---
+   139→
+   140→# 2. FIRST STEP — COMPLETE DISCOVERY
+   141→
+   142→Before changing anything, inspect the repository completely.
+   143→
+   144→Inspect:
+   145→
+   146→* repository structure
+   147→* README
+   148→* documentation
+   149→* architecture documentation
+   150→* Cargo workspace
+   151→* crates
+   152→* binaries
+   153→* frontend
+   154→* backend
+   155→* schemas
+   156→* protobuf
+   157→* migrations
+   158→* configuration
+   159→* Docker
+   160→* infrastructure
+   161→* tests
+   162→* fixtures
+   163→* benchmarks
+   164→* examples
+   165→* scripts
+   166→* CI/CD
+   167→* Git history
+   168→* branches
+   169→* tags
+   170→* open issues
+   171→* open PRs
+   172→* TODOs
+   173→* FIXME markers
+   174→* feature flags
+   175→* environment variables
+   176→* dependency versions
+   177→* security configuration
+   178→* release configuration
+   179→
+   180→Also inspect the complete Git history to understand:
+   181→
+   182→* what was actually implemented
+   183→* what was renamed
+   184→* what was removed
+   185→* what remains unfinished
+   186→* previous architectural decisions
+   187→* abandoned implementations
+   188→* partially completed features
+   189→* regressions
+   190→
+   191→Do not recreate functionality that already exists.
+   192→
+   193→Do not delete working functionality merely because it is undocumented.
+   194→
+   195→---
+   196→
+   197→# 3. BUILD A CURRENT SYSTEM BASELINE
+   198→
+   199→Produce an internal baseline covering:
+   200→
+   201→## Product
+   202→
+   203→* What Wanyrix currently does
+   204→* What users can actually do
+   205→* What is missing
+   206→* What is partially implemented
+   207→* What is broken
+   208→* What is experimental
+   209→* What is production-ready
+   210→
+   211→## Architecture
+   212→
+   213→Map:
+   214→
+   215→```text
+   216→CLI
+   217→ ↓
+   218→Daemon
+   219→ ↓
+   220→Engine
+   221→ ↓
+   222→Collectors
+   223→ ↓
+   224→W-EIR
+   225→ ↓
+   226→Engineering Graph
+   227→ ↓
+   228→Analyzers
+   229→ ↓
+   230→Findings
+   231→ ↓
+   232→Recommendations
+   233→ ↓
+   234→Experiments
+   235→ ↓
+   236→Measurements
+   237→ ↓
+   238→Verification
+   239→```
+   240→
+   241→And online:
+   242→
+   243→```text
+   244→Wanyrix Local
+   245→ ↓
+   246→Secure Sync
+   247→ ↓
+   248→Wanyrix Cloud
+   249→ ↓
+   250→Organizations
+   251→ ↓
+   252→Repositories
+   253→ ↓
+   254→Snapshots
+   255→ ↓
+   256→Analytics
+   257→ ↓
+   258→AI
+   259→ ↓
+   260→Policies
+   261→ ↓
+   262→Fleet Intelligence
+   263→```
+   264→
+   265→## Runtime state
+   266→
+   267→Determine what currently runs successfully.
+   268→
+   269→Record:
+   270→
+   271→* build commands
+   272→* test commands
+   273→* startup commands
+   274→* dependencies
+   275→* required services
+   276→* required environment variables
+   277→* optional services
+   278→* ports
+   279→* storage
+   280→* configuration
+   281→* authentication
+   282→* network requirements
+   283→
+   284→---
+   285→
+   286→# 4. PRODUCT CONTRACT
+   287→
+   288→Validate Wanyrix against this core promise:
+   289→
+   290→> Point Wanyrix at a real Rust repository and receive a continuously updated, trustworthy engineering model connecting Cargo, rustc, rust-analyzer, Git, builds, tests, dependencies, toolchains, runtime observations, findings, recommendations, experiments, and measurements.
+   291→
+   292→The core user journey must work:
+   293→
+   294→```text
+   295→Install
+   296→ ↓
+   297→wanyrix init
+   298→ ↓
+   299→Repository discovery
+   300→ ↓
+   301→Initial analysis
+   302→ ↓
+   303→W-EIR generation
+   304→ ↓
+   305→Engineering graph
+   306→ ↓
+   307→Build intelligence
+   308→ ↓
+   309→Findings
+   310→ ↓
+   311→wanyrix doctor
+   312→ ↓
+   313→Evidence
+   314→ ↓
+   315→Impact
+   316→ ↓
+   317→Recommendation
+   318→ ↓
+   319→Experiment
+   320→ ↓
+   321→Baseline
+   322→ ↓
+   323→Candidate
+   324→ ↓
+   325→Test
+   326→ ↓
+   327→Benchmark
+   328→ ↓
+   329→Measurement
+   330→ ↓
+   331→Verification
+   332→```
+   333→
+   334→A developer must be able to complete this flow on a real or representative Rust repository.
+   335→
+   336→---
+   337→
+   338→# 5. OFFLINE-FIRST PRODUCT VALIDATION
+   339→
+   340→This is a critical requirement.
+   341→
+   342→Create a completely isolated offline environment.
+   343→
+   344→Disable:
+   345→
+   346→* internet
+   347→* external APIs
+   348→* cloud services
+   349→* hosted AI
+   350→* remote telemetry
+   351→* external package access where practical
+   352→
+   353→Then validate:
+   354→
+   355→```bash
+   356→wanyrix --version
+   357→wanyrix init
+   358→wanyrix status
+   359→wanyrix doctor
+   360→wanyrix analyze
+   361→wanyrix dependencies
+   362→wanyrix graph
+   363→wanyrix findings
+   364→wanyrix explain
+   365→wanyrix experiment
+   366→wanyrix verify
+   367→wanyrix storage
+   368→wanyrix daemon start
+   369→wanyrix daemon stop
+   370→```
+   371→
+   372→Determine which commands work offline.
+   373→
+   374→Core functionality MUST NOT depend on the cloud.
+   375→
+   376→At minimum, offline mode must support:
+   377→
+   378→* repository discovery
+   379→* Cargo intelligence
+   380→* dependency intelligence
+   381→* W-EIR
+   382→* engineering graph
+   383→* Git intelligence
+   384→* build analysis where locally available
+   385→* findings
+   386→* deterministic diagnosis
+   387→* recommendations
+   388→* local experiments
+   389→* measurements
+   390→* verification
+   391→* local storage
+   392→* local history
+   393→* machine-readable JSON
+   394→* local documentation/help
+   395→
+   396→If AI is unavailable:
+   397→
+   398→> Wanyrix must continue operating normally for deterministic functionality.
+   399→
+   400→The UI must clearly indicate offline mode.
+   401→
+   402→---
+   403→
+   404→# 6. ONLINE MODE VALIDATION
+   405→
+   406→When network connectivity is available, validate:
+   407→
+   408→```text
+   409→Local
+   410→ ↓
+   411→Authentication
+   412→ ↓
+   413→Organization
+   414→ ↓
+   415→Repository
+   416→ ↓
+   417→Secure synchronization
+   418→ ↓
+   419→Cloud snapshot
+   420→ ↓
+   421→Analytics
+   422→ ↓
+   423→AI
+   424→ ↓
+   425→History
+   426→ ↓
+   427→Policies
+   428→```
+   429→
+   430→Validate:
+   431→
+   432→* authentication
+   433→* authorization
+   434→* tenant isolation
+   435→* repository registration
+   436→* secure synchronization
+   437→* snapshot synchronization
+   438→* conflict handling
+   439→* retry behavior
+   440→* offline queueing
+   441→* reconnection
+   442→* duplicate event handling
+   443→* audit logs
+   444→* cloud failure recovery
+   445→* local functionality during cloud outage
+   446→
+   447→If the network disappears during synchronization:
+   448→
+   449→```text
+   450→Local state must remain valid.
+   451→No data corruption.
+   452→No duplicated records.
+   453→No lost authoritative observations.
+   454→Synchronization resumes safely.
+   455→```
+   456→
+   457→---
+   458→
+   459→# 7. OFFLINE ↔ ONLINE TRANSITION
+   460→
+   461→This must be treated as a first-class product capability.
+   462→
+   463→Test:
+   464→
+   465→### Offline → Online
+   466→
+   467→```text
+   468→Developer works offline
+   469→↓
+   470→Analyses repository
+   471→↓
+   472→Creates snapshots/findings/experiments
+   473→↓
+   474→Network returns
+   475→↓
+   476→Wanyrix synchronizes
+   477→↓
+   478→Cloud receives valid state
+   479→```
+   480→
+   481→### Online → Offline
+   482→
+   483→```text
+   484→Developer loses connectivity
+   485→↓
+   486→Wanyrix detects offline state
+   487→↓
+   488→Local operation continues
+   489→↓
+   490→No destructive errors
+   491→↓
+   492→Local state accumulates safely
+   493→```
+   494→
+   495→### Repeated transitions
+   496→
+   497→Test:
+   498→
+   499→```text
+   500→online
+   501→offline
+   502→online
+   503→offline
+   504→online
+   505→```
+   506→
+   507→with:
+   508→
+   509→* analysis
+   510→* findings
+   511→* experiments
+   512→* measurements
+   513→* configuration changes
+   514→* interrupted synchronization
+   515→
+   516→Validate idempotency and consistency.
+   517→
+   518→---
+   519→
+   520→# 8. W-EIR VALIDATION
+   521→
+   522→Validate W-EIR completely.
+   523→
+   524→Entities include:
+   525→
+   526→* Repository
+   527→* Workspace
+   528→* Package
+   529→* Crate
+   530→* Target
+   531→* Module
+   532→* Symbol
+   533→* Dependency
+   534→* Feature
+   535→* Build
+   536→* Test
+   537→* Benchmark
+   538→* GitCommit
+   539→* Toolchain
+   540→* RuntimeObservation
+   541→* Finding
+   542→* Evidence
+   543→* Recommendation
+   544→* Experiment
+   545→* Measurement
+   546→* PatchProposal
+   547→* AnalysisSnapshot
+   548→
+   549→Every entity must have appropriate:
+   550→
+   551→* stable identity
+   552→* relationships
+   553→* provenance
+   554→* version
+   555→* source references
+   556→* confidence where applicable
+   557→
+   558→Explicitly distinguish:
+   559→
+   560→```text
+   561→AUTHORITATIVE OBSERVATION
+   562→INFERENCE
+   563→RECOMMENDATION
+   564→ESTIMATE
+   565→MEASUREMENT
+   566→VERIFIED RESULT
+   567→```
+   568→
+   569→W-EIR snapshots must include:
+   570→
+   571→* repository identity
+   572→* commit SHA
+   573→* Wanyrix version
+   574→* rustc version
+   575→* Cargo version
+   576→* toolchain
+   577→* target
+   578→* OS
+   579→* architecture
+   580→* configuration hash
+   581→* Cargo.lock hash
+   582→* analysis version
+   583→* timestamp
+   584→
+   585→Test semantic reproducibility.
+   586→
+   587→Same:
+   588→
+   589→```text
+   590→repository
+   591→commit
+   592→Cargo.lock
+   593→toolchain
+   594→configuration
+   595→Wanyrix version
+   596→```
+   597→
+   598→must produce semantically equivalent deterministic output.
+   599→
+   600→---
+   601→
+   602→# 9. REPOSITORY INTELLIGENCE VALIDATION
+   603→
+   604→Validate discovery of:
+   605→
+   606→* Cargo.toml
+   607→* Cargo.lock
+   608→* workspace
+   609→* packages
+   610→* crates
+   611→* targets
+   612→* dependencies
+   613→* transitive dependencies
+   614→* workspace dependencies
+   615→* optional dependencies
+   616→* target-specific dependencies
+   617→* features
+   618→* examples
+   619→* benches
+   620→* build scripts
+   621→* proc macros
+   622→* toolchains
+   623→* rustc metadata
+   624→* Git state
+   625→* Git history
+   626→* changed files
+   627→* changed modules
+   628→* changed crates
+   629→
+   630→Target:
+   631→
+   632→> ≥99.5% authoritative agreement with Cargo for supported repository metadata.
+   633→
+   634→No:
+   635→
+   636→* phantom dependencies
+   637→* missing dependencies
+   638→* incorrect versions
+   639→* incorrect package relationships
+   640→
+   641→---
+   642→
+   643→# 10. ENGINEERING GRAPH VALIDATION
+   644→
+   645→Validate relationships such as:
+   646→
+   647→```text
+   648→Repository
+   649→ ↓
+   650→Workspace
+   651→ ↓
+   652→Package
+   653→ ↓
+   654→Crate
+   655→ ↓
+   656→Module
+   657→ ↓
+   658→Symbol
+   659→ ↓
+   660→Dependency
+   661→ ↓
+   662→Feature
+   663→ ↓
+   664→Build
+   665→ ↓
+   666→Test
+   667→ ↓
+   668→Git
+   669→ ↓
+   670→Runtime
+   671→ ↓
+   672→Finding
+   673→ ↓
+   674→Experiment
+   675→ ↓
+   676→Measurement
+   677→```
+   678→
+   679→The graph must answer:
+   680→
+   681→* What depends on X?
+   682→* What changes if X changes?
+   683→* Why did this rebuild?
+   684→* Which crates are on the critical path?
+   685→* Which modules depend on infrastructure?
+   686→* Which areas changed most?
+   687→* Did an experiment improve anything?
+   688→
+   689→The graph must be useful rather than decorative.
+   690→
+   691→---
+   692→
+   693→# 11. BUILD INTELLIGENCE
+   694→
+   695→Validate:
+   696→
+   697→* build duration
+   698→* crate compilation duration
+   699→* critical path
+   700→* dependency ordering
+   701→* parallelism
+   702→* proc macros
+   703→* build scripts
+   704→* duplicate dependencies
+   705→* feature expansion
+   706→* cache behavior
+   707→* incremental compilation
+   708→* rebuild scope
+   709→* compiler activity
+   710→* workspace structure
+   711→* CI builds where supported
+   712→
+   713→Wanyrix should answer:
+   714→
+   715→> Why is this build slow?
+   716→
+   717→> Why did this crate rebuild?
+   718→
+   719→> What is causing the rebuild?
+   720→
+   721→> What depends on this crate?
+   722→
+   723→> What would changing this dependency affect?
+   724→
+   725→Never make unsupported causality claims.
+   726→
+   727→---
+   728→
+   729→# 12. CRITICAL PATH
+   730→
+   731→Create deterministic fixtures where expected critical paths are known.
+   732→
+   733→Require:
+   734→
+   735→> 100% correctness on deterministic fixtures.
+   736→
+   737→Where parallel execution produces ambiguity:
+   738→
+   739→Do not fabricate a single answer.
+   740→
+   741→Represent:
+   742→
+   743→* possible paths
+   744→* equivalent paths
+   745→* uncertainty
+   746→* concurrency
+   747→
+   748→---
+   749→
+   750→# 13. INCREMENTAL INTELLIGENCE
+   751→
+   752→Validate:
+   753→
+   754→* filesystem watching
+   755→* Git-aware invalidation
+   756→* dependency-aware invalidation
+   757→* incremental W-EIR
+   758→* incremental graph
+   759→* incremental analyzers
+   760→* cache reuse
+   761→
+   762→Target:
+   763→
+   764→> ≥95% reduction in analysis work for localized changes where the dependency graph permits it.
+   765→
+   766→Test:
+   767→
+   768→* one-line change
+   769→* single module change
+   770→* single crate change
+   771→* dependency change
+   772→* Cargo.toml change
+   773→* Cargo.lock change
+   774→* feature change
+   775→* toolchain change
+   776→* workspace restructuring
+   777→
+   778→Wanyrix must explain broad invalidation when it occurs.
+   779→
+   780→---
+   781→
+   782→# 14. FINDINGS & DIAGNOSIS
+   783→
+   784→Validate findings categories:
+   785→
+   786→* Build
+   787→* Dependency
+   788→* Rebuild
+   789→* Architecture
+   790→* Performance
+   791→* Tooling
+   792→* Runtime
+   793→* Security
+   794→
+   795→Every finding requires:
+   796→
+   797→* stable ID
+   798→* category
+   799→* severity
+   800→* title
+   801→* description
+   802→* affected entities
+   803→* evidence
+   804→* impact
+   805→* confidence
+   806→* recommendation
+   807→* provenance
+   808→
+   809→Every actionable finding must have a remediation path.
+   810→
+   811→Target:
+   812→
+   813→> ≥90% precision for high-confidence findings on controlled fixtures.
+   814→
+   815→---
+   816→
+   817→# 15. WANYRIX DOCTOR
+   818→
+   819→`wanyrix doctor` is the flagship user experience.
+   820→
+   821→Validate output similar to:
+   822→
+   823→```text
+   824→WANYRIX DOCTOR
+   825→
+   826→Repository
+   827→my-rust-project
+   828→
+   829→Build
+   830→42.8 seconds
+   831→
+   832→HIGH
+   833→
+   834→Crate: compiler-core
+   835→
+   836→Evidence
+   837→- 11.4s compilation time
+   838→- 37 downstream dependents
+   839→- critical build path
+   840→
+   841→Impact
+   842→Changes to compiler-core can affect a large portion of workspace.
+   843→
+   844→Recommendation
+   845→Investigate dependency boundary and incremental compilation scope.
+   846→
+   847→Confidence
+   848→HIGH
+   849→
+   850→Verification
+   851→Create experiment
+   852→```
+   853→
+   854→The output must distinguish:
+   855→
+   856→```text
+   857→Evidence
+   858→Impact
+   859→Inference
+   860→Recommendation
+   861→Confidence
+   862→Verification
+   863→```
+   864→
+   865→No vague AI-generated statements should replace evidence.
+   866→
+   867→---
+   868→
+   869→# 16. EXPERIMENT ENGINE
+   870→
+   871→Validate:
+   872→
+   873→```text
+   874→Finding
+   875→ ↓
+   876→Recommendation
+   877→ ↓
+   878→Experiment
+   879→ ↓
+   880→Baseline
+   881→ ↓
+   882→Candidate
+   883→ ↓
+   884→Check
+   885→ ↓
+   886→Test
+   887→ ↓
+   888→Benchmark
+   889→ ↓
+   890→Compare
+   891→ ↓
+   892→Measurement
+   893→ ↓
+   894→Verification
+   895→```
+   896→
+   897→Each experiment must record:
+   898→
+   899→* ID
+   900→* repository
+   901→* commit
+   902→* baseline
+   903→* candidate
+   904→* environment
+   905→* toolchain
+   906→* commands
+   907→* tests
+   908→* benchmarks
+   909→* measurements
+   910→* result
+   911→* verification
+   912→
+   913→Never call an estimated improvement a measured improvement.
+   914→
+   915→Never call a measured improvement verified until verification actually occurred.
+   916→
+   917→---
+   918→
+   919→# 17. SAFE PATCHING
+   920→
+   921→Validate:
+   922→
+   923→```text
+   924→Finding
+   925→ ↓
+   926→Recommendation
+   927→ ↓
+   928→Patch Proposal
+   929→ ↓
+   930→Diff
+   931→ ↓
+   932→Developer Approval
+   933→ ↓
+   934→Sandbox
+   935→ ↓
+   936→cargo check
+   937→ ↓
+   938→cargo test
+   939→ ↓
+   940→benchmark
+   941→ ↓
+   942→comparison
+   943→```
+   944→
+   945→Requirements:
+   946→
+   947→* no silent modifications
+   948→* explicit developer approval
+   949→* reviewable diff
+   950→* isolated execution
+   951→* verification before claims
+   952→* rollback/recovery
+   953→
+   954→---
+   955→
+   956→# 18. AI ENGINEERING INTELLIGENCE
+   957→
+   958→Validate AI support for:
+   959→
+   960→* explaining findings
+   961→* repository questions
+   962→* dependency impact
+   963→* build bottlenecks
+   964→* architecture explanations
+   965→* investigation paths
+   966→* optimization ideas
+   967→* experiment explanations
+   968→* candidate patches
+   969→
+   970→Support pluggable providers where implemented:
+   971→
+   972→* OpenAI
+   973→* Anthropic
+   974→* Gemini
+   975→* local models
+   976→* enterprise providers
+   977→
+   978→AI must be optional.
+   979→
+   980→Test AI adversarially:
+   981→
+   982→* invent dependency
+   983→* fabricate file
+   984→* fabricate measurement
+   985→* contradict build data
+   986→* claim verification without experiment
+   987→* invent architecture violation
+   988→
+   989→Target:
+   990→
+   991→> 0 authoritative-evidence contradictions.
+   992→
+   993→AI responses must clearly distinguish:
+   994→
+   995→```text
+   996→FACT
+   997→INFERENCE
+   998→RECOMMENDATION
+   999→UNCERTAINTY
+  1000→```
+  1001→
+  1002→---
+  1003→
+  1004→# 19. ARCHITECTURE INTELLIGENCE
+  1005→
+  1006→Validate:
+  1007→
+  1008→* module coupling
+  1009→* dependency direction
+  1010→* circular dependencies
+  1011→* fan-in/fan-out
+  1012→* boundaries
+  1013→* unstable interfaces
+  1014→* oversized modules
+  1015→* change concentration
+  1016→* architecture drift
+  1017→* architecture rules
+  1018→
+  1019→Enforce architectural rules such as:
+  1020→
+  1021→```text
+  1022→Domain MUST NOT depend on infrastructure.
+  1023→
+  1024→Core MUST NOT depend on AI vendors.
+  1025→
+  1026→Core MUST NOT depend on cloud providers.
+  1027→
+  1028→Analysis MUST NOT depend on UI.
+  1029→
+  1030→Domain MUST NOT depend directly on database implementations.
+  1031→```
+  1032→
+  1033→Architecture boundaries must be CI-enforced.
+  1034→
+  1035→---
+  1036→
+  1037→# 20. RUNTIME INTELLIGENCE
+  1038→
+  1039→Where implemented, validate:
+  1040→
+  1041→* OpenTelemetry
+  1042→* metrics
+  1043→* traces
+  1044→* logs
+  1045→* profiling
+  1046→* runtime events
+  1047→
+  1048→Correlate:
+  1049→
+  1050→```text
+  1051→Service
+  1052→ ↓
+  1053→Binary
+  1054→ ↓
+  1055→Crate
+  1056→ ↓
+  1057→Module
+  1058→ ↓
+  1059→Git Commit
+  1060→ ↓
+  1061→Finding
+  1062→```
+  1063→
+  1064→Never claim causality where evidence does not support it.
+  1065→
+  1066→Represent uncertainty.
+  1067→
+  1068→---
+  1069→
+  1070→# 21. HISTORICAL INTELLIGENCE
+  1071→
+  1072→Validate:
+  1073→
+  1074→```text
+  1075→Commit
+  1076→ ↓
+  1077→Snapshot
+  1078→ ↓
+  1079→Build
+  1080→ ↓
+  1081→Findings
+  1082→ ↓
+  1083→Experiments
+  1084→ ↓
+  1085→Measurements
+  1086→```
+  1087→
+  1088→Support historical views for:
+  1089→
+  1090→* build trends
+  1091→* dependency trends
+  1092→* architecture drift
+  1093→* regressions
+  1094→* experiment history
+  1095→* findings history
+  1096→
+  1097→---
+  1098→
+  1099→# 22. SECURITY VALIDATION
+  1100→
+  1101→Perform a complete security audit.
+  1102→
+  1103→Validate:
+  1104→
+  1105→* authentication
+  1106→* authorization
+  1107→* tenant isolation
+  1108→* secrets handling
+  1109→* secret redaction
+  1110→* credential storage
+  1111→* encryption
+  1112→* TLS
+  1113→* local storage security
+  1114→* cloud storage
+  1115→* API security
+  1116→* dependency vulnerabilities
+  1117→* SBOM
+  1118→* SAST
+  1119→* supply-chain controls
+  1120→* signed releases
+  1121→* sandboxing
+  1122→* patch execution security
+  1123→* AI prompt/data boundaries
+  1124→* repository privacy
+  1125→
+  1126→Test known fixture secrets.
+  1127→
+  1128→Target:
+  1129→
+  1130→> 100% known fixture secrets redacted before cloud/AI transmission.
+  1131→
+  1132→Require:
+  1133→
+  1134→> 0 committed secrets.
+  1135→
+  1136→Require:
+  1137→
+  1138→> 0 unexpected source-code transmission in local-only mode.
+  1139→
+  1140→---
+  1141→
+  1142→# 23. PRIVACY
+  1143→
+  1144→Document exactly:
+  1145→
+  1146→* what data is collected
+  1147→* what remains local
+  1148→* what may be synchronized
+  1149→* what AI providers receive
+  1150→* when source code leaves the machine
+  1151→* how users disable synchronization
+  1152→* how users disable AI
+  1153→* retention policies
+  1154→* deletion behavior
+  1155→* organization controls
+  1156→
+  1157→Create an explicit:
+  1158→
+  1159→```text
+  1160→Privacy & Data Flow
+  1161→```
+  1162→
+  1163→document.
+  1164→
+  1165→---
+  1166→
+  1167→# 24. RELIABILITY & CHAOS VALIDATION
+  1168→
+  1169→Test:
+  1170→
+  1171→* compiler failure
+  1172→* Cargo failure
+  1173→* Git failure
+  1174→* disk full
+  1175→* cache corruption
+  1176→* daemon interruption
+  1177→* database interruption
+  1178→* network failure
+  1179→* cloud failure
+  1180→* AI provider failure
+  1181→* synchronization interruption
+  1182→* malformed repository
+  1183→* corrupted snapshot
+  1184→* interrupted experiment
+  1185→* interrupted patch execution
+  1186→
+  1187→The system must recover without corrupting authoritative state.
+  1188→
+  1189→Kill the daemon during:
+  1190→
+  1191→* writes
+  1192→* analysis
+  1193→* snapshot generation
+  1194→* graph construction
+  1195→* synchronization
+  1196→* experiments
+  1197→* cache operations
+  1198→
+  1199→After restart:
+  1200→
+  1201→```text
+  1202→SQLite integrity_check = PASS
+  1203→```
+  1204→
+  1205→---
+  1206→
+  1207→# 25. 24-HOUR DAEMON SOAK TEST
+  1208→
+  1209→Run a representative daemon for at least 24 hours.
+  1210→
+  1211→Monitor:
+  1212→
+  1213→* memory
+  1214→* CPU
+  1215→* disk
+  1216→* file descriptors
+  1217→* cache growth
+  1218→* database size
+  1219→* logs
+  1220→* event queues
+  1221→* analysis latency
+  1222→* error rate
+  1223→* recovery behavior
+  1224→
+  1225→Acceptance:
+  1226→
+  1227→* 0 crashes
+  1228→* 0 database corruption
+  1229→* 0 unrecoverable state transitions
+  1230→* bounded memory
+  1231→* bounded disk growth
+  1232→* successful recovery
+  1233→
+  1234→---
+  1235→
+  1236→# 26. PERFORMANCE VALIDATION
+  1237→
+  1238→Validate:
+  1239→
+  1240→* cold startup
+  1241→* warm startup
+  1242→* analysis
+  1243→* incremental analysis
+  1244→* doctor
+  1245→* graph queries
+  1246→* large repositories
+  1247→* concurrent operations
+  1248→
+  1249→Targets:
+  1250→
+  1251→```text
+  1252→p95 non-analysis CLI startup <150ms
+  1253→
+  1254→p95 warm localized incremental analysis <1s
+  1255→
+  1256→p95 medium-repository doctor <10s
+  1257→
+  1258→idle daemon <100MB RAM
+  1259→
+  1260→250-crate workspace <1GB RSS unless justified
+  1261→
+  1262→500+ crate synthetic repository completes without pathological memory growth/crash
+  1263→```
+  1264→
+  1265→Any regression greater than 10% must receive an investigation.
+  1266→
+  1267→---
+  1268→
+  1269→# 27. TEST MATRIX
+  1270→
+  1271→Maintain:
+  1272→
+  1273→### Unit
+  1274→
+  1275→Domain logic, parsers, analyzers, graph operations.
+  1276→
+  1277→### Integration
+  1278→
+  1279→Cross-component behavior.
+  1280→
+  1281→### Contract
+  1282→
+  1283→CLI/API/W-EIR/protobuf/event contracts.
+  1284→
+  1285→### Golden
+  1286→
+  1287→Stable expected outputs.
+  1288→
+  1289→### Fixture
+  1290→
+  1291→Realistic Rust repositories.
+  1292→
+  1293→### Performance
+  1294→
+  1295→Benchmarks and resource consumption.
+  1296→
+  1297→### Failure
+  1298→
+  1299→Failure injection.
+  1300→
+  1301→### Recovery
+  1302→
+  1303→Restart/recovery tests.
+  1304→
+  1305→### Security
+  1306→
+  1307→Threat and abuse tests.
+  1308→
+  1309→### E2E
+  1310→
+  1311→Full product workflow.
+  1312→
+  1313→Minimum fixtures:
+  1314→
+  1315→1. Single crate
+  1316→2. Workspace
+  1317→3. Large workspace
+  1318→4. Async-heavy
+  1319→5. Proc-macro-heavy
+  1320→6. Build-script-heavy
+  1321→7. Dependency-heavy
+  1322→8. Feature-heavy
+  1323→9. Architecture-problematic
+  1324→10. Clean baseline
+  1325→
+  1326→Also create:
+  1327→
+  1328→> ≥500-crate synthetic repository.
+  1329→
+  1330→Run the complete suite repeatedly.
+  1331→
+  1332→Target:
+  1333→
+  1334→> 100 consecutive full-suite runs with zero flaky failures.
+  1335→
+  1336→Any quarantined test requires:
+  1337→
+  1338→* owner
+  1339→* issue
+  1340→* reason
+  1341→* mitigation
+  1342→* expiry/review date
+  1343→
+  1344→---
+  1345→
+  1346→# 28. CLI VALIDATION
+  1347→
+  1348→Validate stable:
+  1349→
+  1350→```bash
+  1351→--help
+  1352→--version
+  1353→--json
+  1354→```
+  1355→
+  1356→Machine-readable JSON must have a documented schema.
+  1357→
+  1358→Document exit codes.
+  1359→
+  1360→Ensure scripts can reliably consume Wanyrix output.
+  1361→
+  1362→---
+  1363→
+  1364→# 29. STORAGE
+  1365→
+  1366→Validate local storage.
+  1367→
+  1368→Implement/verify:
+  1369→
+  1370→```bash
+  1371→wanyrix storage
+  1372→```
+  1373→
+  1374→It must expose:
+  1375→
+  1376→* storage usage
+  1377→* cache usage
+  1378→* logs
+  1379→* snapshots
+  1380→* cleanup
+  1381→* retention
+  1382→* corruption checks where appropriate
+  1383→
+  1384→Prevent unbounded:
+  1385→
+  1386→* cache
+  1387→* temporary files
+  1388→* logs
+  1389→* snapshots
+  1390→
+  1391→---
+  1392→
+  1393→# 30. FRONTEND PRODUCT VALIDATION
+  1394→
+  1395→Validate:
+  1396→
+  1397→* Overview
+  1398→* Repositories
+  1399→* Builds
+  1400→* Dependencies
+  1401→* Graph
+  1402→* Findings
+  1403→* Architecture
+  1404→* Experiments
+  1405→* Runtime
+  1406→* History
+  1407→* AI
+  1408→* Policies
+  1409→* Organization
+  1410→* Settings
+  1411→
+  1412→Repository overview should expose:
+  1413→
+  1414→* build health
+  1415→* critical path
+  1416→* top findings
+  1417→* dependency risk
+  1418→* architecture
+  1419→* recent changes
+  1420→* regressions
+  1421→* experiments
+  1422→* runtime
+  1423→
+  1424→Finding screen:
+  1425→
+  1426→* title
+  1427→* severity
+  1428→* confidence
+  1429→* evidence
+  1430→* impact
+  1431→* affected crates/modules
+  1432→* Git history
+  1433→* recommendation
+  1434→* create experiment
+  1435→* AI explanation
+  1436→
+  1437→Experiment screen:
+  1438→
+  1439→* baseline
+  1440→* candidate
+  1441→* tests
+  1442→* benchmark
+  1443→* measurement
+  1444→* verification
+  1445→* methodology
+  1446→
+  1447→The graph must answer engineering questions and not exist merely for visual appeal.
+  1448→
+  1449→---
+  1450→
+  1451→# 31. USER EXPERIENCE VALIDATION
+  1452→
+  1453→Recruit or simulate at least 10 Rust developers.
+  1454→
+  1455→Give them tasks such as:
+  1456→
+  1457→1. Install Wanyrix.
+  1458→2. Analyze a repository.
+  1459→3. Find the slowest build area.
+  1460→4. Understand why a crate rebuilds.
+  1461→5. Identify dependency impact.
+  1462→6. Investigate an architecture issue.
+  1463→7. Create an experiment.
+  1464→8. Verify an optimization.
+  1465→9. Work offline.
+  1466→10. Reconnect online.
+  1467→
+  1468→Measure:
+  1469→
+  1470→* completion rate
+  1471→* time to completion
+  1472→* errors
+  1473→* confusion
+  1474→* number of facilitator interventions
+  1475→* discoverability
+  1476→
+  1477→Target:
+  1478→
+  1479→> ≥70% task completion without facilitator.
+  1480→
+  1481→At least:
+  1482→
+  1483→> 7/10 users should independently articulate a concrete benefit.
+  1484→
+  1485→---
+  1486→
+  1487→# 32. INSTALLATION & DISTRIBUTION
+  1488→
+  1489→A new developer must be able to go from:
+  1490→
+  1491→```text
+  1492→"I found Wanyrix"
+  1493→```
+  1494→
+  1495→to:
+  1496→
+  1497→```text
+  1498→"I have useful engineering intelligence"
+  1499→```
+  1500→
+  1501→with minimal friction.
+  1502→
+  1503→Validate:
+  1504→
+  1505→* macOS
+  1506→* Linux
+  1507→* supported Windows path if implemented
+  1508→* clean machine
+  1509→* clean clone
+  1510→* package installation
+  1511→* binary installation
+  1512→* upgrades
+  1513→* uninstall
+  1514→* version compatibility
+  1515→
+  1516→Create a release process for:
+  1517→
+  1518→* binaries
+  1519→* checksums
+  1520→* signatures where supported
+  1521→* SBOM
+  1522→* version metadata
+  1523→
+  1524→---
+  1525→
+  1526→# 33. README REBUILD
+  1527→
+  1528→Do not merely append to the existing README.
+  1529→
+  1530→Rewrite it into a polished product README.
+  1531→
+  1532→It must clearly explain:
+  1533→
+  1534→### What Wanyrix is
+  1535→
+  1536→### Why it exists
+  1537→
+  1538→### Who it is for
+  1539→
+  1540→### What problems it solves
+  1541→
+  1542→### How it works
+  1543→
+  1544→### Offline mode
+  1545→
+  1546→### Online mode
+  1547→
+  1548→### Core architecture
+  1549→
+  1550→### Installation
+  1551→
+  1552→### Quick start
+  1553→
+  1554→### First analysis
+  1555→
+  1556→### `wanyrix doctor`
+  1557→
+  1558→### Findings
+  1559→
+  1560→### Experiments
+  1561→
+  1562→### AI
+  1563→
+  1564→### Security/privacy
+  1565→
+  1566→### Cloud
+  1567→
+  1568→### CLI reference
+  1569→
+  1570→### Example output
+  1571→
+  1572→### Development
+  1573→
+  1574→### Contribution
+  1575→
+  1576→### Roadmap
+  1577→
+  1578→### Commercial model
+  1579→
+  1580→### License
+  1581→
+  1582→The README should be understandable to both:
+  1583→
+  1584→* senior engineers
+  1585→* potential customers/investors
+  1586→
+  1587→Avoid marketing claims that cannot be demonstrated.
+  1588→
+  1589→---
+  1590→
+  1591→# 34. CREATE A COMPLETE USER GUIDE
+  1592→
+  1593→Create:
+  1594→
+  1595→```text
+  1596→docs/USER_GUIDE.md
+  1597→```
+  1598→
+  1599→Cover:
+  1600→
+  1601→1. Installation
+  1602→2. Requirements
+  1603→3. First repository
+  1604→4. `wanyrix init`
+  1605→5. Repository discovery
+  1606→6. `wanyrix analyze`
+  1607→7. `wanyrix doctor`
+  1608→8. Findings
+  1609→9. Dependencies
+  1610→10. Engineering graph
+  1611→11. Build intelligence
+  1612→12. Incremental analysis
+  1613→13. Experiments
+  1614→14. Verification
+  1615→15. Safe patches
+  1616→16. AI
+  1617→17. Offline mode
+  1618→18. Online mode
+  1619→19. Synchronization
+  1620→20. Storage
+  1621→21. Configuration
+  1622→22. Security
+  1623→23. Privacy
+  1624→24. Troubleshooting
+  1625→25. CLI reference
+  1626→26. Performance
+  1627→27. FAQ
+  1628→
+  1629→A developer should be able to use Wanyrix without contacting the engineering team.
+  1630→
+  1631→---
+  1632→
+  1633→# 35. CREATE DOCUMENTATION SET
+  1634→
+  1635→Ensure these exist and are accurate:
+  1636→
+  1637→```text
+  1638→README.md
+  1639→ARCHITECTURE.md
+  1640→DEVELOPMENT.md
+  1641→CONTRIBUTING.md
+  1642→SECURITY.md
+  1643→THREAT_MODEL.md
+  1644→W-EIR.md
+  1645→CLI.md
+  1646→PERFORMANCE.md
+  1647→PLUGIN_API.md
+  1648→USER_GUIDE.md
+  1649→PRIVACY.md
+  1650→DATA_FLOW.md
+  1651→OPERATIONS.md
+  1652→RELEASE.md
+  1653→COMMERCIAL.md
+  1654→```
+  1655→
+  1656→Documentation must match the implementation.
+  1657→
+  1658→---
+  1659→
+  1660→# 36. COMMERCIAL PRODUCT MODEL
+  1661→
+  1662→Design a commercially viable pricing model.
+  1663→
+  1664→Wanyrix should have a generous:
+  1665→
+  1666→# 90-DAY FREE TRIAL
+  1667→
+  1668→The goal is to let engineering teams experience meaningful value before paying.
+  1669→
+  1670→Do not design pricing merely around API calls.
+  1671→
+  1672→Price around customer value and usage.
+  1673→
+  1674→Propose and implement the commercial model conceptually as:
+  1675→
+  1676→## Free Trial — 90 Days
+  1677→
+  1678→Suitable for:
+  1679→
+  1680→* individual developers
+  1681→* evaluation teams
+  1682→* hackathons
+  1683→* open-source projects
+  1684→* proof of concept
+  1685→
+  1686→Potential limits:
+  1687→
+  1688→* limited cloud storage
+  1689→* limited historical retention
+  1690→* limited team members
+  1691→* limited cloud AI usage
+  1692→* limited repositories
+  1693→
+  1694→Core local/offline functionality should remain usable without requiring payment.
+  1695→
+  1696→---
+  1697→
+  1698→## Developer / Individual
+  1699→
+  1700→For individual engineers who want persistent cloud history and advanced capabilities.
+  1701→
+  1702→Possible capabilities:
+  1703→
+  1704→* unlimited local analysis
+  1705→* cloud history
+  1706→* advanced findings
+  1707→* experiments
+  1708→* AI allowance
+  1709→* repository history
+  1710→* enhanced analytics
+  1711→
+  1712→---
+  1713→
+  1714→## Team
+  1715→
+  1716→For engineering teams.
+  1717→
+  1718→Capabilities:
+  1719→
+  1720→* multiple developers
+  1721→* shared repositories
+  1722→* team dashboards
+  1723→* organization policies
+  1724→* shared findings
+  1725→* historical intelligence
+  1726→* team analytics
+  1727→* increased AI allowance
+  1728→* centralized administration
+  1729→* audit logs
+  1730→
+  1731→---
+  1732→
+  1733→## Business / Enterprise
+  1734→
+  1735→For organizations with advanced requirements.
+  1736→
+  1737→Capabilities:
+  1738→
+  1739→* SSO/SAML/OIDC
+  1740→* SCIM
+  1741→* private deployment
+  1742→* enterprise policies
+  1743→* advanced security
+  1744→* audit controls
+  1745→* custom retention
+  1746→* private AI models/providers
+  1747→* dedicated infrastructure
+  1748→* fleet intelligence
+  1749→* advanced integrations
+  1750→* SLA/support
+  1751→
+  1752→---
+  1753→
+  1754→# 37. PRICING EXPERIMENTATION
+  1755→
+  1756→Do not hard-code pricing prematurely.
+  1757→
+  1758→Create a pricing model abstraction supporting:
+  1759→
+  1760→```text
+  1761→Plan
+  1762→Features
+  1763→Limits
+  1764→Usage
+  1765→Seats
+  1766→Repositories
+  1767→AI allowance
+  1768→Storage
+  1769→Retention
+  1770→Organization features
+  1771→Enterprise capabilities
+  1772→```
+  1773→
+  1774→Pricing should be configurable.
+  1775→
+  1776→Support future pricing experiments without rewriting the billing architecture.
+  1777→
+  1778→Document:
+  1779→
+  1780→* trial rules
+  1781→* conversion
+  1782→* limits
+  1783→* overages
+  1784→* cancellation
+  1785→* upgrades
+  1786→* downgrades
+  1787→* billing periods
+  1788→* data retention
+  1789→* trial expiration behavior
+  1790→
+  1791→Do not allow billing logic to affect local deterministic engineering functionality.
+  1792→
+  1793→---
+  1794→
+  1795→# 38. PRODUCT PACKAGING
+  1796→
+  1797→Define clearly:
+  1798→
+  1799→### Wanyrix Local
+  1800→
+  1801→Free/local-first engineering intelligence.
+  1802→
+  1803→### Wanyrix Cloud
+  1804→
+  1805→Cloud history, collaboration, analytics and AI.
+  1806→
+  1807→### Wanyrix Team
+  1808→
+  1809→Team engineering intelligence.
+  1810→
+  1811→### Wanyrix Enterprise
+  1812→
+  1813→Enterprise security, deployment and governance.
+  1814→
+  1815→Do not artificially cripple core engineering analysis simply to force cloud adoption.
+  1816→
+  1817→The commercial value should come from:
+  1818→
+  1819→* collaboration
+  1820→* persistence
+  1821→* history
+  1822→* analytics
+  1823→* governance
+  1824→* automation
+  1825→* fleet intelligence
+  1826→* enterprise controls
+  1827→* advanced AI
+  1828→* hosted infrastructure
+  1829→
+  1830→---
+  1831→
+  1832→# 39. BILLING ARCHITECTURE
+  1833→
+  1834→If billing is already implemented, audit it.
+  1835→
+  1836→If not implemented, create the appropriate architecture and issues without destabilizing the local core.
+  1837→
+  1838→Potential model:
+  1839→
+  1840→```text
+  1841→Organization
+  1842→ ↓
+  1843→Subscription
+  1844→ ↓
+  1845→Plan
+  1846→ ↓
+  1847→Entitlements
+  1848→ ↓
+  1849→Usage
+  1850→ ↓
+  1851→Limits
+  1852→ ↓
+  1853→Billing
+  1854→ ↓
+  1855→Invoices
+  1856→ ↓
+  1857→Payment
+  1858→ ↓
+  1859→Audit
+  1860→```
+  1861→
+  1862→Requirements:
+  1863→
+  1864→* idempotent billing events
+  1865→* immutable billing records
+  1866→* audit trail
+  1867→* safe retries
+  1868→* no double charging
+  1869→* timezone-safe periods
+  1870→* trial state machine
+  1871→* subscription state machine
+  1872→* entitlement enforcement
+  1873→* grace periods
+  1874→* cancellation
+  1875→* renewal
+  1876→
+  1877→Never allow billing failures to corrupt engineering data.
+  1878→
+  1879→---
+  1880→
+  1881→# 40. CLOUD ARCHITECTURE VALIDATION
+  1882→
+  1883→Cloud should support:
+  1884→
+  1885→* organizations
+  1886→* users
+  1887→* repositories
+  1888→* snapshots
+  1889→* history
+  1890→* analytics
+  1891→* AI orchestration
+  1892→* policies
+  1893→* fleet intelligence
+  1894→* audit
+  1895→
+  1896→Potential architecture:
+  1897→
+  1898→```text
+  1899→Next.js
+  1900→ ↓
+  1901→API
+  1902→ ↓
+  1903→Go Control Plane
+  1904→ ↓
+  1905→PostgreSQL
+  1906→ ↓
+  1907→NATS JetStream
+  1908→ ↓
+  1909→Workers / Temporal
+  1910→ ↓
+  1911→ClickHouse
+  1912→ ↓
+  1913→S3
+  1914→```
+  1915→
+  1916→Local remains:
+  1917→
+  1918→```text
+  1919→Rust CLI
+  1920→ ↓
+  1921→Rust Daemon
+  1922→ ↓
+  1923→Rust Engine
+  1924→ ↓
+  1925→SQLite
+  1926→```
+  1927→
+  1928→Do not introduce cloud dependencies into the deterministic Rust core.
+  1929→
+  1930→---
+  1931→
+  1932→# 41. EVENT ARCHITECTURE
+  1933→
+  1934→Validate versioned events:
+  1935→
+  1936→```text
+  1937→RepositoryDiscovered
+  1938→AnalysisStarted
+  1939→AnalysisCompleted
+  1940→SnapshotCreated
+  1941→BuildObserved
+  1942→FindingCreated
+  1943→ExperimentStarted
+  1944→ExperimentCompleted
+  1945→MeasurementRecorded
+  1946→```
+  1947→
+  1948→Requirements:
+  1949→
+  1950→* versioned schemas
+  1951→* validation
+  1952→* traceability
+  1953→* idempotency
+  1954→* compatibility
+  1955→* replayability
+  1956→
+  1957→Use NATS JetStream for durable asynchronous event processing where appropriate.
+  1958→
+  1959→Use Temporal for genuinely long-running workflows such as:
+  1960→
+  1961→* large repository analysis
+  1962→* historical indexing
+  1963→* experiment execution
+  1964→* fleet analysis
+  1965→* AI workflows
+  1966→* synchronization
+  1967→
+  1968→Do not use Temporal for trivial local operations.
+  1969→
+  1970→---
+  1971→
+  1972→# 42. OBSERVABILITY
+  1973→
+  1974→Validate:
+  1975→
+  1976→* OpenTelemetry
+  1977→* metrics
+  1978→* traces
+  1979→* structured logs
+  1980→* correlation IDs
+  1981→* error tracking
+  1982→* health checks
+  1983→
+  1984→Never expose sensitive repository contents through telemetry by default.
+  1985→
+  1986→Telemetry should make every major analysis job traceable.
+  1987→
+  1988→---
+  1989→
+  1990→# 43. PLUGIN ARCHITECTURE
+  1991→
+  1992→Validate stable boundaries for:
+  1993→
+  1994→* Analyzer
+  1995→* Collector
+  1996→* Formatter
+  1997→* RuntimeAdapter
+  1998→* AIProvider
+  1999→* CIProvider
+  2000→* RepositoryProvider
+
+[showing lines 1-2000 of 2698; use offset=2001 with limit to continue reading]
