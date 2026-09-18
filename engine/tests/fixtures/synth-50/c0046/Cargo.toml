@@ -1,0 +1,9 @@
+# Synthetic crate c0046 (index 46 of 50, seed 7) — wanyrix synth fixture.
+[package]
+name = "c0046"
+version = "0.1.0"
+# license and description intentionally omitted (doctor findings fixture)
+
+[dependencies]
+c0014 = { path = "../c0014" }
+c0020 = { path = "../c0020" }

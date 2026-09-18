@@ -1,0 +1,11 @@
+# Synthetic crate c0018 (index 18 of 50, seed 7) — wanyrix synth fixture.
+[package]
+name = "c0018"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+description = "Synthetic dependency-DAG fixture crate c0018 (seed 7)"
+
+[dependencies]
+c0004 = { path = "../c0004" }
+c0010 = { path = "../c0010" }
+c0017 = { path = "../c0017" }

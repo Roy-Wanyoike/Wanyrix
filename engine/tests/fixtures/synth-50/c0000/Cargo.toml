@@ -1,0 +1,5 @@
+# Synthetic crate c0000 (index 0 of 50, seed 7) — wanyrix synth fixture.
+[package]
+name = "c0000"
+version = "0.1.0"
+# license and description intentionally omitted (doctor findings fixture)

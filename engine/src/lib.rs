@@ -6,6 +6,12 @@
 //! flavors — `wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1` —
 //! all computed from that single measured source.
 //!
+//! Phase-2 slice (GitHub issue #58): [`store`] persists exactly what
+//! `doctor --json` measured into a WAL-backed SQLite database (two-phase
+//! commit + `fsck` for crash detection), and [`synth`] generates
+//! deterministic synthetic workspaces so scale claims can be measured, not
+//! asserted.
+//!
 //! # Honesty contract (the product's core identity — Gate 21 / Gate 7)
 //!
 //! 1. Everything emitted is MEASURED from the real filesystem. Nothing is
@@ -28,6 +34,8 @@
 //! - [`graph`] — graph aggregates + Tarjan SCC (single edge source)
 //! - [`health`] — KPI summary derived from doctor + graph
 //! - [`report`] — the three versioned JSON envelopes
+//! - [`store`] — SQLite persistence for doctor scans (WAL, crash-tested)
+//! - [`synth`] — deterministic synthetic workspace generator (fixtures)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
 pub mod analysis;
@@ -39,6 +47,8 @@ pub mod model;
 pub mod pathutil;
 pub mod report;
 pub mod scan;
+pub mod store;
+pub mod synth;
 pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
@@ -46,6 +56,8 @@ pub use graph::{Graph, GraphEdge, GraphNode};
 pub use model::{Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan};
 pub use report::{DoctorReport, GraphReport, HealthReport};
 pub use scan::scan_workspace;
+pub use store::{ScanRow, SaveOutcome, STORE_SCHEMA_VERSION};
+pub use synth::{SynthOutcome, SynthPlan, DEFAULT_SEED, MAX_CRATES};
 
 #[cfg(test)]
 mod tests {

@@ -56,5 +56,7 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
                 Ok(cli::human_summary("health", &scan, &findings))
             }
         }
+        Command::Store { cmd } => cli::store_run(cmd),
+        Command::Synth { crates, out, seed } => cli::synth_run(crates, &out, seed),
     }
 }

@@ -92,12 +92,20 @@ tests drive the exact CLI code path through the library API. No `unwrap`
 on user-input paths; serialization errors surface as exit code 2, never a
 silent `{}`.
 
-## Roadmap (explicitly NOT built yet)
+## Roadmap
 
+**Built (v0.2.0):**
+- `wanyrix doctor|graph|health` — measured filesystem analysis (v0.1.0)
+- `wanyrix synth` — deterministic synthetic-workspace generator (`--crates N --seed S`;
+  same seed ⇒ byte-identical tree; every artifact is synthetic, never presented as measured)
+- `wanyrix store` — SQLite persistence (WAL, two-phase commit order scans→findings,
+  `fsck` detects/repairs kill-between-commits orphans). Measured timings in
+  [`BENCHMARKS.md`](BENCHMARKS.md).
+
+**Explicitly NOT built yet:**
 - **Build telemetry** — measured dev/CI build times, cache hit rates,
   critical path with real seconds (requires instrumented `cargo` runs).
 - **Daemon / server mode** — persistent scans, API serving the web payloads.
-- **SQLite persistence** — scan history, trends, change frequency from VCS.
 - **Experiment runner** — before/after benchmark verification (the only
   path by which a claim may ever become `verified`).
 - **PR regression analysis, runtime telemetry, AI explain integration.**

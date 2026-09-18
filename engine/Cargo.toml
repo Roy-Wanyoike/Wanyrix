@@ -1,6 +1,6 @@
 [package]
 name = "wanyrix-engine"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Wanyrix engineering-intelligence engine — filesystem-measured doctor/graph/health analysis for Rust workspaces (honesty-first: measured vs estimated is never conflated)."
 license = "MIT OR Apache-2.0"
@@ -9,12 +9,17 @@ license = "MIT OR Apache-2.0"
 name = "wanyrix"
 path = "src/main.rs"
 
-# Dependency policy (engine v1): minimal by design — no daemon, no SQLite, no
+# Dependency policy (engine phase-2): minimal by design — no daemon, no
 # telemetry, no network calls anywhere. `toml` is required to parse real
 # Cargo.toml manifests faithfully (inline tables, [[bin]], inheritance);
-# hand-rolling TOML would trade correctness for a smaller tree.
+# hand-rolling TOML would trade correctness for a smaller tree. `rusqlite`
+# (bundled — the C SQLite is compiled from source into the binary, so no
+# system library is ever probed) is required for local scan persistence;
+# it touches no network and stores only what `wanyrix doctor --json`
+# already measured.
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.9"

@@ -176,6 +176,13 @@ pub enum EngineError {
     /// envelope types (no non-string keys, no floats), but handled honestly
     /// instead of panicking or silently emitting `{}`.
     Json(String),
+    /// The local SQLite scan store rejected an operation: a malformed or
+    /// self-inconsistent doctor payload, or a storage I/O error. The
+    /// rusqlite message is preserved verbatim — never swallowed.
+    Store(String),
+    /// The synthetic-workspace generator was asked for something outside
+    /// its documented operating range (e.g. a crate count above the cap).
+    Synth(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -189,6 +196,8 @@ impl std::fmt::Display for EngineError {
             }
             EngineError::Io(e) => write!(f, "filesystem error: {e}"),
             EngineError::Json(e) => write!(f, "report serialization error: {e}"),
+            EngineError::Store(e) => write!(f, "scan store error: {e}"),
+            EngineError::Synth(e) => write!(f, "synthetic workspace error: {e}"),
         }
     }
 }
