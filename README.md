@@ -1,5 +1,7 @@
 # Wanyrix — Engineering Intelligence Platform
 
+[![CI](https://github.com/Roy-Wanyoike/wanyrix/actions/workflows/ci.yml/badge.svg)](https://github.com/Roy-Wanyoike/wanyrix/actions/workflows/ci.yml)
+
 > Rust made software safer. Wanyrix makes Rust development easier to understand and operate.
 
 Wanyrix continuously understands a Rust workspace and explains **why development is slow,
