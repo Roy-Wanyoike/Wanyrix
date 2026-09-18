@@ -1,0 +1,8 @@
+[package]
+name = "alpha"
+version = "0.1.0"
+license = "MIT"
+description = "Fixture leaf library with complete package metadata."
+
+[lib]
+path = "src/lib.rs"

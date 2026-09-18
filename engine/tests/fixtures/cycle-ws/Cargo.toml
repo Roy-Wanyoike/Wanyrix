@@ -1,0 +1,11 @@
+# cycle-ws — 2-cycle fixture for wanyrix engine conformance tests.
+# Expected measured findings (exactly 4):
+#   FER-ENG-005-ping  (critical — hard dependency cycle ping ↔ pong)
+#   FER-ENG-003-ping  (warning — path-only normal dep without version)
+#   FER-ENG-003-pong  (warning — path-only normal dep without version)
+#   FER-ENG-006-deva  (info — dev-only cycle deva ↔ devb, legal in cargo;
+#                      dev path-deps get no FER-ENG-003 because cargo strips
+#                      path-only dev-dependencies when packaging/publishing)
+# The graph must still render without hanging (closures are visited-set based).
+[workspace]
+members = ["ping", "pong", "deva", "devb"]

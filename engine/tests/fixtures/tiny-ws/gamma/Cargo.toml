@@ -1,0 +1,5 @@
+# gamma intentionally omits BOTH `license` and `description` (FER-ENG-001/002).
+# It is a bin crate (src/main.rs) so the graph carries a `bin` band node.
+[package]
+name = "gamma"
+version = "0.1.0"

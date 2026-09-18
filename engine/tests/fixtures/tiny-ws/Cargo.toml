@@ -1,0 +1,9 @@
+# tiny-ws — 3-crate fixture for wanyrix engine conformance tests.
+# Virtual workspace (no root package): the workspace name is derived from
+# the directory. Expected measured findings (exactly 4, all warnings):
+#   FER-ENG-001-gamma  (no license)
+#   FER-ENG-002-gamma  (no description)
+#   FER-ENG-003-beta   (path-only intra-workspace dep, no version)
+#   FER-ENG-004-beta-log (log declared in [dependencies] AND [dev-dependencies])
+[workspace]
+members = ["alpha", "beta", "gamma"]

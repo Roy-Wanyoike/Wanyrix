@@ -1,0 +1,15 @@
+# beta intentionally:
+#  - depends on alpha via path WITHOUT a version (FER-ENG-003)
+#  - declares `log` in BOTH [dependencies] and [dev-dependencies] (FER-ENG-004)
+[package]
+name = "beta"
+version = "0.1.0"
+license = "Apache-2.0"
+description = "Fixture middle crate with a path dependency."
+
+[dependencies]
+alpha = { path = "../alpha" }
+log = "0.4"
+
+[dev-dependencies]
+log = "0.4"

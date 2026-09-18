@@ -1,0 +1,20 @@
+[package]
+name = "wanyrix-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Wanyrix engineering-intelligence engine — filesystem-measured doctor/graph/health analysis for Rust workspaces (honesty-first: measured vs estimated is never conflated)."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "wanyrix"
+path = "src/main.rs"
+
+# Dependency policy (engine v1): minimal by design — no daemon, no SQLite, no
+# telemetry, no network calls anywhere. `toml` is required to parse real
+# Cargo.toml manifests faithfully (inline tables, [[bin]], inheritance);
+# hand-rolling TOML would trade correctness for a smaller tree.
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
