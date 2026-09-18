@@ -105,3 +105,30 @@ above.
 `docs/audits/issues/` (registry + 10 records) · `docs/audits/GITHUB_ACTIONS_REQUIRED.md` ·
 `docs/migrations/FERRIX_TO_WANYRIX.md` (+ §8 correction) · `scripts/check-branding.sh` ·
 `src/lib/wanyrix/legacy-migration.ts` + store fixes · worklog entries.
+
+---
+
+## 7. Addendum — Production validation round (2026-09-18, `pending-task.md` dispatched)
+
+Agent teams executed the production-validation phase; verdict changes from §2:
+
+| §2 item | Was | Now | Evidence |
+| --- | --- | --- | --- |
+| 9 · 14-item navigation | FAIL | **PASS** | 18-item grouped IA (14 required + 4 legacy extras), browser-verified desktop+390px, zero console errors (Task 2-b) |
+| 10 · Automated tests | FAIL | **PASS** | `bun test` harness — 138 tests / 2,871 assertions green; unit (migration/stores/fixtures/patch/intent/explain-grounding) + live API contract suites (Task 2-a/2-d/2-e) |
+| 11 · Documentation | PARTIAL | **PASS (scoped)** | README rebuilt (§33) + `docs/USER_GUIDE.md` (§34) + ARCHITECTURE/PRIVACY/COMMERCIAL (§23/§54); doc-vs-code discrepancies reconciled (Task 2-d) |
+| 15 · Performance evidence | PARTIAL | **PASS (scoped)** | API p95 single-digit ms in dev.log; explain 413 guard <10 ms; contract stress suite in tests |
+
+**Engineer-persona QA (§31-style simulation, 8 workflows):** REST/JSON personas (CI-bot,
+pipeline engineer, impact analyst, contract stress) + UI personas (build-performance
+engineer, dependency owner, first-time evaluator). 10 defects found → all fixed and
+verified in-round (registry §"Production-validation round"): 3× P2 (workspace-id
+guard, graph honest-math, AI fact-line corruption), 5× P3, 2× P4. Integrity highlights:
+zero false Verified claims anywhere; report flavors byte-deterministic; adversarial AI
+prompt live-demoed being redacted; honesty badges now AA in both themes.
+
+**Remaining open (non-blocking, honest):** AUDIT-I5 (GitHub sync — needs human
+credentials), AUDIT-I8 (Rust engine — different repo), AUDIT-I9 (P4 dev-infra),
+AUDIT-I10 (P4 traceability). **Release decision per §51: CONDITIONAL GO** — web
+platform is production-credible and issue-free at every P0–P3; the GO hinges only on
+the human GitHub step (I5) and the engine repo (I8), both outside this codebase.

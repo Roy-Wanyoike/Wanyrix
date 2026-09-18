@@ -389,6 +389,17 @@ function renderGroundedFallback(kind: string, grounding: Grounding): string {
 
 /* ------------------------------------------------------------- route ------ */
 
+/**
+ * ENG-TE-1: explicit GET handler so the 405 carries a machine-usable `Allow`
+ * header (the framework-generated 405 for unexported methods omits it).
+ */
+export async function GET() {
+  return NextResponse.json(
+    { ok: false, error: 'method not allowed: the explain route is POST-only' },
+    { status: 405, headers: { Allow: 'POST' } },
+  )
+}
+
 export async function POST(req: NextRequest) {
   // ENG-TCA-7: reject oversized payloads BEFORE parsing/provider work.
   // Next.js route handlers impose no default body limit, so this is the guard.

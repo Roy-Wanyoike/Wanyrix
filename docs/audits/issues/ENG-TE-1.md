@@ -1,6 +1,7 @@
 # ENG-TE-1 — `explain` route's framework-generated 405 carries no `Allow` header (RFC 9110 §10.2.2)
 
-**Type:** CONTRACT_HYGIENE (single residual from the ENG-TCA-6a sweep) · **Severity:** P4 · **Status:** Open
+**Type:** CONTRACT_HYGIENE (single residual from the ENG-TCA-6a sweep) · **Severity:** P4 · **Status:** FIXED — verified (orchestrator)
+**Verification addendum (2026-09-18):** explicit `GET` handler added in `src/app/api/wanyrix/explain/route.ts` returning 405 JSON `{ ok:false, error }` with `Allow: POST`. Live: `curl -i GET /api/wanyrix/explain` → `HTTP/1.1 405` + `allow: POST` + `content-type: application/json`. Contract tests still green (138 pass).
 **Labels:** `api`, `contract`, `sdk-persona`, `task-2-e`
 
 ## 1. Problem
