@@ -10,7 +10,13 @@
 #
 # Whitelisted (intentional legacy mentions, skipped with exit 0):
 #   docs/migrations/, docs/audits/, worklog.md, README.md,
-#   src/lib/wanyrix/legacy-migration.ts, scripts/check-branding.sh
+#   src/lib/wanyrix/legacy-migration.ts, scripts/check-branding.sh,
+#   tests/unit/legacy-migration.test.ts (AUDIT-I1 regression test — asserts the
+#     legacy-key migration itself),
+#   docs/PRIVACY.md, docs/ARCHITECTURE.md, docs/USER_GUIDE.md (document the
+#     controlled ferrix.* → wanyrix.* storage-migration protocol),
+#   src/components/wanyrix/views/settings-view.tsx (live migration-status panel
+#     in Settings — surfaces the migration honestly to users).
 #
 # Usage: bash scripts/check-branding.sh   (prints PASS / violations; exit 0 / 1)
 
@@ -52,7 +58,7 @@ while IFS= read -r path; do
   path="${path#./}"
 
   case "$path" in
-    docs/migrations/*|docs/audits/*|worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh)
+    docs/migrations/*|docs/audits/*|worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh|tests/unit/legacy-migration.test.ts|docs/PRIVACY.md|docs/ARCHITECTURE.md|docs/USER_GUIDE.md|src/components/wanyrix/views/settings-view.tsx)
       # Intentional legacy references — skip.
       continue
       ;;
