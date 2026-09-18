@@ -9,8 +9,10 @@
  *                            · 404 unknown `target`
  *   - /api/wanyrix/explain → 400 without `context`+`question` · 400 unknown
  *     `kind` (ENG-TCA-6c) · 405 on GET
- *   - /api/wanyrix/report  → 400 unknown `format` · markdown envelope carries
- *     `schema: wanyrix.markdown/v1` (ENG-TCA-6d)
+ *   - /api/wanyrix/report  → 400 unknown `format`/`flavor` · markdown envelope carries
+ *     `schema: wanyrix.markdown/v1` (ENG-TCA-6d) · `flavor=scorecard|scan-history`
+ *     serves the two machine flavors over HTTP (ENG-TCA-2)
+ *   - /graph aggregates reconcile with the served edges over HTTP (ENG-TCA-3)
  *   - 405 responses carry an `Allow` header (ENG-TCA-6a)
  * Workspace ids are discovered from /api/wanyrix/workspaces — never hardcoded
  * blind. If the server is unreachable the suite skips with a clear message
@@ -287,6 +289,146 @@ describeServer('Wanyrix API — storage & report flavors', () => {
   })
 })
 
+describeServer('Wanyrix API — machine flavors over HTTP (ENG-TCA-2)', () => {
+  test(`report?flavor=scorecard&ws=${PRIMARY_ID} → wanyrix.release-scorecard/v1 envelope`, async () => {
+    const res = await fetchJson(`/api/wanyrix/report?flavor=scorecard&ws=${encodeURIComponent(PRIMARY_ID)}`)
+    expect(res.status).toBe(200)
+    expectJson(res)
+    const body = res.body as {
+      filename: string
+      bytes: number
+      json: {
+        schema: string
+        generatedAt: string
+        release: string
+        verdict: string
+        rationale: string
+        gates: { id: number; name: string; target: string; measured: string; status: string; blocking: boolean }[]
+        blockingConditions: { condition: string; clear: boolean; note: string }[]
+      }
+    }
+    expect(body.json.schema).toBe('wanyrix.release-scorecard/v1')
+    expect(body.json.release.length).toBeGreaterThan(0)
+    expect(new Date(body.json.generatedAt).toISOString()).toBe(body.json.generatedAt)
+    expect(['GO', 'CONDITIONAL GO', 'NO-GO']).toContain(body.json.verdict)
+    expect(body.json.gates.length).toBeGreaterThan(0)
+    // same fixture the /gates route serves — one source, no flavor drift
+    const gatesRes = await fetchJson('/api/wanyrix/gates')
+    const gatesBody = gatesRes.body as {
+      gates: typeof body.json.gates
+      blockingConditions: typeof body.json.blockingConditions
+    }
+    expect(body.json.gates).toEqual(gatesBody.gates)
+    expect(body.json.blockingConditions).toEqual(gatesBody.blockingConditions)
+    // download parity with the client exporter
+    expect(body.filename).toBe(`wanyrix-scorecard-${body.json.release}.json`)
+    expect(body.bytes).toBeGreaterThan(0)
+  })
+
+  test(`report?flavor=scan-history&ws=${PRIMARY_ID} → wanyrix.scan-history/v1 envelope (honest empty server log)`, async () => {
+    for (const ws of WS_IDS) {
+      const res = await fetchJson(`/api/wanyrix/report?flavor=scan-history&ws=${encodeURIComponent(ws)}`)
+      expect(res.status).toBe(200)
+      expectJson(res)
+      const body = res.body as {
+        filename: string
+        bytes: number
+        json: { schema: string; workspace: string; exportedAt: string; note: string; runs: unknown[] }
+      }
+      expect(body.json.schema).toBe('wanyrix.scan-history/v1')
+      expect(body.json.workspace).toBe(ws)
+      expect(new Date(body.json.exportedAt).toISOString()).toBe(body.json.exportedAt)
+      expect(Array.isArray(body.json.runs)).toBe(true)
+      // server-side log is empty in this demo — and the response says so
+      // (runs are a client-side localStorage log; nothing is fabricated)
+      expect(body.json.runs.length).toBe(0)
+      expect(body.json.note.toLowerCase()).toContain('empty')
+      expect(body.filename).toMatch(new RegExp(`^${ws}-scan-history-.+\\.json$`))
+      expect(body.bytes).toBeGreaterThan(0)
+    }
+  })
+
+  test('unknown flavor → 400 JSON error (by design); default report flavor unchanged', async () => {
+    const bad = await fetchJson(`/api/wanyrix/report?flavor=yaml`)
+    expect(bad.status).toBe(400)
+    expectJson(bad)
+    expect((bad.body as { error: string }).error).toContain("unknown flavor 'yaml'")
+
+    // the pre-existing default flavor is untouched by the new param
+    const def = await fetchJson(`/api/wanyrix/report?ws=${encodeURIComponent(PRIMARY_ID)}`)
+    expect(def.status).toBe(200)
+    expect((def.body as { schema?: string }).schema).toBe('wanyrix.markdown/v1')
+  })
+})
+
+describeServer('Wanyrix API — graph aggregates reconcile with served edges over HTTP (ENG-TCA-3)', () => {
+  // The golden property from the QA cross-check script, run against the LIVE
+  // HTTP payloads (not just the fixture builders): every downstream/blast/
+  // degree claim inside a served /graph payload recomputes from its own edges.
+  for (const ws of WS_IDS) {
+    test(`[${ws}] closures + degrees recomputed from served edges match served aggregates`, async () => {
+      const res = await fetchJson(`/api/wanyrix/graph?ws=${encodeURIComponent(ws)}`)
+      expect(res.status).toBe(200)
+      const graph = res.body as {
+        nodes: { id: string; kind: string; fanIn: number; fanOut: number; downstream: number }[]
+        edges: { from: string; to: string }[]
+        duplicates: { name: string; dependents: string[] }[]
+        blast: { crate: string; affectedWorkspace: number }[]
+        meta: { workspaceCrates: number; servedNodes: number; servedEdges: number }
+      }
+
+      const kindOf = new Map(graph.nodes.map((n) => [n.id, n.kind]))
+      const inDeg = new Map<string, number>()
+      const outDeg = new Map<string, number>()
+      const dependents = new Map<string, string[]>(graph.nodes.map((n) => [n.id, []]))
+      for (const n of graph.nodes) {
+        inDeg.set(n.id, 0)
+        outDeg.set(n.id, 0)
+      }
+      for (const e of graph.edges) {
+        inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1)
+        outDeg.set(e.from, (outDeg.get(e.from) ?? 0) + 1)
+        dependents.get(e.to)?.push(e.from)
+      }
+      const closureSize = (id: string): number => {
+        const seen = new Set<string>([id])
+        const queue = [...(dependents.get(id) ?? [])]
+        while (queue.length > 0) {
+          const cur = queue.shift() as string
+          if (seen.has(cur)) continue
+          seen.add(cur)
+          for (const next of dependents.get(cur) ?? []) if (!seen.has(next)) queue.push(next)
+        }
+        seen.delete(id)
+        return [...seen].filter((x) => kindOf.get(x) === 'workspace').length
+      }
+
+      for (const n of graph.nodes) {
+        expect(n.fanIn).toBe(inDeg.get(n.id) ?? -1)
+        expect(n.fanOut).toBe(outDeg.get(n.id) ?? -1)
+        expect(n.downstream).toBe(closureSize(n.id))
+        // impossible-count guard: no node affects more crates than the workspace has
+        expect(n.downstream).toBeLessThanOrEqual(graph.meta.workspaceCrates)
+      }
+      for (const b of graph.blast) {
+        expect(b.affectedWorkspace).toBe(closureSize(b.crate))
+      }
+      // no ghost references: every duplicate dependent label resolves to a node + edge
+      const nodeIds = new Set(graph.nodes.map((n) => n.id))
+      for (const d of graph.duplicates) {
+        expect(nodeIds.has(d.name)).toBe(true)
+        for (const label of d.dependents) {
+          const head = label.replace(/ \([\w-]+\)$/, '')
+          expect(nodeIds.has(head)).toBe(true)
+          expect(graph.edges.some((e) => e.from === head && e.to === d.name)).toBe(true)
+        }
+      }
+      expect(graph.meta.servedNodes).toBe(graph.nodes.length)
+      expect(graph.meta.servedEdges).toBe(graph.edges.length)
+    })
+  }
+})
+
 describeServer('Wanyrix API — impact by-design error contracts', () => {
   test('unknown type → 400 JSON; unknown target → 404 JSON; missing target → 400 JSON (ENG-TCA-6b)', async () => {
     const badType = await fetchJson('/api/wanyrix/impact?type=teleport')
@@ -387,12 +529,16 @@ describeServer('Wanyrix API — unknown workspace → 404 on every ws-scoped rou
     'experiments',
     'report?format=json',
     'report?format=markdown',
+    'report?flavor=scorecard',
+    'report?flavor=scan-history',
     'impact?type=add-dep&target=sqlx',
   ]
 
   for (const route of WS_ROUTES) {
-    test(`GET /api/wanyrix/${route}&ws=<unknown> → 404 JSON error envelope`, async () => {
-      const res = await fetchJson(`/api/wanyrix/${route}&ws=${encodeURIComponent('does-not-exist')}`)
+    test(`GET /api/wanyrix/${route}${route.includes('?') ? '&' : '?'}ws=<unknown> → 404 JSON error envelope`, async () => {
+      // bare routes join with '?', routes that already carry a query join with '&'
+      const sep = route.includes('?') ? '&' : '?'
+      const res = await fetchJson(`/api/wanyrix/${route}${sep}ws=${encodeURIComponent('does-not-exist')}`)
       expect(res.status).toBe(404)
       expectJson(res)
       const body = res.body as { error: string; knownWorkspaces: string[]; workspace?: string }

@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowDown, ArrowRight, Copy, Lightbulb, ShieldAlert, ShieldCheck, TrendingDown, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, Copy, Lightbulb, PackageCheck, ShieldAlert, ShieldCheck, TrendingDown, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -177,6 +177,56 @@ function CatalogCard({
         )}
       </div>
     </button>
+  )
+}
+
+/**
+ * ENG-TCB-1 — non-selectable catalog entry for a crate that is ALREADY resolved
+ * in the active workspace's dependency tree. The add-scenario premise ("what
+ * enters your tree if you add this crate") would be false for it: adding the
+ * crate again builds a second copy of an existing crate — the exact
+ * duplicate-version failure mode the doctor reports (FER-BLD-002). The card
+ * states the honest premise and hands off to the Upgrade tab; it never renders
+ * add-cost figures, so the what-if math stays untouched.
+ */
+function GuardedCatalogCard({
+  id,
+  version,
+  onUpgradeHandoff,
+}: {
+  id: string
+  version: string
+  onUpgradeHandoff: () => void
+}) {
+  return (
+    <div
+      className="w-full rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-3 text-left opacity-90"
+      data-testid={`catalog-guarded-${id}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate font-mono text-xs font-semibold text-foreground/70">{id}</span>
+        <Badge
+          variant="outline"
+          className="shrink-0 gap-1 border-amber-500/40 bg-amber-500/10 font-mono text-[11px] font-medium text-amber-800 dark:text-amber-300"
+        >
+          <PackageCheck className="size-3" aria-hidden />
+          already in tree
+        </Badge>
+      </div>
+      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+        v{version} would build a second copy of a crate this workspace already resolves — a
+        duplicate-version build (see finding FER-BLD-002), not a new addition.
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="mt-2 h-7 gap-1 px-2 text-[11px]"
+        onClick={onUpgradeHandoff}
+      >
+        Go to upgrade scenarios
+        <ArrowRight className="size-3" aria-hidden />
+      </Button>
+    </div>
   )
 }
 
@@ -945,10 +995,26 @@ export default function SimulatorView({ onNavigate }: ViewProps) {
 
   const graph = useGraph()
   const blast: BlastEntry[] = useMemo(() => graph.data?.blast ?? [], [graph.data])
+  /* ENG-TCB-1 — already-in-tree guard. The add-catalog is cross-checked against
+   * the node set of the SAME graph payload the simulator already renders (no
+   * extra request): a catalog crate that appears as a graph node is already
+   * resolved in this workspace, so its "add" premise is false. Guarded entries
+   * are rendered disabled with a hand-off to the Upgrade tab instead.
+   */
+  const presentInTree = useMemo(
+    () => new Set((graph.data?.nodes ?? []).map((n) => n.id)),
+    [graph.data],
+  )
   // Catalogs are payload-driven per workspace; defaults derive during render
   // so a workspace switch never shows stale selections.
   const addDepOptions = graph.data?.catalog?.addDeps ?? []
-  const activeTarget = target || addDepOptions[0]?.id || ''
+  const guardedAddDeps = useMemo(
+    () => addDepOptions.map((opt) => ({ ...opt, inTree: presentInTree.has(opt.id) })),
+    [addDepOptions, presentInTree],
+  )
+  const addableAddDeps = useMemo(() => guardedAddDeps.filter((opt) => !opt.inTree), [guardedAddDeps])
+  const activeTarget =
+    target && addableAddDeps.some((opt) => opt.id === target) ? target : (addableAddDeps[0]?.id ?? '')
   const splitSource = graph.data?.catalog?.splitCandidates[0] ?? ''
   const activeFile = file || blast[0]?.file || ''
   const upgradeOptions = graph.data?.catalog?.upgrades ?? []
@@ -1003,15 +1069,30 @@ export default function SimulatorView({ onNavigate }: ViewProps) {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Catalog</p>
               {graph.isPending &&
                 Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
-              {addDepOptions.map((opt) => (
-                <CatalogCard
-                  key={opt.id}
-                  id={opt.id}
-                  version={opt.version}
-                  active={activeTarget === opt.id}
-                  onSelect={() => setTarget(opt.id)}
-                />
-              ))}
+              {guardedAddDeps.map((opt) =>
+                opt.inTree ? (
+                  <GuardedCatalogCard
+                    key={opt.id}
+                    id={opt.id}
+                    version={opt.version}
+                    onUpgradeHandoff={() => {
+                      // one-click hop to the realistic scenario (ENG-TCB-1):
+                      // preselect the same crate when an upgrade scenario for it
+                      // exists in this workspace, else the tab's default.
+                      if (upgradeOptions.some((u) => u.id === opt.id)) setUpgrade(opt.id)
+                      setMode('upgrade-dep')
+                    }}
+                  />
+                ) : (
+                  <CatalogCard
+                    key={opt.id}
+                    id={opt.id}
+                    version={opt.version}
+                    active={activeTarget === opt.id}
+                    onSelect={() => setTarget(opt.id)}
+                  />
+                ),
+              )}
             </div>
             <div className="lg:col-span-2">
               <AddDepReport query={addDepQuery} />

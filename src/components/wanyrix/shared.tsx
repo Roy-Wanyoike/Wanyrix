@@ -11,10 +11,18 @@ import type { ConfidenceClass, MeasurementStatus, Severity } from '@/lib/wanyrix
 
 /* ------------------------------------------------------------------ badges */
 
+/*
+ * Badge contrast (ENG-TCB-2): every badge must hold WCAG AA (≥4.5:1) on BOTH
+ * themes. Light theme uses the -800 text shades (≥5.4:1 over the 10% tint on
+ * any light surface: card oklch(0.995) and page oklch(0.977)); dark keeps the
+ * -400/-300/-200 shades (≥6:1 over oklch(0.18) card). Computation:
+ * tool-results/badge-contrast/contrast.mjs.
+ */
+
 const SEVERITY_STYLES: Record<Severity, string> = {
-  critical: 'text-red-400 bg-red-500/10 border-red-500/25',
-  warning: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
-  info: 'text-teal-300 bg-teal-500/10 border-teal-500/25',
+  critical: 'text-red-800 dark:text-red-400 bg-red-500/10 border-red-500/25',
+  warning: 'text-amber-800 dark:text-amber-400 bg-amber-500/10 border-amber-500/25',
+  info: 'text-teal-800 dark:text-teal-300 bg-teal-500/10 border-teal-500/25',
 }
 
 const SEVERITY_DOT: Record<Severity, string> = {
@@ -39,10 +47,10 @@ export function SeverityBadge({ severity, className }: { severity: Severity; cla
 }
 
 const CONFIDENCE_STYLES: Record<ConfidenceClass, string> = {
-  deterministic: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
-  high: 'text-teal-300 bg-teal-500/10 border-teal-500/25',
-  medium: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
-  estimated: 'text-orange-300 bg-orange-500/10 border-orange-500/25',
+  deterministic: 'text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+  high: 'text-teal-800 dark:text-teal-300 bg-teal-500/10 border-teal-500/25',
+  medium: 'text-amber-800 dark:text-amber-400 bg-amber-500/10 border-amber-500/25',
+  estimated: 'text-orange-800 dark:text-orange-300 bg-orange-500/10 border-orange-500/25',
 }
 
 export function ConfidenceBadge({ level }: { level: ConfidenceClass }) {
@@ -50,7 +58,7 @@ export function ConfidenceBadge({ level }: { level: ConfidenceClass }) {
     <span
       title="Confidence calibration (Gate 13)"
       className={cn(
-        'inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+        'inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wide',
         CONFIDENCE_STYLES[level],
       )}
     >
@@ -60,9 +68,9 @@ export function ConfidenceBadge({ level }: { level: ConfidenceClass }) {
 }
 
 const MEASUREMENT_STYLES: Record<MeasurementStatus, string> = {
-  measured: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
-  verified: 'text-emerald-200 bg-emerald-500/20 border-emerald-400/40',
-  estimated: 'text-orange-300 bg-orange-500/10 border-orange-500/25',
+  measured: 'text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+  verified: 'text-emerald-800 dark:text-emerald-200 bg-emerald-500/20 border-emerald-400/40',
+  estimated: 'text-orange-800 dark:text-orange-300 bg-orange-500/10 border-orange-500/25',
 }
 
 export function MeasurementBadge({ status }: { status: MeasurementStatus }) {
@@ -70,7 +78,7 @@ export function MeasurementBadge({ status }: { status: MeasurementStatus }) {
     <span
       title="Measurement status — estimates are never presented as measurements (Gate 21)"
       className={cn(
-        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wide',
         MEASUREMENT_STYLES[status],
       )}
     >
@@ -94,7 +102,9 @@ export function DeltaBadge({
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[11px]',
-        good ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-red-500/25 bg-red-500/10 text-red-300',
+        good
+          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+          : 'border-red-500/25 bg-red-500/10 text-red-800 dark:text-red-300',
       )}
     >
       {down ? '↓' : '↑'}

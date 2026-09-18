@@ -1,6 +1,6 @@
 # ENG-TCA-5 — `estimatedRange` semantics lost in machine surfaces: report presents "Build time 87.4s (estimated range 49.0–61.0s · confidence 82%)" — point estimate outside its own range
 
-**Type:** BUG (schema self-description / presentation) · **Severity:** P3 · **Status:** Open
+**Type:** BUG (schema self-description / presentation) · **Severity:** P3 · **Status:** FIXED — pending verification (Task 2-e)
 **Labels:** `report`, `contract`, `honesty-rules`, `task-2-c-a`
 
 ## 1. Problem
@@ -70,6 +70,9 @@ CLI/API reference (Task 2-d) must define every `wanyrix.report/v1` field's seman
 ## 12. Definition of Done
 No surface presents `estimatedRange` as a confidence interval around `buildTime`;
 tests + docs green.
+
+## 13. Resolution evidence (Task 2-e)
+FIXED — machine flavors now carry the semantics structurally: JSON flavor has `doctor.buildTime: {value, unit:'seconds'}` + `doctor.estimatedAfterFix: {unit:'seconds', estimatedRange:{low,high}, status:'estimated', meaning:'projected-after-top-fix', confidencePct, note}` (the ambiguous flat `estimatedRangeSeconds` tuple is gone; the note states the projection is NOT a confidence interval and buildTimeSeconds may legitimately fall outside it); markdown line reads `Build time: 87.4s (estimated after top fix: 49.0–61.0s · confidence 82%)`. Flavor version strings unchanged (`wanyrix.report/v1`, `wanyrix.markdown/v1`). Verified for BOTH workspaces; pinned by tests/unit/fixtures-and-report.test.ts (unit, both ws, incl. the outside-the-range documentation property) + live contract tests in tests/api/wanyrix-api.test.ts.
 
 ## Ready-to-run filing
 ```bash

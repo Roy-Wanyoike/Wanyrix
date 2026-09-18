@@ -1,6 +1,6 @@
 # ENG-TCA-2 — `wanyrix.release-scorecard/v1` and `wanyrix.scan-history/v1` flavors are client-side only — not reachable over the HTTP SDK surface
 
-**Type:** MISSING_FEATURE (SDK surface gap) · **Severity:** P3 · **Status:** Open
+**Type:** MISSING_FEATURE (SDK surface gap) · **Severity:** P3 · **Status:** FIXED — pending verification (Task 2-e)
 **Labels:** `api`, `sdk-persona`, `machine-readable`, `task-2-c-a`
 
 ## 1. Problem
@@ -78,6 +78,9 @@ API reference (Task 2-d) must list the flavors and their `format` switches.
 
 ## 12. Definition of Done
 Both flavors served over HTTP, shared builder, tests green, docs updated.
+
+## 13. Resolution evidence (Task 2-e)
+FIXED (HTTP surface; one owner-consolidation follow-up) — both flavors are now server-built in src/lib/wanyrix/flavors.ts and served additively via `GET /api/wanyrix/report?flavor=scorecard|scan-history&ws=…` (envelope `{filename, json, bytes}`, consistent with the route's existing style; unknown flavor → 400; unknown ws → 404; default report flavors untouched). Verified live: `?flavor=scorecard` → `wanyrix.release-scorecard/v1` with schema/generatedAt/release 0.4.2/verdict CONDITIONAL GO/gates(20)/blockingConditions(17), field-for-field identical to the client exporter's envelope (scorecard-view.tsx) and deep-equal to the /gates fixture; `?flavor=scan-history` → `wanyrix.scan-history/v1` with schema/workspace/exportedAt/note/runs[] — the server-side log is honestly EMPTY (runs are a per-browser localStorage log by design; fabricating runs — wall-clock durations that never happened — would violate Gate 21) and the note says so in every response. Tests: tests/unit/flavors.test.ts (envelope keys pinned to the client exporters' exact fields) + live contract tests in tests/api/wanyrix-api.test.ts (incl. cross-check vs /gates + empty-runs honesty). Residual: the client exporters (src/components/** — UI-agent ownership) still carry their own builder copies; consolidating them onto flavors.ts is a one-import change flagged for the component owner.
 
 ## Ready-to-run filing
 ```bash

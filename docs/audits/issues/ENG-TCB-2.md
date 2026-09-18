@@ -1,6 +1,7 @@
 # ENG-TCB-2 — Honesty badges (ESTIMATED / MEASURED / VERIFIED / HIGH) fail WCAG AA contrast in light theme on the label-densest views
 
-**Type:** BUG / ACCESSIBILITY · **Severity:** P3 · **Status:** Open
+**Type:** BUG / ACCESSIBILITY · **Severity:** P3 · **Status:** FIXED — pending verification
+**Fix:** Task 2-f — single source `src/components/wanyrix/shared.tsx` (MEASUREMENT/CONFIDENCE/SEVERITY style maps + DeltaBadge): light-theme text tokens darkened to the `-800` shades (hue families unchanged, no indigo/blue), dark-theme tokens kept; badge size/weight bumped 10px/400 → 11px/500. Browser-measured ≥5.6:1 light, ≥9.4:1 dark (AA ≥4.5).
 **Labels:** `bug`, `accessibility`, `contrast`, `honesty`, `persona-qa`, `audit-2026-09-18`
 
 ## 1. Problem
@@ -89,3 +90,11 @@ gh issue create -R Roy-Wanyoike/wanyrix \
   -t "a11y: honesty badges (ESTIMATED/MEASURED/VERIFIED/HIGH) fail WCAG AA contrast in light theme (3.6–3.8:1, 10px text)" \
   -b "See docs/audits/issues/ENG-TCB-2.md" -l "bug,accessibility"
 ```
+
+## Evidence addendum (fix — Task 2-f, frontend fix engineer)
+- Fix location: the honesty badges have a SINGLE source — `shared.tsx` (`MeasurementBadge`/`ConfidenceBadge`/`SeverityBadge` consumed by doctor/simulator/experiments/findings/ai/etc.). Light-theme fg tokens darkened (`-300/-400` → `-800`: emerald/orange/teal/amber/red), dark-theme fg tokens unchanged; `MeasurementBadge`+`ConfidenceBadge` bumped `text-[10px]` → `text-[11px] font-medium` (AA small-text 4.5:1 still applies at 11px — ratios below clear it with margin). Hue language preserved (green/orange/teal/amber/red); no indigo/blue introduced.
+- Offline token math (`tool-results/badge-contrast/contrast.mjs`; oklch→sRGB, gamma-space alpha compositing over theme surfaces, WCAG 2.1): light card `oklch(0.995 0.003 85)` + 10% tint — MEASURED/deterministic emerald-800 #006045 = 6.84:1 · VERIFIED emerald-800 on 20% tint = 6.20:1 · ESTIMATED orange-800 #9f2d00 = 6.51:1 · HIGH/info teal-800 #005f5a = 6.75:1 · warning/medium amber-800 #973c00 = 6.46:1 · critical red-800 = ~7.3:1; same tokens on the page background `oklch(0.977 0.005 85)` (SectionHeading badges sit there): 5.92–6.80:1. Dark card `oklch(0.18 0.006 60)` (unchanged tokens): 6.00–11.17:1.
+- Browser-verified (agent-browser, computed styles → canvas sRGB conversion → full ancestor alpha compositing → WCAG ratio): LIGHT — Doctor: measured 6.61, estimated 6.36, high 6.64, deterministic 6.61, medium 6.26 · Simulator: estimated 6.05, "already in tree" 5.63 · Experiments: measured 6.43, ✓ verified 5.60, estimated 6.19. DARK — Doctor: measured 10.88, estimated 9.83, high 11.26, deterministic 10.88, medium 9.42 · Simulator: estimated 10.61 · Experiments: measured 10.51, ✓ verified 9.91. All 11px/500, all ≥4.5:1. Note: the original record's light-theme table (3.6–3.8:1) under-stated the failure — recomputation of the served tokens gives 1.0–1.6:1 (e.g. MEASURED emerald-300 rgb(94,233,181) on rgb(229,247,238)); verdict direction identical (light FAIL, dark pass).
+- Screenshots: `tool-results/task-2f-screens/{doctor-light,doctor-dark}-badges.png`, `{sim-helios-guarded-light,sim-helios-guarded-dark}.png`, `experiments-light-badges.png`.
+- §8 theme-matrix test: `tests/**` is outside this task's ownership boundary — the reproducible computation script is re-homed at `tool-results/badge-contrast/contrast.mjs` for the test-harness owner to absorb as a unit test (next action).
+- Checks: `bun run lint` clean · `bunx tsc --noEmit` clean · `bun run test` 138 pass / 0 fail.

@@ -176,10 +176,12 @@ describe('graph fixtures — derived aggregates reconcile with the served edges 
         return [...seen].filter((x) => kindOf.get(x) === 'workspace')
       }
 
-      // 1. every node's fanIn/fanOut == served edge degrees
+      // 1. every node's fanIn/fanOut == served edge degrees (maps are
+      // pre-initialized for every node id, so a miss means test corruption —
+      // the -1 sentinel then fails the comparison loudly)
       for (const n of nodes) {
-        expect(n.fanIn).toBe(inDeg.get(n.id))
-        expect(n.fanOut).toBe(outDeg.get(n.id))
+        expect(n.fanIn).toBe(inDeg.get(n.id) ?? -1)
+        expect(n.fanOut).toBe(outDeg.get(n.id) ?? -1)
       }
 
       // 2. every node's downstream == its workspace closure, within workspace size
@@ -193,7 +195,7 @@ describe('graph fixtures — derived aggregates reconcile with the served edges 
       for (const b of graph.blast) {
         const node = nodes.find((n) => n.id === b.crate)
         expect(node).toBeDefined()
-        expect(b.affectedWorkspace).toBe(node?.downstream)
+        expect(b.affectedWorkspace).toBe(node ? node.downstream : -1)
         expect(b.affectedWorkspace).toBe(closure(b.crate).length)
         expect(b.affectedWorkspace).toBeGreaterThan(0)
         expect(b.chain[0]).toBe(b.crate)
@@ -226,7 +228,7 @@ describe('graph fixtures — derived aggregates reconcile with the served edges 
       for (const s of health.slowestCrates) {
         const node = nodes.find((n) => n.id === s.name)
         expect(node).toBeDefined()
-        expect(s.downstream).toBe(node?.downstream)
+        expect(s.downstream).toBe(node ? node.downstream : -1)
       }
     })
 

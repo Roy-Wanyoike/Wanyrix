@@ -1,6 +1,6 @@
 # ENG-TCA-3 — Blast-radius math does not reconcile inside one `/graph` payload (blast vs node vs edges) + impact-simulator flags contradict the duplicates list
 
-**Type:** BUG (honest-math / internal consistency) · **Severity:** P2 · **Status:** Open
+**Type:** BUG (honest-math / internal consistency) · **Severity:** P2 · **Status:** FIXED — pending verification (Task 2-e)
 **Labels:** `graph`, `impact`, `honesty-rules`, `sdk-persona`, `task-2-c-a`
 
 ## 1. Problem
@@ -105,6 +105,9 @@ reference (Task 2-d) and in `types.ts` JSDoc.
 ## 12. Definition of Done
 One payload, one consistent blast-radius story; reconciliation test green; semantics
 documented.
+
+## 13. Resolution evidence (Task 2-e)
+FIXED — fixture builders rebuilt around a single edge-list source of truth: `computeGraphMath` (src/lib/wanyrix/data.ts) derives fanIn/fanOut (served degrees), downstream (reverse reachability of served workspace-kind crates), blast.affectedWorkspace (= downstream of the entry's crate), chain (real dependent path), duplicates[].dependents (direct in-edge sources, kind-annotated), duplicateBefore (from the same payload's duplicates list) and recompileCrates (= served closure; was hand-typed 52) at module load — nothing hand-typed. Ghost `legacy-cache` (and `old-sdk`) are now REAL served nodes with edges pinning their duplicate lineages; `meta` declares `scope:'backbone-subset'`, `aggregateSource:'served-edges'`, servedNodes/servedEdges explicitly. Live HTTP verification (both workspaces): helios 47/47 aggregate checks consistent over 39 nodes/72 edges (database down=5 = blast = closure; api down=1 consistent with gateway→api; serde duplicateBefore=true, recompileCrates=14 ≤ 47); atlas 32/32 over 26 nodes/49 edges (recompileCrates ≤ 23). Golden property tests ported into tests/unit/fixtures-and-report.test.ts + live HTTP reconciliation suite in tests/api/wanyrix-api.test.ts.
 
 ## Ready-to-run filing
 ```bash

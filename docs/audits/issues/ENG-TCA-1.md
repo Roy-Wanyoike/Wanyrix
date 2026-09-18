@@ -1,6 +1,6 @@
 # ENG-TCA-1 — Unknown `ws` silently resolves to default workspace data (HTTP 200); `/report` and `/experiments` stamp the bogus id into the artifact
 
-**Type:** BUG (API contract / data integrity for machine consumers) · **Severity:** P2 · **Status:** Open
+**Type:** BUG (API contract / data integrity for machine consumers) · **Severity:** P2 · **Status:** FIXED — pending verification (Task 2-e)
 **Labels:** `api`, `contract`, `honesty-rules`, `sdk-persona`, `task-2-c-a`
 
 ## 1. Problem
@@ -88,6 +88,9 @@ align with the impact route's documented 404-on-unknown-target.
 ## 12. Definition of Done
 All ws-scoped routes return explicit 404s for unknown ids; report refuses mislabeled
 artifacts; tests green; API doc updated.
+
+## 13. Resolution evidence (Task 2-e)
+FIXED — shared workspace-id validator shipped (`workspaceGuard`/`resolveWorkspace` in src/lib/wanyrix/api.ts) validating `ws` against the SAME `WORKSPACES` registry the /workspaces route serves; unknown id → 404 `{ error: "unknown workspace '<id>'", knownWorkspaces }` on ALL 9 ws-scoped routes (doctor, graph, health, diagnostics, pr, experiments, impact, report×2 formats, report×2 flavors) — /report and /experiments now 404 before any payload is built, so no artifact can stamp a bogus id. Live evidence: 9/9 routes → 404 for `ws=does-not-exist`; known ids → 200 with `workspace` echo matching the request (both workspaces). Parametrized contract tests in tests/api/wanyrix-api.test.ts (unknown-ws suite incl. the new flavor routes + known-ws 200 suite).
 
 ## Ready-to-run filing
 ```bash

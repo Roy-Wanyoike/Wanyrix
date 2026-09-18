@@ -1,6 +1,6 @@
 # ENG-TCA-6 — API contract hygiene: 405 without `Allow`, missing-param vs unknown-target status conflation, silent `kind` coercion, unversioned markdown envelope
 
-**Type:** CONTRACT_HYGIENE (4 minor findings, one trackable unit) · **Severity:** P4 · **Status:** Open
+**Type:** CONTRACT_HYGIENE (4 minor findings, one trackable unit) · **Severity:** P4 · **Status:** FIXED — pending verification (Task 2-e)
 **Labels:** `api`, `contract`, `sdk-persona`, `task-2-c-a`
 
 ## 1. Problem
@@ -69,6 +69,9 @@ GET-405-vs-400-doc question — this record only adds the `Allow` header evidenc
 
 ## 12. Definition of Done
 All four behaviors implemented + tested + documented.
+
+## 13. Resolution evidence (Task 2-e)
+FIXED (a–d) — (a) `methodNotAllowed()` in src/lib/wanyrix/api.ts returns 405 WITH an RFC 9110 `Allow` header; exported by every owned route (12 GET-only + storage/reclaim + storage/rebuild POST-only); live: `POST /graph` → 405 + `allow: GET`. (b) impact missing `target` → 400 `missing required param 'target'`; unknown target stays the documented 404. (c) explain rejects an explicit unknown `kind` → 400 `unknown kind 'weird-kind' (expected: …)` (landed within Task 2-d's explain hardening — verified live; omitted kind still defaults to general). (d) markdown envelope carries `schema: 'wanyrix.markdown/v1'`. Known residual (outside my file boundary): the explain route's framework-generated GET→405 carries no `Allow` header (adding one requires touching src/app/api/wanyrix/explain/**, owned by Task 2-d) — filed as ENG-TE-1.
 
 ## Ready-to-run filing
 ```bash

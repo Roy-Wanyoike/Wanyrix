@@ -1,6 +1,7 @@
 # ENG-TCB-1 — Impact Simulator "Add a dependency" catalog offers crates that are already in the dependency tree (no already-present guard)
 
-**Type:** BUG / UX-HONESTY · **Severity:** P3 · **Status:** Open
+**Type:** BUG / UX-HONESTY · **Severity:** P3 · **Status:** FIXED — pending verification
+**Fix:** Task 2-f — add-catalog entries cross-checked against the graph node set client-side; already-present crates render as non-selectable cards with an "already in tree" badge, a duplicate-version/FER-BLD-002 caveat and a one-click hop to the Upgrade tab; the what-if math is untouched.
 **Labels:** `bug`, `simulator`, `honesty`, `persona-qa`, `audit-2026-09-18`
 
 ## 1. Problem
@@ -79,3 +80,9 @@ gh issue create -R Roy-Wanyoike/wanyrix \
   -t "fix(simulator): add-dependency catalog offers already-present crates without a guard (sqlx/reqwest on helios, datafusion on atlas)" \
   -b "See docs/audits/issues/ENG-TCB-1.md" -l "bug"
 ```
+
+## Evidence addendum (fix — Task 2-f, frontend fix engineer)
+- Guard implemented in `src/components/wanyrix/views/simulator-view.tsx` only (no API/lib changes): `presentInTree` = Set of `graph.data.nodes[].id` (same payload the view already renders; no extra request); catalog entries are tagged `inTree` per render, so a workspace switch re-computes the guard.
+- Already-present entries render `GuardedCatalogCard`: non-radio, non-selectable, "already in tree" badge (amber, AA-safe 11px/500), caveat "v{version} would build a second copy of a crate this workspace already resolves — a duplicate-version build (see finding FER-BLD-002), not a new addition.", and a "Go to upgrade scenarios" button that switches to the Upgrade tab (preselects the crate when an upgrade scenario for it exists in the active workspace's catalog). No add-cost figures are rendered for guarded entries; the default `activeTarget` falls back to the first ADDABLE entry, so the what-if math is never computed on a false premise.
+- Browser-verified (agent-browser, dev :3000): helios-platform → guarded {sqlx, reqwest, tonic}, selectable {aws-sdk-s3, opentelemetry-otlp, deadpool-redis}; atlas-consortium → guarded {datafusion}, selectable {axum, redb, tracing-appender}; guard re-computed correctly in both switch directions. What-if E2E intact: helios aws-sdk-s3 → "Dependency impact — aws-sdk-s3 1.62.0" ESTIMATED (31 crates, 52.1 MB, +38s CI); atlas axum 0.8.1 → ESTIMATED card renders; guarded-card hand-off opens the Upgrade tab on both workspaces. Screenshots: `tool-results/task-2f-screens/sim-helios-guarded-{dark,light}.png`, `sim-atlas-guarded-dark.png`, `sim-helios-guarded-mobile390.png`. Zero console/page errors; mobile 390px overflow-free (scrollWidth 390 == innerWidth).
+- Checks: `bun run lint` clean · `bunx tsc --noEmit` clean · `bun run test` 138 pass / 0 fail.
