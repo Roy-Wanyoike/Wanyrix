@@ -3,7 +3,7 @@
 Scope: this repository (the Next.js web platform). Status: **local-first demonstrator**
 — the shipped threat surface is deliberately minimal, and this document states what is
 actually enforced in code today vs. what is **Roadmap**. See also
-[`docs/PRIVACY.md`](PRIVACY.md) (data flows) and `docs/audits/issues/AUDIT-I8.md`
+[`docs/PRIVACY.md`](PRIVACY.md) (data flows) and the engine boundary section of [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
 (engine scope).
 
 ## 1. Authentication & authorization
@@ -62,7 +62,7 @@ through typed getters; no user string is ever used as a file path or query.
 - **No telemetry/analytics endpoints ship in the product code.** One disclosed scaffold
   caveat: `@vercel/analytics` is wired in `src/app/layout.tsx` — inert on localhost,
   active only when deployed on Vercel; removal recommended and tracked in
-  `docs/audits/issues/ENG-T3A-1.md`.
+  the zero-telemetry policy section of [`docs/PRIVACY.md`](PRIVACY.md).
 - Prisma is present as scaffold but unused by product flows (no database writes).
 - Automated `bun audit`/Renovate/Dependabot pipelines: **Roadmap** (no CI
   infrastructure exists in this sandbox; see AUDIT-I5).

@@ -157,7 +157,7 @@ only.
 ## 6. Residual whitelist (intentional `Ferrix`/`ferrix` mentions)
 
 1. `docs/migrations/*` — this record and future migration docs (self-referential).
-2. `docs/audits/*` — audit records owned by other agents (read-only for this task).
+2. Audit records live maintainer-local (out of tree, `.local/`) — read-only historical evidence.
 3. `README.md` — only inside the trailing `## Brand history` section.
 4. `src/lib/wanyrix/legacy-migration.ts` — legacy key literals required by the migration protocol.
 5. `worklog.md` — append-only agent worklog.

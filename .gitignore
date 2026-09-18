@@ -61,3 +61,14 @@ agent-ctx/
 skills/
 download/
 *.tsbuildinfo
+
+# Local-only working artifacts (never published)
+.local/
+engine/target/
+db/*.db
+.zscripts/
+Caddyfile
+examples/
+mini-services/
+now.png
+tool-results/

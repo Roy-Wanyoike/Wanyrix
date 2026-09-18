@@ -52,13 +52,13 @@ evidence-backed answers about workspace health instead of folklore.
 
 ## What this repository contains
 
-This repo hosts the **Wanyrix web platform** — a working demonstrator of the product loop
-(Next.js 16 · TypeScript · Tailwind 4 · shadcn/ui · TanStack Query · zustand) over
-fixture workspaces (`helios-platform`, 47 crates · `atlas-consortium`). The Rust engine is
-**not** in this repo; engine contracts are encoded here as versioned fixtures and API
-flavors (`wanyrix.report/v1`, `wanyrix.scan-history/v1`, `wanyrix.release-scorecard/v1`),
-so the web platform is the integration surface the engine will plug into (tracked in
-`docs/audits/issues/AUDIT-I8.md`).
+This repo hosts the **Wanyrix platform** — the web dashboard (Next.js 16 · TypeScript ·
+Tailwind 4 · shadcn/ui · TanStack Query · zustand) over fixture workspaces
+(`helios-platform`, 47 crates · `atlas-consortium`), plus the **`wanyrix-engine` Rust
+crate** under [`engine/`](engine/README.md): a measured filesystem analyzer serving
+versioned JSON flavors (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`)
+that the web contracts mirror. Persistence/telemetry phases are tracked on the issue
+tracker.
 
 The UI exposes an 18-item information architecture: Overview · Repositories · Builds·Doctor ·
 Dependencies · Graph · Findings · Architecture · Impact Simulator · Diagnostics · PR Analysis ·
@@ -162,9 +162,9 @@ Machine-readable contract: [`docs/CLI.md`](docs/CLI.md) · full doc map: [`docs/
 
 - **Local-first**: workspaces, scan history, diff queue, and preferences live in your
   browser's localStorage. No background sync, no product telemetry endpoints. (One
-  caveat: the Next.js scaffold wires Vercel's anonymous page-view snippet into the app
-  shell — inactive on localhost, active only when deployed on Vercel; tracked in
-  `docs/audits/issues/ENG-T3A-1.md`. Details: [`docs/SECURITY.md`](docs/SECURITY.md).)
+  caveat: the Next.js scaffold wired Vercel's anonymous page-view snippet into the app
+  shell — that snippet has been **removed** (zero-telemetry policy enforced).
+  Details: [`docs/SECURITY.md`](docs/SECURITY.md).)
 - **AI explain** sends only what you explicitly submit (the `context` payload + question)
   to the model provider, capped at 256 KB. Nothing else leaves the page.
 - **Cloud features are roadmap** (disabled today) — see [`docs/PRIVACY.md`](docs/PRIVACY.md)
@@ -187,7 +187,7 @@ bun run lint        # eslint
   [`docs/W-EIR.md`](docs/W-EIR.md) · [`docs/SECURITY.md`](docs/SECURITY.md) ·
   [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) · [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) ·
   [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`docs/PRIVACY.md`](docs/PRIVACY.md) ·
-  [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md) · audit trail under `docs/audits/`.
+  [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
 
 ## Roadmap (condensed, phases 1–15)
 

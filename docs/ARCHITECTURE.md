@@ -1,8 +1,8 @@
 # Wanyrix Web Platform — Architecture
 
-Scope: this repository (web platform). The Rust engine is external — engine contracts are
-encoded here as fixtures and versioned API flavors (see "Engine boundary"; tracked in
-`docs/audits/issues/AUDIT-I8.md`).
+Scope: this repository (web platform + the `engine/` Rust crate). Engine contracts are
+encoded as fixtures, versioned API flavors, and the engine's own versioned JSON output
+(see "Engine boundary"; persistence/telemetry phases tracked on the issue tracker).
 
 ## Stack
 

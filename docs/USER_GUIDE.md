@@ -142,7 +142,7 @@ only the explicit context payload you submit. No telemetry exists.
 
 **Why do numbers disagree between views?** They shouldn't — if you see contradictions
 (e.g. graph vs blast-radius counts), that's a bug class we track (see
-`docs/audits/issues/ENG-REGISTRY-tca.md`).
+the project audit history).
 
 **Can Wanyrix fix my code?** It proposes reviewable patches only (Gate 19). Auto-fix is
 **Roadmap** (Phase 9) and would still be approval-gated.

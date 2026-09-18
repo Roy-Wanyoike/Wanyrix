@@ -3,7 +3,7 @@
 W-EIR is the normalized evidence model every Wanyrix surface derives from. This
 document describes W-EIR **as actually encoded in this repository** (`src/lib/wanyrix/`)
 — not the full engine-side spec (the Rust engine is a separate repo,
-`docs/audits/issues/AUDIT-I8.md`). Types live in `src/lib/wanyrix/types.ts`; fixture
+the engine roadmap). Types live in `src/lib/wanyrix/types.ts`; fixture
 data in `src/lib/wanyrix/data.ts`; serialization in `report.ts` + `flavors.ts`.
 
 ```text

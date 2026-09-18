@@ -18,14 +18,12 @@ backed by all five evidence classes, abbreviated **CODE+INTEGRATION+TEST+RUNTIME
 
 Never claim Verified/DONE from code alone. "FIXED — pending verification" is the honest
 intermediate status; only a verifier with RUNTIME evidence flips it (see the issue
-records under `docs/audits/issues/` for worked examples).
+tracker and commit history for worked examples).
 
 ## 2. Issue records (14-field template)
 
-The sandbox has no GitHub write access (AUDIT-I5), so issues are filed as records in
-`docs/audits/issues/` — one file per issue, named by round (e.g. `ENG-TCA-1.md`), each
-carrying the 14 fields plus a ready-to-run `gh issue create` payload for when auth
-exists:
+Report issues on the GitHub issue tracker. Historical audit records live out-of-tree
+(maintainer-local); each carries the same 14 fields below plus an acceptance checklist:
 
 1. Title line + **Type / Severity / Status / Labels**
 2. Problem
@@ -42,9 +40,8 @@ exists:
 13. Definition of Done
 14. Ready-to-run filing (`gh issue create` block)
 
-Before filing: duplicate-check against `docs/audits/issues/ISSUE_REGISTRY.md` (Rule 4 —
-GitHub-side duplicates are UNVERIFIABLE until AUDIT-I5 resolves; note that in the
-record). Severity policy: P0 breaks a shipped promise/data loss · P1 blocks credible
+Before filing: duplicate-check against the GitHub issue tracker (Rule 4 — search
+open *and* closed issues first). Severity policy: P0 breaks a shipped promise/data loss · P1 blocks credible
 development · P2 material product gap · P3 quality/completeness · P4 hygiene.
 
 ## 3. Honesty gates (non-negotiable)

@@ -185,7 +185,7 @@ real completion of the previous item; slipping beats spamming.
 
 | Week | Focus | Concrete actions | Success signal |
 | --- | --- | --- | --- |
-| T0+1 | Housekeeping | Tracker live, labels (§7) applied to starter set, 5–10 `good-first-issue` records migrated from `docs/audits/issues/` | Every open issue has kind+severity labels |
+| T0+1 | Housekeeping | Tracker live, labels (§7) applied to starter set, 5–10 `good-first-issue` entries opened on the tracker | Every open issue has kind+severity labels |
 | T0+2 | Soft share (Stage 1) | 1:1 shares with trusted Rust devs; explicit ask for blunt criticism | ≥ 3 first-run completions |
 | T0+3–4 | Fix + tailor | Fix Stage-1 complaints; draft channel-specific posts; re-verify each community's rules | Drafts reviewed against current rules |
 | T0+5 | Users Forum post | Tailored "Show and tell" post; author replies to everything for 48 h | Zero moderation friction; ≥ 1 actionable critique filed |

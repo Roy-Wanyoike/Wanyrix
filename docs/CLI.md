@@ -1,7 +1,8 @@
 # Wanyrix CLI — contract reference
 
-Status: the `wanyrix` CLI **binary is Roadmap** (it lives with the Rust engine —
-`docs/audits/issues/AUDIT-I8.md`). What ships **today** is the *contract*: the in-app
+Status: the `wanyrix` CLI **binary now exists as engine v0** — `wanyrix
+doctor|graph|health` ([`engine/README.md`](../engine/README.md)); deeper CLI surfaces
+(daemon, telemetry) are Roadmap. The web contract remains: the in-app
 **CLI contract** dialog (`src/components/wanyrix/cli-dialog.tsx`, opened from the top
 bar's terminal entry) pins the command set, the flags, and the exit codes. Every web
 surface maps 1:1 to a CLI command — same payloads, same exit codes, `--json` on
@@ -49,8 +50,9 @@ Flags observed in the contract: `--json` (every command), `--duplicates`
 | `2` | usage error | bad flag, unknown command, unknown target/type — the mirror of the HTTP `400` class |
 | `3` | infrastructure failure | engine/store unavailable — the mirror of the HTTP `404`/`5xx` class |
 
-The 2-c persona CI bot derived the same ladder from pure JSON (exit 2 with criticals
-present in the fixture) — see `docs/audits/issues/ENG-REGISTRY-tca.md`, WF1.
+The engine binary implements the same ladder (`wanyrix doctor` exits 2 on scan
+failure, 0 on success — findings do not fail the exit code; CI consumers parse the
+JSON) — see [`engine/README.md`](../engine/README.md).
 
 ## Machine-readable payloads (the serialization contract)
 

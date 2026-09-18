@@ -9,8 +9,8 @@ set -euo pipefail
 
 WANYRIX_REPO="${WANYRIX_REPO:-Roy-Wanyoike/wanyrix}"
 WANYRIX_OLD_REPO="${WANYRIX_OLD_REPO:-Roy-Wanyoike/ferrix}"
-ISSUES_DIR="${ISSUES_DIR:-docs/audits/issues}"
-MAP_FILE="${MAP_FILE:-docs/audits/issues/CREATED_ISSUES.md}"
+ISSUES_DIR="${ISSUES_DIR:-.local/audits/issues}"
+MAP_FILE="${MAP_FILE:-.local/audits/CREATED_ISSUES.md}"
 
 die() { echo "FATAL: $*" >&2; exit 1; }
 

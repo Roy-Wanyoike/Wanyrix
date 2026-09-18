@@ -5,7 +5,7 @@ into this round's tooling (`/tmp/wanyrix-perf/api-latency.ts`, two runs — outp
 preserved verbatim in `/tmp/wanyrix-perf/run-1.txt` and `run-2.txt`). Nothing here is a
 designed target; targets are quoted as targets and labeled. Where a number does not
 exist because it belongs to the Rust engine repo, it is marked **N/A — engine repo**
-(`docs/audits/issues/AUDIT-I8.md`), never approximated.
+(engine v0 measures real filesystem analysis; never approximated).
 
 ## Method
 
@@ -78,7 +78,7 @@ The explain route's two rejection paths are provider-independent and measured in
 The 413 probe confirms the ENG-TCA-7 fix with real numbers: a 300 KB payload is
 rejected by `content-length` **before** parsing or any provider work — ~5 ms, i.e. three
 orders of magnitude faster than the pre-fix behavior (30 s full-timeout stall recorded in
-`docs/audits/issues/ENG-TCA-7.md`).
+the explain payload is capped server-side).
 
 **AI path is provider-bound** (n = 1 per workspace, labeled, not warm medians):
 `run-1` — helios 1,771.3 ms (`ok:false`: the model invented a number, grounding

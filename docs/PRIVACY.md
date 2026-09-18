@@ -42,7 +42,7 @@ above. All state is client-side; clearing site data removes everything.
   `@vercel/analytics` snippet into `src/app/layout.tsx`. It is inactive on localhost and
   only reports anonymous page views when the app is actually deployed on Vercel
   infrastructure; removal is recommended and tracked in
-  `docs/audits/issues/ENG-T3A-1.md` (see also [`docs/SECURITY.md`](SECURITY.md)).
+  (see [`docs/SECURITY.md`](SECURITY.md)).
 - **No background sync, no auto-upload** of repositories, scans, or findings.
 - **No server-side persistence** in this repo — the platform keeps no database records of
   your usage (Prisma is present as scaffolding, unused by these flows).

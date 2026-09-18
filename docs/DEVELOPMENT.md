@@ -60,10 +60,9 @@ add legacy tokens; run the gate before every PR.
 
 ## Contract-fix conventions
 
-- **One issue = one PR.** Contract issues are filed as full records under
-  `docs/audits/issues/` (14-field template — `docs/CONTRIBUTING.md`) and closed by a
-  focused PR whose message references the ID (recent examples: `fix: close
-  ENG-TCA-1/2/3/5/6 … + ENG-TCB-1/2 … — 138 tests green`, `1f47254`).
+- **One issue = one PR.** Issues are filed on the GitHub tracker (14-field template —
+  `docs/CONTRIBUTING.md`) and closed by a focused PR whose message references the ID
+  (`Closes #N`), so merging closes the issue automatically.
 - A contract fix lands **with the tests that pin it** (e.g. the ENG-TCA-1 workspace
   guard shipped with unknown-ws 404 contract tests; ENG-TCA-2 flavors with unit + live
   contract tests). A fix without a pinning test is incomplete.

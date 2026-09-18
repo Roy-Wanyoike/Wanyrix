@@ -39,8 +39,8 @@ Core differentiator — the **honesty architecture**:
   to commentary/inference/recommendation/uncertainty fields, cannot re-label measured
   facts, and violating content is stripped and marked — verified by adversarial tests.
 - Local-first: analysis data stays in the user's browser/machine. Zero telemetry
-  (enforced; a telemetry SDK that shipped by mistake was found and removed —
-  `docs/audits/issues/ENG-T3A-1.md`).
+  (enforced; a telemetry SDK that shipped by mistake was found and removed — see the
+  project's audit history and `docs/SECURITY.md`).
 
 ## 3. What exists today (measured, in this repository)
 
@@ -51,7 +51,7 @@ Core differentiator — the **honesty architecture**:
 | Grounded AI layer | Done | Server-rendered facts; model confined to isolated fields; grounding-violation stripping; 413 payload cap <10 ms |
 | Rust engine `wanyrix-engine` v0.1.0 | v0 working | 25 Rust tests green; clippy clean; `doctor`/`graph`/`health` subcommands emit versioned JSON (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`) from real filesystem measurement |
 | Product documentation set | Done | README, USER_GUIDE, ARCHITECTURE, CLI, W-EIR, SECURITY, PRIVACY, PERFORMANCE, DEVELOPMENT, CONTRIBUTING, COMMERCIAL + community/crates/open-source strategies |
-| 57-gate acceptance audit | Done | `docs/audits/ACCEPTANCE_GATES.md` — 31 PASS / 7 PARTIAL / 2 FAIL / 12 IN-PROGRESS / 5 N/A at audit time |
+| 57-gate acceptance audit | Done | Maintainer audit record (ACCEPTANCE_GATES) — 32 PASS / 7 PARTIAL / 1 FAIL / 12 IN-PROGRESS / 5 N/A |
 
 ## 4. What is deliberately not built yet (planned)
 
@@ -89,7 +89,7 @@ Core differentiator — the **honesty architecture**:
 This project is developed under a verifiable audit regime rather than marketing
 claims: every round produces machine-checked evidence (test counts, browser E2E
 sweeps, gate matrices), and issue records carry their full audit trail
-(`docs/audits/issues/ISSUE_REGISTRY.md` — every finding → record → fix → commit).
+(a maintainer-local audit registry — every finding → record → fix → commit; issues live on the tracker).
 The release decision is re-derived each round: currently **CONDITIONAL GO**, with the
 named conditions being the engine roadmap (§4) and the repository-access ops step —
 no known product-integrity blockers.
