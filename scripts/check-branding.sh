@@ -58,8 +58,12 @@ while IFS= read -r path; do
   path="${path#./}"
 
   case "$path" in
-    docs/migrations/*|docs/audits/*|worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh|tests/unit/legacy-migration.test.ts|docs/PRIVACY.md|docs/ARCHITECTURE.md|docs/USER_GUIDE.md|src/components/wanyrix/views/settings-view.tsx)
+    docs/migrations/*|docs/audits/*|worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh|tests/unit/legacy-migration.test.ts|docs/PRIVACY.md|docs/ARCHITECTURE.md|docs/USER_GUIDE.md|src/components/wanyrix/views/settings-view.tsx|scripts/github/lib.sh|scripts/github/README.md|docs/OPEN_SOURCE_STRATEGY.md|docs/CRATES_IO_STRATEGY.md|docs/RUST_COMMUNITY_GUIDE.md)
       # Intentional legacy references — skip.
+      #   scripts/github/*: the GitHub rename flow needs the old repo name
+      #     (WANYRIX_OLD_REPO bootstrap renames ferrix → wanyrix).
+      #   docs/*STRATEGY*/RUST_COMMUNITY_GUIDE: document the rename/publish
+      #     history and community messaging honestly.
       continue
       ;;
   esac
