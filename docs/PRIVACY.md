@@ -36,9 +36,13 @@ above. All state is client-side; clearing site data removes everything.
 
 ## What we do NOT do
 
-- **No telemetry, analytics, or crash reporting** — there is no telemetry endpoint in this
-  product; network calls are the Wanyrix API routes and (only for explain) the model
-  provider.
+- **No product telemetry, analytics, or crash reporting endpoints** — network calls from
+  this app are the Wanyrix API routes and (only for explain) the model provider. One
+  scaffold caveat, disclosed for accuracy: the Next.js scaffold wires Vercel's
+  `@vercel/analytics` snippet into `src/app/layout.tsx`. It is inactive on localhost and
+  only reports anonymous page views when the app is actually deployed on Vercel
+  infrastructure; removal is recommended and tracked in
+  `docs/audits/issues/ENG-T3A-1.md` (see also [`docs/SECURITY.md`](SECURITY.md)).
 - **No background sync, no auto-upload** of repositories, scans, or findings.
 - **No server-side persistence** in this repo — the platform keeps no database records of
   your usage (Prisma is present as scaffolding, unused by these flows).

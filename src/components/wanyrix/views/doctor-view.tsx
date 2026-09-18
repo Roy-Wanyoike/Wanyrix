@@ -31,7 +31,7 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useDoctor } from '@/lib/wanyrix/hooks'
+import { useDoctor, useRecordScanRun } from '@/lib/wanyrix/hooks'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useToast } from '@/hooks/use-toast'
@@ -360,6 +360,8 @@ export default function DoctorView({ onNavigate }: ViewProps) {
   const lastTrigger = useScanStore((s) => s.lastTrigger)
   const bumpScan = useScanStore((s) => s.bumpScan)
   const addScanEntry = useScanStore((s) => s.addEntry)
+  /* Task 3-b wiring: structured scan-run log (runs[]) recorded at completion */
+  const recordScanRun = useRecordScanRun()
 
   const [mode, setMode] = useState<'human' | 'json'>('human')
   const [selected, setSelected] = useState<Finding | null>(null)
@@ -371,6 +373,13 @@ export default function DoctorView({ onNavigate }: ViewProps) {
   const [doneRun, setDoneRun] = useState(-1)
   const scanDone = doneRun === runId
   const mountedAtTick = useRef(scanTick)
+
+  /* Task 3-b wiring: startedAt = the moment this run's terminal remounted
+     (runId change); finishedAt/durationMs arrive at onDone from ScanTerminal. */
+  const runStartedAtRef = useRef(Date.now())
+  useEffect(() => {
+    runStartedAtRef.current = Date.now()
+  }, [runId])
 
   /* findings grouped by section, in curated data order */
   const groups = useMemo(() => {
@@ -391,13 +400,15 @@ export default function DoctorView({ onNavigate }: ViewProps) {
   /* recomputed on every runId replay (ScanTerminal builds its own copy) */
   const json = report ? JSON.stringify(report, null, 2) : ''
 
-  /* scan completion → record a history entry (issue #37); figures from the payload.
-     Trigger label: 'manual' for the auto-run on view mount, otherwise whatever
-     control bumped the scan event that produced this run. */
+  /* scan completion → record a history entry (issue #37) + a structured scan
+     run (Task 3-b); figures come from the payload. Trigger label: 'manual' for
+     the auto-run on view mount, otherwise whatever control bumped the scan
+     event that produced this run. */
   const handleScanDone = (done: boolean, durationMs: number) => {
     if (!done) return
     setDoneRun(runId)
     if (report) {
+      const trigger = scanTick === mountedAtTick.current ? 'manual' : lastTrigger
       addScanEntry(activeWs, {
         id: `scan-${Date.now()}`,
         workspace: activeWs,
@@ -410,7 +421,19 @@ export default function DoctorView({ onNavigate }: ViewProps) {
         buildTime: report.buildTime,
         estimatedFrom: report.estimatedRange[0],
         estimatedTo: report.estimatedRange[1],
-        trigger: scanTick === mountedAtTick.current ? 'manual' : lastTrigger,
+        trigger,
+      })
+      recordScanRun({
+        startedAt: runStartedAtRef.current,
+        finishedAt: Date.now(),
+        durationMs,
+        findingCount: report.findings.length,
+        severityCounts: {
+          critical: report.findings.filter((f) => f.severity === 'critical').length,
+          warning: report.findings.filter((f) => f.severity === 'warning').length,
+          info: report.findings.filter((f) => f.severity === 'info').length,
+        },
+        trigger,
       })
     }
   }

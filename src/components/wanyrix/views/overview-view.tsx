@@ -5,14 +5,20 @@ import { motion } from 'framer-motion'
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
+  Blocks,
   Boxes,
   CircleDollarSign,
+  CircleSlash,
   Copy,
   FlaskConical,
   GitPullRequest,
+  History as HistoryIcon,
   Lightbulb,
+  ListChecks,
   RadioTower,
   RefreshCw,
+  Route,
   Settings,
   ShieldAlert,
   TrendingDown,
@@ -32,9 +38,26 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useHealth } from '@/lib/wanyrix/hooks'
-import type { ActivityEvent, Severity } from '@/lib/wanyrix/types'
-import { CountUp, KpiCard, Panel, Reveal, SectionHeading } from '../shared'
+import {
+  useDoctor,
+  useExperiments,
+  useGraph,
+  useHealth,
+  usePRAnalysis,
+  useWorkspaces,
+} from '@/lib/wanyrix/hooks'
+import { useScanStore } from '@/lib/wanyrix/scan-store'
+import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+import type { ActivityEvent, GraphPayload, Severity } from '@/lib/wanyrix/types'
+import {
+  CountUp,
+  KpiCard,
+  MeasurementBadge,
+  Panel,
+  Reveal,
+  SectionHeading,
+  StatusDot,
+} from '../shared'
 import { ExplainDialog } from '../explain-dialog'
 import type { ViewProps } from '../view-types'
 
@@ -55,6 +78,13 @@ const SEVERITY_DOT_CLASS: Record<Severity, string> = {
   info: 'bg-teal-300',
 }
 
+/* Workspace accent dots — same token families as app-shell WS_ACCENT (§30 card). */
+const WS_DOT: Record<'primary' | 'emerald' | 'zinc', string> = {
+  primary: 'bg-primary',
+  emerald: 'bg-emerald-400',
+  zinc: 'bg-zinc-400',
+}
+
 const TOOLTIP_STYLE = {
   backgroundColor: 'oklch(0.16 0.005 60)',
   border: '1px solid oklch(1 0 0 / 10%)',
@@ -65,7 +95,7 @@ const TOOLTIP_STYLE = {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="space-y-2">
         <Skeleton className="h-3 w-36" />
         <Skeleton className="h-7 w-64" />
@@ -104,6 +134,551 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   )
 }
 
+/* ================================================================== §30
+ * Promise cards (pending-task §30 "Repository overview should expose") —
+ * one glance per promise, each deep-linking into its first-class view.
+ * Data comes ONLY from already-served payloads (health/graph/doctor/pr/
+ * experiments/workspaces) + the local scan-history store; every figure is
+ * honest about its source, and empty states are never zeros-as-data.
+ * ================================================================== */
+
+const SEVERITY_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 }
+
+/* Relative time for scan/registry timestamps. Future-dated payloads render
+ * absolute (never clamped into a fake "just now"). */
+function relMs(ms: number): string {
+  const diff = Date.now() - ms
+  if (diff < 0) return new Date(ms).toLocaleString()
+  const m = Math.floor(diff / 60_000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d ago`
+  return new Date(ms).toLocaleDateString()
+}
+
+function relIso(iso: string): string {
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? iso : relMs(t)
+}
+
+/**
+ * Longest upstream dependency chain ending at the workspace's slowest crate,
+ * computed client-side from the SERVED edge list (edge = dependent → dependency,
+ * so walking out-edges walks upstream). Per-crate `buildTime` is telemetry, but
+ * the summed chain duration is a serial projection — labeled ESTIMATED (Gate 21).
+ * Memoized DAG walk with a defensive cycle guard.
+ */
+interface UpstreamChain {
+  target: string
+  seconds: number
+  crates: string[]
+}
+
+function computeUpstreamChain(graph: GraphPayload): UpstreamChain | null {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]))
+  const depsOf = new Map<string, string[]>()
+  for (const e of graph.edges) {
+    if (!byId.has(e.from) || !byId.has(e.to)) continue
+    depsOf.set(e.from, [...(depsOf.get(e.from) ?? []), e.to])
+  }
+  const workspaceNodes = graph.nodes.filter((n) => n.kind === 'workspace')
+  if (workspaceNodes.length === 0) return null
+  const target = workspaceNodes.reduce((a, b) => (b.buildTime > a.buildTime ? b : a))
+
+  const memo = new Map<string, { crates: string[]; seconds: number }>()
+  const inProgress = new Set<string>()
+  const best = (id: string): { crates: string[]; seconds: number } => {
+    const hit = memo.get(id)
+    if (hit) return hit
+    const self = byId.get(id)!
+    if (inProgress.has(id)) return { crates: [id], seconds: self.buildTime } // cycle guard
+    inProgress.add(id)
+    let bestSub: { crates: string[]; seconds: number } = { crates: [], seconds: 0 }
+    for (const dep of depsOf.get(id) ?? []) {
+      const cand = best(dep)
+      if (cand.seconds > bestSub.seconds) bestSub = cand
+    }
+    inProgress.delete(id)
+    const res = { crates: [id, ...bestSub.crates], seconds: self.buildTime + bestSub.seconds }
+    memo.set(id, res)
+    return res
+  }
+
+  const result = best(target.id)
+  return { target: target.id, seconds: result.seconds, crates: result.crates }
+}
+
+/* ------------------------------------------------------------ card frame */
+
+function PromiseCardSkeleton() {
+  return (
+    <div
+      className="flex min-h-[132px] flex-col rounded-xl border border-border/80 bg-card p-4"
+      aria-hidden
+    >
+      <span className="flex items-center gap-2">
+        <Skeleton className="size-4 rounded-full" />
+        <Skeleton className="h-3 w-24" />
+      </span>
+      <span className="mt-4 flex-1">
+        <Skeleton className="h-7 w-28" />
+        <Skeleton className="mt-2.5 h-3 w-full max-w-[220px]" />
+      </span>
+      <span className="mt-3 flex items-center justify-between border-t border-border/60 pt-2">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-3 w-16" />
+      </span>
+    </div>
+  )
+}
+
+/**
+ * One §30 promise. The WHOLE card is the deep-link (single interactive
+ * element, ≥44px touch target by construction), with hover/focus rings.
+ * Body slots: data · honest empty state · honest error — never a bare 0.
+ */
+function PromiseCard({
+  label,
+  icon: Icon,
+  accent,
+  footnote,
+  action,
+  onOpen,
+  loading = false,
+  children,
+}: {
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  accent: string
+  footnote: string
+  action: string
+  onOpen: () => void
+  loading?: boolean
+  children: React.ReactNode
+}) {
+  if (loading) return <PromiseCardSkeleton />
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group relative flex h-full min-h-[132px] w-full flex-col rounded-xl border border-border/80 bg-card p-4 text-left transition-all duration-200 hover:border-primary/40 hover:shadow-[0_0_24px_-8px_oklch(0.72_0.16_45/30%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      <span className="flex items-center gap-2 text-muted-foreground">
+        <Icon className={`size-4 shrink-0 ${accent}`} aria-hidden />
+        <span className="text-xs font-medium">{label}</span>
+      </span>
+      <span className="mt-3 flex-1">{children}</span>
+      <span className="mt-3 flex min-h-11 items-center justify-between gap-2 border-t border-border/60 pt-1.5">
+        <span className="truncate text-[11px] leading-tight text-muted-foreground">{footnote}</span>
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary transition-transform duration-150 group-hover:translate-x-0.5">
+          {action}
+          <ArrowRight className="size-3.5" aria-hidden />
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** Honest in-card empty state — explains what's missing and how to fill it. */
+function CardEmpty({ children }: { children: React.ReactNode }) {
+  return <span className="block text-[12px] leading-snug text-muted-foreground">{children}</span>
+}
+
+/** Honest in-card failure — names the payload that failed, keeps the link. */
+function CardError({ message }: { message: string }) {
+  return (
+    <span className="block text-[12px] leading-snug text-red-800 dark:text-red-300">
+      Payload failed to load (<span className="font-mono text-[11px]">{message}</span>) — open the
+      linked view for the full surface.
+    </span>
+  )
+}
+
+/* ------------------------------------------------------- 1) critical path */
+
+function CriticalPathCard({ onNavigate }: ViewProps) {
+  const { data, isLoading, isError, error } = useGraph()
+  const chain = useMemo(() => (data ? computeUpstreamChain(data) : null), [data])
+  return (
+    <PromiseCard
+      label="Critical path"
+      icon={Route}
+      accent="text-primary"
+      footnote={chain ? `longest upstream chain to ${chain.target}` : 'slowest crate upstream chain'}
+      action="Open graph"
+      onOpen={() => onNavigate?.('graph')}
+      loading={isLoading}
+    >
+      {isError ? (
+        <CardError message={(error as Error).message} />
+      ) : !chain ? (
+        <CardEmpty>No workspace crates in the served graph for this workspace.</CardEmpty>
+      ) : (
+        <span className="block">
+          <span className="flex flex-wrap items-baseline gap-2">
+            <span className="font-mono text-2xl font-semibold tabular-nums tracking-tight">
+              {chain.seconds.toFixed(1)}s
+            </span>
+            <MeasurementBadge status="estimated" />
+          </span>
+          <span
+            className="mt-2 block truncate font-mono text-[11px] leading-relaxed text-muted-foreground"
+            title={chain.crates.join(' → ')}
+          >
+            {chain.crates.slice(0, 3).join(' → ')}
+            {chain.crates.length > 3 ? ` → +${chain.crates.length - 3} more` : ''}
+          </span>
+          <span className="mt-1.5 block text-[11px] leading-snug text-muted-foreground">
+            {chain.crates.length}-crate serial projection from per-crate build telemetry — not a
+            wall-clock measurement (Gate 21).
+          </span>
+        </span>
+      )}
+    </PromiseCard>
+  )
+}
+
+/* ------------------------------------------------------ 2) top findings */
+
+function TopFindingsCard({ onNavigate }: ViewProps) {
+  const { data, isLoading, isError, error } = useDoctor()
+  const top = useMemo(
+    () =>
+      [...(data?.findings ?? [])]
+        .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.confidence - a.confidence)
+        .slice(0, 3),
+    [data],
+  )
+  return (
+    <PromiseCard
+      label="Top findings"
+      icon={ListChecks}
+      accent="text-red-400"
+      footnote={data ? `${data.findings.length} findings · evidence-backed (Gate 8)` : 'top findings by severity'}
+      action="Open findings"
+      onOpen={() => onNavigate?.('findings')}
+      loading={isLoading}
+    >
+      {isError ? (
+        <CardError message={(error as Error).message} />
+      ) : top.length === 0 ? (
+        <CardEmpty>No findings reported for this workspace.</CardEmpty>
+      ) : (
+        <span className="block space-y-1.5">
+          {top.map((f) => (
+            <span key={f.id} className="flex items-center gap-2">
+              <span
+                className={`size-2 shrink-0 rounded-full ${SEVERITY_DOT_CLASS[f.severity]}`}
+                aria-label={f.severity}
+              />
+              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{f.title}</span>
+              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{f.id}</span>
+            </span>
+          ))}
+        </span>
+      )}
+    </PromiseCard>
+  )
+}
+
+/* --------------------------------------------------- 3) dependency risk */
+
+function DependencyRiskCard({ onNavigate }: ViewProps) {
+  const { data, isLoading, isError, error } = useGraph()
+  const dupes = data?.duplicates.length ?? 0
+  const upgrades = data?.catalog?.upgrades.length ?? 0
+  return (
+    <PromiseCard
+      label="Dependency risk"
+      icon={Copy}
+      accent="text-amber-400"
+      footnote="from the served graph payload"
+      action="Open dependencies"
+      onOpen={() => onNavigate?.('dependencies')}
+      loading={isLoading}
+    >
+      {isError ? (
+        <CardError message={(error as Error).message} />
+      ) : dupes === 0 && upgrades === 0 ? (
+        <CardEmpty>No duplicate versions or pending upgrade scenarios detected.</CardEmpty>
+      ) : (
+        <span className="flex gap-6">
+          <span>
+            <span className="block font-mono text-2xl font-semibold tabular-nums tracking-tight">
+              {dupes}
+            </span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              duplicate version groups
+            </span>
+          </span>
+          <span>
+            <span className="block font-mono text-2xl font-semibold tabular-nums tracking-tight">
+              {upgrades}
+            </span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              upgrade scenarios
+            </span>
+          </span>
+        </span>
+      )}
+    </PromiseCard>
+  )
+}
+
+/* ------------------------------------------------------- 4) architecture */
+
+function ArchitectureCard({ onNavigate }: ViewProps) {
+  const { data, isLoading, isError, error } = useGraph()
+  const workspaceCrates = (data?.nodes ?? []).filter((n) => n.kind === 'workspace')
+  // Same heuristic as architecture-view (fan-in × churn), so the counts agree.
+  const hotspots = workspaceCrates.filter((n) => n.fanIn >= 3 && n.changeFreq >= 5).length
+  return (
+    <PromiseCard
+      label="Architecture"
+      icon={Blocks}
+      accent="text-teal-300"
+      footnote={`${workspaceCrates.length} workspace crates served`}
+      action="Open architecture"
+      onOpen={() => onNavigate?.('architecture')}
+      loading={isLoading}
+    >
+      {isError ? (
+        <CardError message={(error as Error).message} />
+      ) : workspaceCrates.length === 0 ? (
+        <CardEmpty>No workspace crates in the served graph for this workspace.</CardEmpty>
+      ) : (
+        <span className="block">
+          <span className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl font-semibold tabular-nums tracking-tight">
+              {hotspots}
+            </span>
+            <span className="text-[11px] text-muted-foreground">hotspot crates</span>
+          </span>
+          <span className="mt-2 block text-[11px] leading-snug text-muted-foreground">
+            fan-in × churn heuristic (INFERRED client-side) — not an engine measurement.
+          </span>
+        </span>
+      )}
+    </PromiseCard>
+  )
+}
+
+/* ----------------------------------------------------- 5) recent changes */
+
+function RecentChangesCard({ onNavigate }: ViewProps) {
+  const workspacesQ = useWorkspaces()
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const recordedRuns = useScanStore((s) => s.runs[activeWs]) // structured runs (Task 3-b)
+  const legacyEntries = useScanStore((s) => s.history[activeWs]) // legacy history log
+  // Prefer the structured scan-run log; fall back to the legacy history entries
+  // so the card is honest whichever log the browser has accumulated.
+  const entries: { key: string; label: string; at: number }[] = (recordedRuns ?? [])
+    .slice(0, 2)
+    .map((r) => ({
+      key: r.id,
+      label: `${r.findingCount} findings · ${r.trigger} run`,
+      at: r.finishedAt,
+    }))
+  if (entries.length === 0) {
+    entries.push(
+      ...(legacyEntries ?? [])
+        .slice(0, 2)
+        .map((e) => ({ key: e.id, label: `${e.findings} findings · ${e.trigger} run`, at: e.at })),
+    )
+  }
+  const registry = workspacesQ.data?.workspaces ?? []
+  return (
+    <PromiseCard
+      label="Recent changes"
+      icon={HistoryIcon}
+      accent="text-primary"
+      footnote="local scan-run log + registry timestamps"
+      action="Open history"
+      onOpen={() => onNavigate?.('history')}
+      loading={workspacesQ.isLoading}
+    >
+      <span className="block space-y-2">
+        {entries.length === 0 ? (
+          <CardEmpty>
+            No scans recorded in this browser yet — run a scan (topbar or Build Doctor) to start the
+            local log.
+          </CardEmpty>
+        ) : (
+          entries.map((e) => (
+            <span key={e.key} className="flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{e.label}</span>
+              <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                {relMs(e.at)}
+              </span>
+            </span>
+          ))
+        )}
+        {registry.length > 0 && (
+          <span className="block space-y-1 border-t border-border/60 pt-2">
+            {registry.map((w) => (
+              <span key={w.id} className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                  <span className={`size-1.5 shrink-0 rounded-full ${WS_DOT[w.accent]}`} aria-hidden />
+                  <span className="truncate">{w.name}</span>
+                </span>
+                <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                  last scan {relIso(w.lastScan)}
+                </span>
+              </span>
+            ))}
+          </span>
+        )}
+      </span>
+    </PromiseCard>
+  )
+}
+
+/* --------------------------------------------------------- 6) regressions */
+
+function RegressionsCard({ onNavigate }: ViewProps) {
+  const { data, isLoading, isError, error } = usePRAnalysis()
+  const check = data?.checks.find((c) => c.name === 'wanyrix/build-impact')
+  const hasGuard = Boolean(data && check)
+  return (
+    <PromiseCard
+      label="Regressions"
+      icon={GitPullRequest}
+      accent="text-red-400"
+      footnote={data ? `PR #${data.number} regression guard` : 'PR regression guard'}
+      action={hasGuard ? 'Open PR analysis' : 'Run PR analysis'}
+      onOpen={() => onNavigate?.('prs')}
+      loading={isLoading}
+    >
+      {isError ? (
+        <CardError message={(error as Error).message} />
+      ) : !data || !check ? (
+        <CardEmpty>No regression guard data — run PR analysis to populate the guard.</CardEmpty>
+      ) : (
+        <span className="block">
+          <span className="flex items-center gap-2">
+            <StatusDot status={check.status} />
+            <span className="text-[12px] font-medium">
+              {check.status === 'fail'
+                ? 'Guard blocking'
+                : check.status === 'running'
+                  ? 'Guard running'
+                  : 'Guard passing'}
+            </span>
+          </span>
+          <span className="mt-2 block font-mono text-[11px] leading-relaxed text-muted-foreground">
+            #{data.number} · +{data.regressionPct}% build · {data.affectedCrates} crates affected
+          </span>
+        </span>
+      )}
+    </PromiseCard>
+  )
+}
+
+/* -------------------------------------------------------- 7) experiments */
+
+function ExperimentsCard({ onNavigate }: ViewProps) {
+  const { data, isLoading, isError, error } = useExperiments()
+  const experiments = data?.experiments ?? []
+  const running = experiments.filter((e) => e.status === 'running').length
+  const verified = experiments.filter((e) => e.status === 'verified').length
+  return (
+    <PromiseCard
+      label="Experiments"
+      icon={FlaskConical}
+      accent="text-teal-300"
+      footnote={`${experiments.length} experiments tracked`}
+      action="Open experiments"
+      onOpen={() => onNavigate?.('experiments')}
+      loading={isLoading}
+    >
+      {isError ? (
+        <CardError message={(error as Error).message} />
+      ) : experiments.length === 0 ? (
+        <CardEmpty>No experiments recorded yet — create one from a finding.</CardEmpty>
+      ) : (
+        <span className="flex gap-6">
+          <span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="font-mono text-2xl font-semibold tabular-nums tracking-tight">
+                {running}
+              </span>
+              <StatusDot status="running" />
+            </span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">running</span>
+          </span>
+          <span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="font-mono text-2xl font-semibold tabular-nums tracking-tight">
+                {verified}
+              </span>
+              <StatusDot status="pass" />
+            </span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">✓ verified</span>
+          </span>
+        </span>
+      )}
+    </PromiseCard>
+  )
+}
+
+/* ------------------------------------------------------------- 8) runtime */
+
+function RuntimeCard({ onNavigate }: ViewProps) {
+  return (
+    <PromiseCard
+      label="Runtime"
+      icon={CircleSlash}
+      accent="text-amber-400"
+      footnote="honest empty state — AUDIT-I8"
+      action="Open runtime"
+      onOpen={() => onNavigate?.('runtime')}
+    >
+      <CardEmpty>
+        Continuous runtime telemetry is not instrumented in this environment (tracked in AUDIT-I8).
+        Captured async request profiles and local engine signals only — never fabricated metrics.
+      </CardEmpty>
+    </PromiseCard>
+  )
+}
+
+/* ------------------------------------------------------------ promise row */
+
+function PromiseCards({ onNavigate }: ViewProps) {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <Reveal delay={0.03}>
+        <CriticalPathCard onNavigate={onNavigate} />
+      </Reveal>
+      <Reveal delay={0.06}>
+        <TopFindingsCard onNavigate={onNavigate} />
+      </Reveal>
+      <Reveal delay={0.09}>
+        <DependencyRiskCard onNavigate={onNavigate} />
+      </Reveal>
+      <Reveal delay={0.12}>
+        <ArchitectureCard onNavigate={onNavigate} />
+      </Reveal>
+      <Reveal delay={0.15}>
+        <RecentChangesCard onNavigate={onNavigate} />
+      </Reveal>
+      <Reveal delay={0.18}>
+        <RegressionsCard onNavigate={onNavigate} />
+      </Reveal>
+      <Reveal delay={0.21}>
+        <ExperimentsCard onNavigate={onNavigate} />
+      </Reveal>
+      <Reveal delay={0.24}>
+        <RuntimeCard onNavigate={onNavigate} />
+      </Reveal>
+    </div>
+  )
+}
+
+/* ================================================================== view */
+
 export default function OverviewView({ onNavigate }: ViewProps) {
   const { data: health, isLoading, isError, error, refetch } = useHealth()
 
@@ -129,7 +704,7 @@ export default function OverviewView({ onNavigate }: ViewProps) {
   const k = health.kpis
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* ------------------------------------------------ 1) header */}
       <SectionHeading
         eyebrow="Engineering Health"
@@ -220,6 +795,11 @@ export default function OverviewView({ onNavigate }: ViewProps) {
           </Reveal>
         ))}
       </div>
+
+      {/* ------------------------- 2.5) §30 promise cards — one glance per promise (Task 3-d).
+          Build health is promised by the KPI row above; the eight cards below cover the rest
+          of the §30 list, each deep-linking into its first-class view via onNavigate. */}
+      <PromiseCards onNavigate={onNavigate} />
 
       {/* ------------------------------------------------ 3) trend + distribution */}
       <div className="grid gap-4 lg:grid-cols-3">

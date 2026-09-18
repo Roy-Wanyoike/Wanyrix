@@ -95,14 +95,18 @@ with explicit approval semantics (Gate 19: new-proposal, no fabricated removals)
 
 ## History & runtime
 
-- **History**: scan run log persisted locally (`wanyrix.scan-history/v1` exports).
+- **History**: scan run log persisted locally (`wanyrix.scan-history/v1` exports — in-app
+  download, and `GET /api/wanyrix/report?flavor=scan-history&ws=…` over HTTP; the
+  server-side log there is honestly empty because runs live in *your* browser's
+  localStorage, and durations are never fabricated).
 - **Runtime**: captured async request profile + local engine signals. If a signal is not
   instrumented, the view says so honestly (tracked AUDIT-I8) — no fabricated telemetry.
 
 ## Policies·Gates & issues
 
 - **Policies·Gates**: release scorecard (`GO / CONDITIONAL GO / NO-GO`) with per-gate
-  evidence; exports `wanyrix.release-scorecard/v1` JSON.
+  evidence; exports `wanyrix.release-scorecard/v1` JSON (in-app download, and the same
+  envelope is served over HTTP: `GET /api/wanyrix/report?flavor=scorecard&ws=…`).
 - **Issues & PRs**: traceability board — every issue fixed by a PR.
 
 ## Organization & settings
@@ -147,7 +151,10 @@ only the explicit context payload you submit. No telemetry exists.
 (Gate 21), and the AI layer is post-validated against exactly that rule.
 
 **Where does the engine live?** Not in this repo — the web platform encodes engine
-contracts via fixtures/versioned flavors (AUDIT-I8). CLI/daemon surfaces: **Roadmap**.
+contracts via fixtures/versioned flavors (AUDIT-I8). CLI/daemon surfaces: **Roadmap** —
+but the CLI contract itself (commands, `--json`, exit codes) is already pinned by the
+in-app **CLI contract** dialog and documented in [`docs/CLI.md`](CLI.md), so the future
+engine binary plugs into a stable spec.
 
 **Is it free?** The local deterministic core is free/local-first. Commercial tiers
 (90-day trial, Team, Enterprise) are described in [`docs/COMMERCIAL.md`](COMMERCIAL.md)

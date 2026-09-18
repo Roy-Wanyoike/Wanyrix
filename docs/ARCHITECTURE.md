@@ -48,15 +48,23 @@ Next.js 16 (App Router) · TypeScript · Tailwind 4 · shadcn/ui · TanStack Que
 
 | Status | When |
 | --- | --- |
-| `400` | by-design contract violations: `explain` without `context`+`question` or with unknown finding ID, invalid JSON, `report` with unknown `format`, `impact` with unknown `type` |
-| `404` | `impact` with unknown target |
-| `405` | wrong method on POST-only surfaces (`explain` is POST-only; GET → 405) |
+| `400` | by-design contract violations: `explain` without `context`+`question`, with an unknown finding ID, with an unknown `kind`, or with invalid JSON; `report` with unknown `format` or unknown `flavor`; `impact` with unknown `type` or a missing `target` |
+| `404` | `impact` with an unknown target; **any workspace-scoped route with an unknown `ws`** → `{error, knownWorkspaces}` (ENG-TCA-1 — silent default-substitution is impossible) |
+| `405` | wrong method on GET-only or POST-only surfaces; every 405 carries the RFC 9110 `Allow` header (ENG-TCA-6a; `explain` GET → 405 `Allow: POST` — ENG-TE-1) |
 | `413` | `explain` body > 256 KB (rejected before any processing; limit named in the error) |
 | `200` | everything else; JSON endpoints always answer `application/json` |
 
+Workspace scoping: every `ws`-accepting surface resolves the param through the shared
+`workspaceGuard` (`src/lib/wanyrix/api.ts`) against the same registry `/workspaces` serves
+— `doctor`, `graph`, `health`, `diagnostics`, `pr`, `experiments`, `impact`, and `report`
+(9 ws-scoped surfaces across 8 route directories: report counts twice for its two
+`format` branches; every `flavor` is scoped too). An absent/empty `ws` falls back to the
+registry default; `storage`, `gates`, `issues`, and `workspaces` are workspace-independent.
+
 Deterministic GET routes are byte-identical across calls minus timestamps/storage GC
-fields. Known gaps tracked elsewhere (ENG-TCA-6: 405 lacks `Allow` header; ENG-TCA-1:
-`doctor` ignores `?ws=`; ENG-TCA-3: blast-radius math contradictions).
+fields. Graph aggregates (`fanIn`/`fanOut`/`downstream`, blast radius, `recompileCrates`)
+are computed from the served edge list (`meta.aggregateSource: 'served-edges'`,
+ENG-TCA-3 fix) — no hand-typed counts.
 
 ## Fixture & contract versioning
 
@@ -64,11 +72,21 @@ fields. Known gaps tracked elsewhere (ENG-TCA-6: 405 lacks `Allow` header; ENG-T
   `atlas-consortium`; findings `FER-BLD-001…FER-ASY-012`; issues `WAN-*`; experiments
   `EXP-*`; gates). `report.ts` assembles workspace reports from the same getters the
   routes serve — no duplicated data paths.
-- Versioned machine flavors:
-  - `wanyrix.report/v1` — served by `/report` (`?format=json`), schema field on the wire.
-  - `wanyrix.scan-history/v1` and `wanyrix.release-scorecard/v1` — produced client-side
-    today (scan-history.tsx, scorecard-view.tsx); served-flavor endpoints are tracked
-    (ENG-TCA-2).
+- Versioned machine flavors (all served over HTTP by `/report` — ENG-TCA-2):
+  - `wanyrix.report/v1` — `?format=json`; inner JSON report with structured
+    `doctor.buildTime {value, unit}` and `doctor.estimatedAfterFix
+    {estimatedRange: {low, high}, status, meaning}` (ENG-TCA-5 — the estimate is a
+    projection after the top fix, never a confidence interval around `buildTime`).
+  - `wanyrix.markdown/v1` — `?format=markdown` (default); versioned envelope for the
+    human-readable report (ENG-TCA-6d).
+  - `wanyrix.release-scorecard/v1` — `?flavor=scorecard`; verdict/gates/blocking
+    conditions from the shared gates fixture.
+  - `wanyrix.scan-history/v1` — `?flavor=scan-history`; the server-side run log is
+    **honestly empty** (`runs: []`) — scan runs are a per-browser localStorage log and
+    wall-clock durations are never fabricated (Gate 21); the `note` field states this in
+    every response.
+  - An unknown `flavor` is a 400 naming the valid flavors; a valid `flavor` takes
+    precedence over `format`. Client download exporters render the same envelopes.
 - IDs are stable across surfaces (`FER-*` findings, `WAN-*` issues, `EXP-*` experiments)
   so the registry, the graph, and the traceability board cross-reference without joins.
 

@@ -4,7 +4,10 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Analytics } from "@vercel/analytics/next";
+// ENG-T3A-1: no analytics component here. Wanyrix is local-first with a
+// documented zero-telemetry posture (docs/PRIVACY.md) — any future, strictly
+// opt-in telemetry must be added behind an explicit user setting, never
+// silently at the root layout.
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,7 +47,6 @@ export default function RootLayout({
         <ThemeProvider>
           <QueryProvider>{children}</QueryProvider>
           <Toaster />
-          <Analytics />
         </ThemeProvider>
       </body>
     </html>

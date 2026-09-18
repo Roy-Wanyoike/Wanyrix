@@ -6,7 +6,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { createMigratingStorage } from './legacy-migration'
 
 /**
- * Doctor scan wiring + history (issue #37).
+ * Doctor scan wiring + history (issue #37) + scan-run recording (Task 3-b).
  *
  * `scanTick` is the global "run a scan" event: the topbar Run-scan button and
  * the command palette bump it, and the doctor view reacts (event-driven wiring
@@ -16,6 +16,16 @@ import { createMigratingStorage } from './legacy-migration'
  *
  * Figures for each entry come from the doctor payload at completion time;
  * the wall-clock duration is measured in the browser and labeled as such.
+ *
+ * Task 3-b (additive): `recordScanRun` persists a structured SCAN RUN per
+ * workspace — same zustand persist + legacy-migration storage layer, same
+ * `wanyrix.scan-store` key, capped at 50 runs (oldest evicted) with
+ * deterministic ids (`run-<count>-<startedAt>`). The UI trigger wiring is
+ * owned by the component layer; this module only exposes the store API
+ * (`recordScanRun`) + the `useRecordScanRun()` hook in hooks.ts. Server-side,
+ * the `wanyrix.scan-history/v1` flavor stays honestly EMPTY — these local
+ * runs are per-browser data and are never fabricated into the HTTP response
+ * (see flavors.ts).
  */
 
 export type ScanTrigger = 'manual' | 'topbar' | 'palette'
@@ -37,6 +47,48 @@ export interface ScanHistoryEntry {
 
 const CAP = 20
 
+/* ------------------------------------------- scan-run recording (Task 3-b) */
+
+/** Per-severity finding tallies of a completed scan run. */
+export interface ScanSeverityCounts {
+  critical: number
+  warning: number
+  info: number
+}
+
+/**
+ * One recorded scan run, persisted per workspace. Shape pinned by
+ * tests/unit/scan-runs.test.ts and mirrored (key-for-key) by the run-entry
+ * contract documented in the `wanyrix.scan-history/v1` flavor note.
+ */
+export interface ScanRunRecord {
+  id: string
+  workspaceId: string
+  startedAt: number // epoch ms — scan start
+  finishedAt: number // epoch ms — scan completion
+  durationMs: number // measured wall clock (finishedAt − startedAt)
+  findingCount: number
+  severityCounts: ScanSeverityCounts
+  trigger: ScanTrigger
+}
+
+/**
+ * What a caller must provide: the measured figures. `id` is assigned
+ * deterministically by the store (pass one only to replay/migrate an exact
+ * run); `durationMs` defaults to `finishedAt − startedAt`; `trigger`
+ * defaults to `'manual'`.
+ */
+export type ScanRunInput = Partial<Pick<ScanRunRecord, 'id' | 'durationMs' | 'trigger'>> &
+  Omit<ScanRunRecord, 'id' | 'durationMs' | 'trigger'>
+
+/** Max persisted scan runs per workspace (oldest evicted). */
+export const SCAN_RUNS_CAP = 50
+
+/** Deterministic run id: `run-<count>-<startedAt>` (count = per-ws sequence). */
+export function scanRunId(count: number, startedAt: number): string {
+  return `run-${count}-${startedAt}`
+}
+
 interface ScanState {
   scanTick: number
   lastTrigger: ScanTrigger
@@ -44,11 +96,19 @@ interface ScanState {
   history: Record<string, ScanHistoryEntry[]>
   addEntry: (ws: string, entry: ScanHistoryEntry) => void
   clearHistory: (ws: string) => void
+  /** persisted scan runs per workspace (newest first), Task 3-b */
+  runs: Record<string, ScanRunRecord[]>
+  /** per-workspace monotonic counter backing deterministic run ids */
+  runSeq: Record<string, number>
+  /** record a completed scan run (called at scan completion; UI-owned trigger) */
+  recordScanRun: (run: ScanRunInput) => ScanRunRecord
+  /** clear the recorded runs of one workspace */
+  clearScanRuns: (workspaceId: string) => void
 }
 
 export const useScanStore = create<ScanState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       scanTick: 0,
       lastTrigger: 'manual',
       bumpScan: (trigger) =>
@@ -64,10 +124,40 @@ export const useScanStore = create<ScanState>()(
         }),
       clearHistory: (ws) =>
         set((s) => ({ history: { ...s.history, [ws]: [] } })),
+      runs: {},
+      runSeq: {},
+      recordScanRun: (run) => {
+        const ws = run.workspaceId
+        const seq = (get().runSeq[ws] ?? 0) + 1
+        const record: ScanRunRecord = {
+          id: run.id ?? scanRunId(seq, run.startedAt),
+          workspaceId: ws,
+          startedAt: run.startedAt,
+          finishedAt: run.finishedAt,
+          durationMs: run.durationMs ?? Math.max(0, run.finishedAt - run.startedAt),
+          findingCount: run.findingCount,
+          severityCounts: run.severityCounts,
+          trigger: run.trigger ?? 'manual',
+        }
+        set((s) => ({
+          runs: {
+            ...s.runs,
+            // newest first; cap 50 — the oldest runs fall off the tail
+            [ws]: [record, ...(s.runs[ws] ?? [])].slice(0, SCAN_RUNS_CAP),
+          },
+          // monotonic even past the cap, so ids never repeat after eviction
+          runSeq: { ...s.runSeq, [ws]: Math.max(seq, s.runSeq[ws] ?? 0) },
+        }))
+        return record
+      },
+      clearScanRuns: (workspaceId) =>
+        set((s) => ({ runs: { ...s.runs, [workspaceId]: [] } })),
     }),
     {
       name: 'wanyrix.scan-store',
-      partialize: (s) => ({ history: s.history }),
+      // Task 3-b: runs + runSeq join the same persisted envelope (additive;
+      // older persisted payloads without them hydrate to the defaults above).
+      partialize: (s) => ({ history: s.history, runs: s.runs, runSeq: s.runSeq }),
       // Pass the thunk (not its result) — see workspace-store note.
       storage: createJSONStorage(createMigratingStorage),
     },

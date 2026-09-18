@@ -32,6 +32,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { GateStatus, GatesPayload } from '@/lib/wanyrix/types'
+import {
+  buildClientScorecardExport,
+  clientScorecardFilename,
+} from '@/lib/wanyrix/flavors'
 import { useGates } from '@/lib/wanyrix/hooks'
 import { useToast } from '@/hooks/use-toast'
 import { Panel, SectionHeading } from '../shared'
@@ -111,17 +115,12 @@ function ExportMenu({ data }: { data: GatesPayload }) {
   const { toast } = useToast()
 
   const exportJson = () => {
-    const payload = {
-      schema: 'wanyrix.release-scorecard/v1',
-      generatedAt: new Date().toISOString(),
-      release: RELEASE,
-      verdict: data.verdict,
-      rationale: data.rationale,
-      gates: data.gates,
-      blockingConditions: data.blockingConditions,
-    }
+    // ENG-TCA-2 consolidation (Task 3-b): the download envelope is built by the
+    // SAME builder the HTTP `?flavor=scorecard` route serves — field-for-field
+    // identical by construction, version string pinned in flavors.ts.
+    const payload = buildClientScorecardExport()
     downloadBlob(
-      `wanyrix-scorecard-${RELEASE}.json`,
+      clientScorecardFilename(),
       JSON.stringify(payload, null, 2),
       'application/json',
     )

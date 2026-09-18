@@ -78,7 +78,7 @@ Experiments · Runtime · History · AI · Policies·Gates · Issues & PRs · Or
 bun install
 bun run dev          # http://localhost:3000
 bun run lint         # eslint
-bun run test         # bun test — 105 tests, incl. live API contract tests
+bun run test         # bun test — 138 tests, incl. live API contract tests
 ```
 
 ## First analysis (5-minute walkthrough)
@@ -139,10 +139,14 @@ asserts anything the evidence does not contain.
 | `doctor`, `graph`, `diagnostics` | findings, dependency graph, borrow/async explainers |
 | `impact` | blast-radius / change-cost calculator (`estimated` by definition) |
 | `experiments`, `gates`, `issues`, `pr` | verification loop, release scorecard, traceability, PR regression guard |
-| `report` | `wanyrix.report/v1` JSON / Markdown workspace report |
-| `explain` | grounded AI reasoning — `context`+`question` required → `400`; GET → `405`; >256 KB body → `413`; unknown finding ID → `400` |
+| `report` | workspace report — `?format=markdown\|json` (`wanyrix.markdown/v1` / `wanyrix.report/v1`) and machine flavors `?flavor=scorecard\|scan-history` (`wanyrix.release-scorecard/v1` / `wanyrix.scan-history/v1`) |
+| `explain` | grounded AI reasoning — `context`+`question` required → `400`; GET → `405` (`Allow: POST`); >256 KB body → `413`; unknown finding ID or unknown `kind` → `400` |
+
+Every workspace-scoped route validates `?ws=`: an unknown workspace id is a **404**
+`{error, knownWorkspaces}` — data is never silently served for the wrong workspace.
 
 Error semantics and response shapes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Machine-readable contract: [`docs/CLI.md`](docs/CLI.md) · full doc map: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 ## AI stance
 
@@ -157,7 +161,10 @@ Error semantics and response shapes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.
 ## Security & privacy
 
 - **Local-first**: workspaces, scan history, diff queue, and preferences live in your
-  browser's localStorage. No telemetry, no analytics, no background sync.
+  browser's localStorage. No background sync, no product telemetry endpoints. (One
+  caveat: the Next.js scaffold wires Vercel's anonymous page-view snippet into the app
+  shell — inactive on localhost, active only when deployed on Vercel; tracked in
+  `docs/audits/issues/ENG-T3A-1.md`. Details: [`docs/SECURITY.md`](docs/SECURITY.md).)
 - **AI explain** sends only what you explicitly submit (the `context` payload + question)
   to the model provider, capped at 256 KB. Nothing else leaves the page.
 - **Cloud features are roadmap** (disabled today) — see [`docs/PRIVACY.md`](docs/PRIVACY.md)
@@ -172,11 +179,14 @@ bun run typecheck   # tsc --noEmit
 bun run lint        # eslint
 ```
 
-- Tests pin the honesty contracts (400/405/413, report schema, estimate-vs-measured
-  separation, migration goldens). The suite skips API tests with a clear message if the
-  dev server is down.
+- Tests pin the honesty contracts (400/405/413, workspace guard, report schema,
+  estimate-vs-measured separation, migration goldens). The suite skips API tests with a
+  clear message if the dev server is down.
 - Docs map: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) ·
-  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/PRIVACY.md`](docs/PRIVACY.md) ·
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · [`docs/CLI.md`](docs/CLI.md) ·
+  [`docs/W-EIR.md`](docs/W-EIR.md) · [`docs/SECURITY.md`](docs/SECURITY.md) ·
+  [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) · [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) ·
+  [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) · [`docs/PRIVACY.md`](docs/PRIVACY.md) ·
   [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md) · audit trail under `docs/audits/`.
 
 ## Roadmap (condensed, phases 1–15)

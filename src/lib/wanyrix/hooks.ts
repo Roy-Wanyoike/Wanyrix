@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient, UseMutationResult } from '@tanstack/react-query'
 import type {
   DiagnosticsPayload,
@@ -18,6 +19,7 @@ import type {
   WorkspacesPayload,
 } from './types'
 import { useWorkspaceStore } from './workspace-store'
+import { useScanStore, type ScanRunInput, type ScanRunRecord } from './scan-store'
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -211,6 +213,32 @@ export function useReportExport(format: ReportFormat = 'markdown') {
       return bundle
     },
   })
+}
+
+/* ------------------------------------------------------ scan-run recording */
+
+/** Input of {@link useRecordScanRun} — run figures only, workspace folded in. */
+export type RecordScanRunInput = Omit<ScanRunInput, 'workspaceId'>
+
+/**
+ * Records a completed doctor-scan run for the ACTIVE workspace into the
+ * persisted scan-run log (Task 3-b: zustand persist, `wanyrix.scan-store`
+ * key, capped at 50 runs, deterministic `run-<count>-<startedAt>` ids).
+ *
+ * STORE-API-ONLY contract: this hook deliberately does no UI wiring — the
+ * "Run scan" action lives in the app shell / doctor view (component-layer
+ * ownership). Call it once at scan completion with the measured figures;
+ * `trigger` defaults to `'manual'` (pass `'topbar'` / `'palette'` where the
+ * origin is known). Returns the created {@link ScanRunRecord} so callers can
+ * surface its id/duration in a toast or status line.
+ */
+export function useRecordScanRun(): (input: RecordScanRunInput) => ScanRunRecord {
+  const recordScanRun = useScanStore((s) => s.recordScanRun)
+  const activeWs = useWorkspaceStore((s) => s.active)
+  return useCallback(
+    (input) => recordScanRun({ trigger: 'manual', ...input, workspaceId: activeWs }),
+    [recordScanRun, activeWs],
+  )
 }
 
 /* ------------------------------------------------- repositories (AUDIT-I3) */

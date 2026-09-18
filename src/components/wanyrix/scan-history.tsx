@@ -14,6 +14,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useToast } from '@/hooks/use-toast'
 import { useScanStore, type ScanHistoryEntry } from '@/lib/wanyrix/scan-store'
+import {
+  buildClientScanHistoryExport,
+  clientScanHistoryFilename,
+} from '@/lib/wanyrix/flavors'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { cn } from '@/lib/utils'
 import { MeasurementBadge, Panel } from './shared'
@@ -45,29 +49,11 @@ function downloadBlob(filename: string, content: string, mime: string) {
 }
 
 function exportJson(workspace: string, runs: ScanHistoryEntry[]) {
-  return JSON.stringify(
-    {
-      schema: 'wanyrix.scan-history/v1',
-      workspace,
-      exportedAt: new Date().toISOString(),
-      note: 'client-side scan log for the web dashboard demo — durations are terminal wall clock; figures mirror the doctor payload (Gate 21: measured vs estimated labeled per run)',
-      runs: runs.map((h) => ({
-        id: h.id,
-        at: new Date(h.at).toISOString(),
-        trigger: h.trigger,
-        findings: h.findings,
-        critical: h.critical,
-        warning: h.warning,
-        info: h.info,
-        buildTimeSeconds: h.buildTime,
-        estimatedFromSeconds: h.estimatedFrom,
-        estimatedToSeconds: h.estimatedTo,
-        wallClockMs: h.durationMs,
-      })),
-    },
-    null,
-    2,
-  )
+  // ENG-TCA-2 consolidation (Task 3-b): the download envelope is built by the
+  // SAME run-mapper + envelope constructor the HTTP `?flavor=scan-history`
+  // route uses. Only `note` and `runs` differ honestly from the server flavor
+  // (client log = real local activity; server log stays empty — Gate 21).
+  return JSON.stringify(buildClientScanHistoryExport(workspace, runs), null, 2)
 }
 
 function exportMarkdown(workspace: string, runs: ScanHistoryEntry[]): string {
@@ -113,10 +99,18 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
   const barMax = metric === 'findings' ? maxFindings : maxDuration
 
   const doExport = (fmt: 'json' | 'md') => {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const now = new Date()
     if (fmt === 'json') {
-      downloadBlob(`${activeWs}-scan-history-${stamp}.json`, exportJson(activeWs, history), 'application/json')
+      // Consolidated exporter (ENG-TCA-2): filename + envelope both come from
+      // flavors.ts so the download matches the HTTP flavor byte-for-byte.
+      downloadBlob(
+        clientScanHistoryFilename(activeWs, now),
+        exportJson(activeWs, history),
+        'application/json',
+      )
     } else {
+      // Same stamp rule as the exporter: ISO → '-', 19 chars.
+      const stamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19)
       downloadBlob(`${activeWs}-scan-history-${stamp}.md`, exportMarkdown(activeWs, history), 'text/markdown')
     }
     toast({
