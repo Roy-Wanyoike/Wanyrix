@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient, UseMutationResult } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient, UseMutationResult } from '@tanstack/react-query'
 import type {
   DiagnosticsPayload,
   DoctorReport,
@@ -14,6 +14,7 @@ import type {
   ExperimentsPayload,
   PRAnalysis,
   StoragePayload,
+  WorkspaceSummary,
   WorkspacesPayload,
 } from './types'
 import { useWorkspaceStore } from './workspace-store'
@@ -207,5 +208,22 @@ export function useReportExport(format: ReportFormat = 'markdown') {
       else downloadText(bundle.filename, JSON.stringify(bundle.json, null, 2))
       return bundle
     },
+  })
+}
+
+/* ------------------------------------------------- repositories (AUDIT-I3) */
+
+/**
+ * Health snapshot for EVERY registered workspace (not just the active one) —
+ * powers the Repositories view. Uses the same /api/wanyrix/health route with
+ * an explicit `ws` param per workspace, so no new network surface is created.
+ */
+export function useWorkspaceHealths(workspaces: WorkspaceSummary[]) {
+  return useQueries({
+    queries: workspaces.map((w) => ({
+      queryKey: ['health', w.id],
+      queryFn: () => getJson<HealthPayload>(`/api/wanyrix/health?ws=${encodeURIComponent(w.id)}`),
+      staleTime: 60_000,
+    })),
   })
 }

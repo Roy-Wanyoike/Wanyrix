@@ -529,13 +529,70 @@ export interface ExplainResponse {
   error?: string
 }
 
+/**
+ * First-class navigation ids (AUDIT-I3 — 14 required surfaces).
+ * The 14 required items are: overview, repositories, doctor (Builds),
+ * dependencies, graph, findings, architecture, experiments, runtime,
+ * history, ai, scorecard (Policies), organization, settings.
+ * `diagnostics`, `prs`, `simulator` and `issues` are pre-existing surfaces —
+ * they keep their nav entries so nothing regresses.
+ */
 export type ViewId =
   | 'overview'
+  | 'repositories'
   | 'doctor'
+  | 'dependencies'
   | 'graph'
+  | 'findings'
+  | 'architecture'
   | 'diagnostics'
   | 'prs'
   | 'simulator'
   | 'experiments'
+  | 'runtime'
+  | 'history'
+  | 'ai'
   | 'scorecard'
   | 'issues'
+  | 'organization'
+  | 'settings'
+
+// ---------------------------------------------------------------------------
+// Organization (AUDIT-I3 — fixture-backed org profile; no live auth exists,
+// so this data is always rendered with an explicit fixture label)
+// ---------------------------------------------------------------------------
+
+export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer'
+
+export type OrgPlanTier = 'trial' | 'developer' | 'team' | 'enterprise'
+
+export interface OrgMember {
+  id: string
+  name: string
+  handle: string
+  role: OrgRole
+  status: 'active' | 'invited'
+  lastActive: string
+}
+
+export interface OrgTier {
+  tier: OrgPlanTier
+  name: string
+  blurb: string
+  capabilities: string[]
+  current: boolean
+}
+
+export interface OrganizationProfile {
+  name: string
+  slug: string
+  plan: OrgPlanTier
+  planName: string
+  /** fixture dates — rendered with the fixture label, never as live billing state */
+  trialStartedAt: string
+  trialEndsAt: string
+  seatsUsed: number
+  seatsTotal: number
+  members: OrgMember[]
+  tiers: OrgTier[]
+}

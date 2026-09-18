@@ -5,22 +5,13 @@ import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   Braces,
-  Calculator,
   FileDiff,
   FileText,
-  FlaskConical,
-  GitPullRequest,
   HardDrive,
-  LayoutDashboard,
-  ListChecks,
   Loader2,
-  Microscope,
   Moon,
-  Network,
   RefreshCw,
   Search,
-  ShieldCheck,
-  Stethoscope,
   Sun,
   TerminalSquare,
 } from 'lucide-react'
@@ -33,6 +24,8 @@ import { DiffQueueSheet } from './diff-queue-sheet'
 import { StorageDialog } from './storage-dialog'
 import { NotificationsPopover } from './notifications-popover'
 import { CliContractDialog } from './cli-dialog'
+import { SystemStatusPill } from './system-status-pill'
+import { NAV_GROUPS, VIEW_TITLES } from './nav-registry'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -105,47 +98,10 @@ function ThemeToggle() {
   )
 }
 
-const NAV: {
-  group: string
-  items: { id: ViewId; label: string; icon: React.ReactNode; hint: string }[]
-}[] = [
-  {
-    group: 'Intelligence',
-    items: [
-      { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="size-4" />, hint: 'Engineering health' },
-      { id: 'doctor', label: 'Build Doctor', icon: <Stethoscope className="size-4" />, hint: 'wanyrix doctor' },
-      { id: 'graph', label: 'Engineering Graph', icon: <Network className="size-4" />, hint: 'Blast radius' },
-      { id: 'diagnostics', label: 'Diagnostics', icon: <Microscope className="size-4" />, hint: 'Borrow · async' },
-    ],
-  },
-  {
-    group: 'Action',
-    items: [
-      { id: 'prs', label: 'PR Analysis', icon: <GitPullRequest className="size-4" />, hint: 'Regression guard' },
-      { id: 'simulator', label: 'Impact Simulator', icon: <Calculator className="size-4" />, hint: 'Change cost' },
-      { id: 'experiments', label: 'Experiments', icon: <FlaskConical className="size-4" />, hint: 'Verify improvements' },
-    ],
-  },
-  {
-    group: 'Governance',
-    items: [
-      { id: 'scorecard', label: 'Release Scorecard', icon: <ShieldCheck className="size-4" />, hint: '45 MVP gates' },
-      { id: 'issues', label: 'Issues & PRs', icon: <ListChecks className="size-4" />, hint: 'Traceability' },
-    ],
-  },
-]
-
-const TITLES: Record<ViewId, { title: string; sub: string }> = {
-  overview: { title: 'Engineering Health', sub: 'continuously analyzed' },
-  doctor: { title: 'Build Doctor', sub: 'wanyrix doctor · evidence-backed findings' },
-  graph: { title: 'Engineering Graph', sub: 'dependency backbone · blast radius' },
-  diagnostics: { title: 'Diagnostics', sub: 'borrow-checker explainer · async flow' },
-  prs: { title: 'PR Analysis', sub: 'build regression guard' },
-  simulator: { title: 'Impact Simulator', sub: 'what will this change cost?' },
-  experiments: { title: 'Experiments', sub: 'baseline → candidate → verified' },
-  scorecard: { title: 'Release Scorecard', sub: 'MVP acceptance gates · GO / NO-GO' },
-  issues: { title: 'Issues & PRs', sub: 'every issue fixed by a PR' },
-}
+/* NAV + TITLES live in ./nav-registry (AUDIT-I3) — shared with the
+   command palette so sidebar, palette and mobile nav can never drift. */
+const NAV = NAV_GROUPS
+const TITLES = VIEW_TITLES
 
 export function AppShell({
   activeView,
@@ -277,7 +233,7 @@ export function AppShell({
                         <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
                       )}
                       <span className={cn(activeView === item.id ? 'text-primary' : 'opacity-70')}>
-                        {item.icon}
+                        <item.icon className="size-4" aria-hidden />
                       </span>
                       <span className="flex-1 font-medium">{item.label}</span>
                       {activeView === item.id && <span className="size-1.5 rounded-full bg-primary" />}
@@ -324,7 +280,11 @@ export function AppShell({
               <p className="truncate font-mono text-[11px] text-muted-foreground">{TITLES[activeView].sub}</p>
             </div>
 
-            <div className="ml-auto flex items-center gap-2">
+            {/* flex-wrap + justify-end: at 390px the action cluster wraps onto a
+                second row instead of overflowing the viewport (AUDIT-I3 regression
+                guard while the topbar grew the status pill). */}
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <SystemStatusPill onNavigate={onNavigate} />
               <button
                 type="button"
                 onClick={() => setPaletteOpen(true)}
@@ -439,25 +399,38 @@ export function AppShell({
             </div>
           </div>
 
-          {/* mobile nav */}
+          {/* mobile nav — grouped chips (AUDIT-I3: 18 items need orientation).
+              Items keep ≥44px touch targets (min-h-11). */}
           <nav
-            className="flex gap-1.5 overflow-x-auto border-t border-border/60 px-3 py-2 lg:hidden"
+            className="flex items-center gap-1.5 overflow-x-auto border-t border-border/60 px-3 py-2 lg:hidden"
             aria-label="Wanyrix views (mobile)"
           >
-            {NAV.flatMap((g) => g.items).map((item) => (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                className={cn(
-                  'flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors',
-                  activeView === item.id
-                    ? 'border-primary/40 bg-primary/12 text-foreground'
-                    : 'border-border/70 text-muted-foreground',
-                )}
-              >
-                {item.icon}
-                {item.label}
-              </button>
+            {NAV.map((group, gi) => (
+              <div key={group.group} className="flex shrink-0 items-center gap-1.5">
+                {gi > 0 && <span className="h-5 w-px shrink-0 bg-border/70" aria-hidden />}
+                <span
+                  className="shrink-0 self-center font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground/60"
+                  aria-hidden
+                >
+                  {group.group}
+                </span>
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => onNavigate(item.id)}
+                    aria-current={activeView === item.id ? 'page' : undefined}
+                    className={cn(
+                      'flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs transition-colors',
+                      activeView === item.id
+                        ? 'border-primary/40 bg-primary/12 text-foreground'
+                        : 'border-border/70 text-muted-foreground',
+                    )}
+                  >
+                    <item.icon className="size-4" aria-hidden />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
         </header>

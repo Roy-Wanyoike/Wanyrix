@@ -4,24 +4,15 @@ import { useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import {
   Braces,
-  Calculator,
   Check,
   Database,
   ExternalLink,
   FileDiff,
   FileText,
-  FlaskConical,
-  GitPullRequest,
   HardDrive,
   History,
-  LayoutDashboard,
-  ListChecks,
-  Microscope,
   Moon,
-  Network,
   RefreshCw,
-  ShieldCheck,
-  Stethoscope,
   Sun,
   TerminalSquare,
 } from 'lucide-react'
@@ -37,19 +28,11 @@ import {
 import { REPO_URL } from '@/lib/wanyrix/data'
 import { useWorkspaces } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+import { NAV_ITEMS } from './nav-registry'
 import type { ViewId } from '@/lib/wanyrix/types'
 
-const NAV_ITEMS: { id: ViewId; label: string; icon: React.ElementType; hint: string }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard, hint: 'Engineering health' },
-  { id: 'doctor', label: 'Build Doctor', icon: Stethoscope, hint: 'wanyrix doctor' },
-  { id: 'graph', label: 'Engineering Graph', icon: Network, hint: 'blast radius' },
-  { id: 'diagnostics', label: 'Diagnostics', icon: Microscope, hint: 'borrow · async' },
-  { id: 'prs', label: 'PR Analysis', icon: GitPullRequest, hint: 'regression guard' },
-  { id: 'simulator', label: 'Impact Simulator', icon: Calculator, hint: 'change cost' },
-  { id: 'experiments', label: 'Experiments', icon: FlaskConical, hint: 'verify claims' },
-  { id: 'scorecard', label: 'Release Scorecard', icon: ShieldCheck, hint: 'GO / NO-GO' },
-  { id: 'issues', label: 'Issues & PRs', icon: ListChecks, hint: 'traceability' },
-]
+/* Navigation comes from ./nav-registry (AUDIT-I3) — same source as the
+   sidebar, so the palette always covers every view, 18/18. */
 
 export function CommandPalette({
   open,
@@ -198,7 +181,7 @@ export function CommandPalette({
           >
             <History className="size-4 text-teal-300" />
             <span>View scan history</span>
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground">Build Doctor</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">History view</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {
@@ -210,6 +193,17 @@ export function CommandPalette({
             <ExternalLink className="size-4 text-teal-300" />
             <span>Open GitHub repository</span>
             <span className="ml-auto font-mono text-[10px] text-muted-foreground">Roy-Wanyoike/wanyrix</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setOpen(false)
+              onNavigate('history')
+            }}
+            className="gap-2.5"
+          >
+            <History className="size-4 text-teal-300" />
+            <span>Open History view</span>
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">scan run log</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {

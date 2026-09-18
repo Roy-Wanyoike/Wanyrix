@@ -14,6 +14,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import { useExplain } from '@/lib/wanyrix/hooks'
 import type { ExplainRequest } from '@/lib/wanyrix/types'
+import { aiStatusFromExplain, useAiStatusStore } from './ai-status-store'
 
 /**
  * The AI reasoning layer entry point (Gate 9): consumes only structured
@@ -38,8 +39,17 @@ export function ExplainDialog({
 }) {
   const [open, setOpen] = useState(false)
   const explain = useExplain()
+  const setAiStatus = useAiStatusStore((s) => s.setStatus)
 
-  const run = () => explain.mutate({ context, question, kind })
+  /* every reasoning outcome feeds the honest system status pill (AUDIT-I3) */
+  const run = () =>
+    explain.mutate(
+      { context, question, kind },
+      {
+        onSuccess: (data) => setAiStatus(aiStatusFromExplain(data)),
+        onError: () => setAiStatus('deterministic'),
+      },
+    )
 
   return (
     <Dialog

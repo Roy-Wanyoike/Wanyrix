@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
+import { RefreshCw } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import type { ConfidenceClass, MeasurementStatus, Severity } from '@/lib/wanyrix/types'
 
@@ -262,6 +266,53 @@ export function EmptyState({ label }: { label: string }) {
     <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
       {label}
     </div>
+  )
+}
+
+/**
+ * Shared loading skeleton for first-class views (AUDIT-I3) — heading block +
+ * KPI row + panel rows, so every new view degrades the same way.
+ */
+export function ViewSkeleton({ kpiCount = 4 }: { kpiCount?: number }) {
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-32" />
+        <Skeleton className="h-7 w-56" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {Array.from({ length: kpiCount }).map((_, i) => (
+          <Skeleton key={i} className="h-[104px] rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-[280px] rounded-xl" />
+    </div>
+  )
+}
+
+/** Shared error state — honest failure copy + retry, no fake data. */
+export function DataErrorPanel({
+  title,
+  message,
+  onRetry,
+}: {
+  title: string
+  message: string
+  onRetry: () => void
+}) {
+  return (
+    <Panel title={title}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-red-300">
+          Failed to load: <span className="font-mono text-xs">{message}</span>
+        </p>
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={onRetry}>
+          <RefreshCw className="size-3.5" />
+          Retry
+        </Button>
+      </div>
+    </Panel>
   )
 }
 

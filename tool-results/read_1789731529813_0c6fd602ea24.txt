@@ -1,0 +1,839 @@
+     1→'use client'
+     2→
+     3→import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+     4→import { motion } from 'framer-motion'
+     5→import { ArrowRight, ChevronDown, Lightbulb, RotateCcw, Search, SplitSquareHorizontal } from 'lucide-react'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Checkbox } from '@/components/ui/checkbox'
+     9→import { Input } from '@/components/ui/input'
+    10→import { Skeleton } from '@/components/ui/skeleton'
+    11→import {
+    12→  Table,
+    13→  TableBody,
+    14→  TableCell,
+    15→  TableFooter,
+    16→  TableHead,
+    17→  TableHeader,
+    18→  TableRow,
+    19→} from '@/components/ui/table'
+    20→import { useGraph } from '@/lib/wanyrix/hooks'
+    21→import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+    22→import { useSimulatorIntentStore } from '@/lib/wanyrix/simulator-intent'
+    23→import type { BlastEntry, DuplicateResolution, GraphEdge, GraphNode, GraphPayload } from '@/lib/wanyrix/types'
+    24→import { cn } from '@/lib/utils'
+    25→import { ExplainDialog } from '../explain-dialog'
+    26→import { CountUp, MeasurementBadge, Panel, SectionHeading } from '../shared'
+    27→import type { ViewProps } from '../view-types'
+    28→
+    29→/* ------------------------------------------------------------------ layout */
+    30→
+    31→const BAND_Y = { bin: 90, lib: 320, external: 550 } as const
+    32→const X_MIN = 60
+    33→const X_MAX = 900
+    34→
+    35→interface Positioned extends GraphNode {
+    36→  x: number
+    37→  y: number
+    38→  r: number
+    39→}
+    40→
+    41→/**
+    42→ * Band layout: workspace bins (y 90) → workspace libs (y 320) → externals &
+    43→ * proc-macros (y 550). Band members spread evenly across X_MIN..X_MAX in the
+    44→ * exact order they appear in the payload's nodes array.
+    45→ */
+    46→function layoutGraph(nodes: GraphNode[]): Map<string, Positioned> {
+    47→  const map = new Map<string, Positioned>()
+    48→  for (const band of ['bin', 'lib', 'external'] as const) {
+    49→    const members = nodes.filter((n) => n.band === band)
+    50→    members.forEach((n, i) => {
+    51→      const x =
+    52→        members.length === 1 ? (X_MIN + X_MAX) / 2 : X_MIN + (i * (X_MAX - X_MIN)) / (members.length - 1)
+    53→      const r = Math.min(22, Math.max(9, 7 + n.buildTime * 0.7))
+    54→      map.set(n.id, { ...n, x, y: BAND_Y[band], r })
+    55→    })
+    56→  }
+    57→  return map
+    58→}
+    59→
+    60→function edgePath(a: Positioned, b: Positioned): string {
+    61→  const y1 = a.y + a.r
+    62→  const y2 = b.y - b.r
+    63→  const my = (y1 + y2) / 2
+    64→  return `M ${a.x} ${y1} C ${a.x} ${my}, ${b.x} ${my}, ${b.x} ${y2}`
+    65→}
+    66→
+    67→function nodeFill(n: GraphNode): { fill: string; fillOpacity: number } {
+    68→  if (n.kind === 'proc-macro') return { fill: 'var(--chart-5)', fillOpacity: 0.7 }
+    69→  if (n.kind === 'external') return { fill: 'oklch(0.30 0.005 60)', fillOpacity: 1 }
+    70→  if (n.critical) return { fill: 'var(--chart-1)', fillOpacity: 0.85 }
+    71→  return { fill: 'oklch(0.35 0.03 50)', fillOpacity: 1 }
+    72→}
+    73→
+    74→const AMBER = 'rgb(251 191 36)'
+    75→
+    76→/* ------------------------------------------------------------------ graph */
+    77→
+    78→interface GraphPanelProps {
+    79→  nodes: GraphNode[]
+    80→  edges: GraphEdge[]
+    81→  query: string
+    82→  showExternal: boolean
+    83→  selected: string
+    84→  onSelect: (id: string) => void
+    85→  workspaceName: string
+    86→}
+    87→
+    88→const GraphPanel = memo(function GraphPanel({
+    89→  nodes,
+    90→  edges,
+    91→  query,
+    92→  showExternal,
+    93→  selected,
+    94→  onSelect,
+    95→  workspaceName,
+    96→}: GraphPanelProps) {
+    97→  const [hovered, setHovered] = useState<string | null>(null)
+    98→  const [mouse, setMouse] = useState({ x: 24, y: 24, w: 320, h: 220 })
+    99→  const containerRef = useRef<HTMLDivElement>(null)
+   100→
+   101→  const pos = useMemo(() => layoutGraph(nodes), [nodes])
+   102→
+   103→  const q = query.trim().toLowerCase()
+   104→  const match = useCallback((id: string) => q === '' || id.toLowerCase().includes(q), [q])
+   105→
+   106→  const visible = useMemo(
+   107→    () => nodes.filter((n) => showExternal || n.band !== 'external'),
+   108→    [nodes, showExternal],
+   109→  )
+   110→  const visibleIds = useMemo(() => new Set(visible.map((n) => n.id)), [visible])
+   111→
+   112→  const focusId = hovered ?? selected
+   113→
+   114→  const laidOut = useMemo(
+   115→    () =>
+   116→      edges.flatMap((e) => {
+   117→        const a = pos.get(e.from)
+   118→        const b = pos.get(e.to)
+   119→        if (!a || !b || !visibleIds.has(a.id) || !visibleIds.has(b.id)) return []
+   120→        return [{ key: `${e.from}->${e.to}`, from: e.from, to: e.to, a, b }]
+   121→      }),
+   122→    [edges, pos, visibleIds],
+   123→  )
+   124→
+   125→  const neighbors = useMemo(() => {
+   126→    const s = new Set<string>()
+   127→    if (focusId) {
+   128→      s.add(focusId)
+   129→      for (const l of laidOut) {
+   130→        if (l.from === focusId) s.add(l.to)
+   131→        if (l.to === focusId) s.add(l.from)
+   132→      }
+   133→    }
+   134→    return s
+   135→  }, [focusId, laidOut])
+   136→
+   137→  const hoveredNode = hovered ? pos.get(hovered) : undefined
+   138→
+   139→  const trackMouse = (ev: React.MouseEvent<HTMLDivElement>) => {
+   140→    const rect = containerRef.current?.getBoundingClientRect()
+   141→    if (!rect) return
+   142→    setMouse({ x: ev.clientX - rect.left, y: ev.clientY - rect.top, w: rect.width, h: rect.height })
+   143→  }
+   144→
+   145→  const tipLeft = Math.max(8, Math.min(mouse.x + 16, mouse.w - 196))
+   146→  const tipTop = Math.max(8, Math.min(mouse.y + 16, mouse.h - 112))
+   147→
+   148→  return (
+   149→    <Panel
+   150→      title="Interactive graph"
+   151→      subtitle="hover to trace · click to inspect"
+   152→      className="xl:col-span-2"
+   153→    >
+   154→      <div
+   155→        ref={containerRef}
+   156→        className="relative"
+   157→        onMouseMove={trackMouse}
+   158→        onMouseLeave={() => setHovered(null)}
+   159→      >
+   160→        <svg
+   161→          viewBox="0 0 960 640"
+   162→          className="h-auto w-full rounded-lg border bg-[oklch(0.13_0.004_60)]"
+   163→          role="img"
+   164→          aria-label={`Dependency graph of the ${workspaceName} workspace`}
+   165→        >
+   166→          {/* band labels */}
+   167→          <text x={12} y={BAND_Y.bin - 36} fontSize={9} fill="oklch(0.9 0 0 / 0.35)" className="font-mono uppercase">
+   168→            bins
+   169→          </text>
+   170→          <text x={12} y={BAND_Y.lib - 36} fontSize={9} fill="oklch(0.9 0 0 / 0.35)" className="font-mono uppercase">
+   171→            libs
+   172→          </text>
+   173→          {showExternal && (
+   174→            <text
+   175→              x={12}
+   176→              y={BAND_Y.external - 36}
+   177→              fontSize={9}
+   178→              fill="oklch(0.9 0 0 / 0.35)"
+   179→              className="font-mono uppercase"
+   180→            >
+   181→              external
+   182→            </text>
+   183→          )}
+   184→
+   185→          {/* edges */}
+   186→          <g fill="none">
+   187→            {laidOut.map(({ key, from, to, a, b }) => {
+   188→              const touch = focusId !== null && (from === focusId || to === focusId)
+   189→              const dim = focusId !== null && !touch
+   190→              const dimmedBySearch = q !== '' && !match(from) && !match(to)
+   191→              return (
+   192→                <path
+   193→                  key={key}
+   194→                  d={edgePath(a, b)}
+   195→                  stroke={touch ? 'var(--chart-1)' : 'oklch(1 0 0 / 0.1)'}
+   196→                  strokeWidth={touch ? 2 : 1.25}
+   197→                  opacity={touch ? 1 : dim || dimmedBySearch ? 0.25 : 1}
+   198→                  className="transition-[opacity,stroke] duration-200"
+   199→                />
+   200→              )
+   201→            })}
+   202→          </g>
+   203→
+   204→          {/* nodes */}
+   205→          <g>
+   206→            {visible.map((n, i) => {
+   207→              const p = pos.get(n.id)
+   208→              if (!p) return null
+   209→              const { fill, fillOpacity } = nodeFill(n)
+   210→              const isSel = n.id === selected
+   211→              const isHov = n.id === hovered
+   212→              const matched = match(n.id)
+   213→              const searchDim = q !== '' && !matched
+   214→              const focusDim = focusId !== null && !neighbors.has(n.id)
+   215→              return (
+   216→                <g
+   217→                  key={n.id}
+   218→                  opacity={searchDim ? 0.2 : focusDim ? 0.45 : 1}
+   219→                  className="cursor-pointer transition-opacity duration-200"
+   220→                  onMouseEnter={() => setHovered(n.id)}
+   221→                  onClick={() => onSelect(n.id)}
+   222→                  tabIndex={0}
+   223→                  role="button"
+   224→                  aria-label={`Inspect ${n.id}`}
+   225→                  onKeyDown={(ev) => {
+   226→                    if (ev.key === 'Enter' || ev.key === ' ') {
+   227→                      ev.preventDefault()
+   228→                      onSelect(n.id)
+   229→                    }
+   230→                  }}
+   231→                  onFocus={() => setHovered(n.id)}
+   232→                  onBlur={() => setHovered(null)}
+   233→                >
+   234→                  {q !== '' && matched && (
+   235→                    <circle cx={p.x} cy={p.y} r={p.r + 4} fill="none" stroke={AMBER} strokeWidth={1.25} />
+   236→                  )}
+   237→                  {isSel && (
+   238→                    <circle cx={p.x} cy={p.y} r={p.r + 4} fill="none" stroke="var(--chart-1)" strokeWidth={1.5} />
+   239→                  )}
+   240→                  {isHov && !isSel && (
+   241→                    <circle
+   242→                      cx={p.x}
+   243→                      cy={p.y}
+   244→                      r={p.r + 4}
+   245→                      fill="none"
+   246→                      stroke="oklch(1 0 0 / 0.35)"
+   247→                      strokeWidth={1}
+   248→                    />
+   249→                  )}
+   250→                  {n.duplicate && (
+   251→                    <circle
+   252→                      cx={p.x}
+   253→                      cy={p.y}
+   254→                      r={p.r + 3}
+   255→                      fill="none"
+   256→                      stroke={AMBER}
+   257→                      strokeWidth={1}
+   258→                      strokeDasharray="3 3"
+   259→                      opacity={0.85}
+   260→                    />
+   261→                  )}
+   262→                  <motion.circle
+   263→                    cx={p.x}
+   264→                    cy={p.y}
+   265→                    r={p.r}
+   266→                    fill={fill}
+   267→                    fillOpacity={fillOpacity}
+   268→                    initial={{ scale: 0 }}
+   269→                    animate={{ scale: 1 }}
+   270→                    transition={{ delay: 0.015 * i, type: 'spring', stiffness: 260, damping: 18 }}
+   271→                    style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+   272→                  />
+   273→                  <text
+   274→                    x={p.x}
+   275→                    y={p.y + p.r + 12}
+   276→                    textAnchor="middle"
+   277→                    fontSize={10}
+   278→                    fill="oklch(0.9 0 0 / 0.75)"
+   279→                    className="select-none font-mono"
+   280→                  >
+   281→                    {n.id}
+   282→                    {n.duplicate && (
+   283→                      <tspan dy={-4} fontSize={7} fill={AMBER}>
+   284→                        {' '}
+   285→                        ×2
+   286→                      </tspan>
+   287→                    )}
+   288→                  </text>
+   289→                </g>
+   290→              )
+   291→            })}
+   292→          </g>
+   293→        </svg>
+   294→
+   295→        {/* hover tooltip */}
+   296→        {hoveredNode && (
+   297→          <div
+   298→            role="tooltip"
+   299→            className="pointer-events-none absolute z-20 min-w-44 rounded-lg border border-border bg-popover/95 p-2.5 shadow-xl backdrop-blur"
+   300→            style={{ left: tipLeft, top: tipTop }}
+   301→          >
+   302→            <p className="font-mono text-xs font-semibold text-foreground">{hoveredNode.id}</p>
+   303→            <dl className="mt-1.5 space-y-0.5 font-mono text-[10px] text-muted-foreground">
+   304→              <div className="flex justify-between gap-4">
+   305→                <dt>build</dt>
+   306→                <dd className="text-foreground">{hoveredNode.buildTime.toFixed(1)}s</dd>
+   307→              </div>
+   308→              <div className="flex justify-between gap-4">
+   309→                <dt>downstream</dt>
+   310→                <dd className="text-foreground">{hoveredNode.downstream} crates</dd>
+   311→              </div>
+   312→              <div className="flex justify-between gap-4">
+   313→                <dt>kind</dt>
+   314→                <dd className="text-foreground">{hoveredNode.kind}</dd>
+   315→              </div>
+   316→            </dl>
+   317→          </div>
+   318→        )}
+   319→      </div>
+   320→      <p className="mt-3 font-mono text-[10px] text-muted-foreground">
+   321→        {visible.length} nodes · {laidOut.length} edges rendered
+   322→        {!showExternal ? ' · external band hidden' : ''}
+   323→      </p>
+   324→    </Panel>
+   325→  )
+   326→})
+   327→
+   328→/* --------------------------------------------------------------- inspector */
+   329→
+   330→function DetailStat({ label, children }: { label: string; children: ReactNode }) {
+   331→  return (
+   332→    <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+   333→      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+   334→      <p className="mt-0.5 font-mono text-sm font-semibold text-foreground">{children}</p>
+   335→    </div>
+   336→  )
+   337→}
+   338→
+   339→function SectionLabel({ children }: { children: ReactNode }) {
+   340→  return <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{children}</h3>
+   341→}
+   342→
+   343→function NodeDetails({
+   344→  node,
+   345→  edges,
+   346→  blast,
+   347→  resolutions,
+   348→  onNavigate,
+   349→}: {
+   350→  node: GraphNode
+   351→  edges: GraphEdge[]
+   352→  blast: BlastEntry[]
+   353→  resolutions?: Record<string, DuplicateResolution>
+   354→  onNavigate?: ViewProps['onNavigate']
+   355→}) {
+   356→  const dependents = edges.filter((e) => e.to === node.id).map((e) => e.from)
+   357→  const touching = edges.filter((e) => e.from === node.id || e.to === node.id)
+   358→  const blastEntry = blast.find((b) => b.crate === node.id)
+   359→
+   360→  return (
+   361→    <Panel title="Inspector" subtitle={`selected node · ${node.band} band`} className="self-start">
+   362→      <div className="space-y-4">
+   363→        <div>
+   364→          <div className="flex flex-wrap items-center gap-2">
+   365→            <h3 className="text-base font-semibold">{node.id}</h3>
+   366→            <Badge variant="outline" className="font-mono text-[10px]">
+   367→              {node.kind}
+   368→            </Badge>
+   369→            {node.critical && (
+   370→              <Badge className="border-amber-500/30 bg-amber-500/10 font-mono text-[10px] text-amber-300">
+   371→                critical
+   372→              </Badge>
+   373→            )}
+   374→          </div>
+   375→        </div>
+   376→
+   377→        <div className="grid grid-cols-2 gap-2">
+   378→          <DetailStat label="build time">
+   379→            <CountUp value={node.buildTime} decimals={1} suffix="s" />
+   380→          </DetailStat>
+   381→          <DetailStat label="fan-in">{node.fanIn}</DetailStat>
+   382→          <DetailStat label="fan-out">{node.fanOut}</DetailStat>
+   383→          <DetailStat label="changes 90d">{node.changeFreq}</DetailStat>
+   384→        </div>
+   385→
+   386→        {node.downstream >= 20 && (
+   387→          <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5">
+   388→            <p className="text-[11px] text-amber-200/90">
+   389→              blocks{' '}
+   390→              <span className="font-mono text-lg font-semibold text-amber-300">
+   391→                <CountUp value={node.downstream} />
+   392→              </span>{' '}
+   393→              workspace crates
+   394→            </p>
+   395→          </div>
+   396→        )}
+   397→
+   398→        {node.duplicate && node.versions && (
+   399→          <div className="space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5">
+   400→            <div className="flex gap-1.5">
+   401→              {node.versions.map((v) => (
+   402→                <Badge key={v} variant="outline" className="font-mono text-[10px]">
+   403→                  {v}
+   404→                </Badge>
+   405→              ))}
+   406→            </div>
+   407→            <p className="text-[11px] text-amber-300">duplicate compiled ×2 — unify to one version</p>
+   408→            {resolutions?.[node.id] && (
+   409→              <ResolutionCta
+   410→                crate={node.id}
+   411→                resolution={resolutions[node.id]}
+   412→                onNavigate={onNavigate}
+   413→                compact
+   414→              />
+   415→            )}
+   416→          </div>
+   417→        )}
+   418→
+   419→        <div>
+   420→          <SectionLabel>Dependents ({dependents.length})</SectionLabel>
+   421→          {dependents.length > 0 ? (
+   422→            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+   423→              {dependents.slice(0, 6).map((d) => (
+   424→                <Badge key={d} variant="secondary" className="font-mono text-[10px]">
+   425→                  {d}
+   426→                </Badge>
+   427→              ))}
+   428→              {dependents.length > 6 && (
+   429→                <span className="font-mono text-[10px] text-muted-foreground">
+   430→                  +{dependents.length - 6} more
+   431→                </span>
+   432→              )}
+   433→            </div>
+   434→          ) : (
+   435→            <p className="mt-1.5 text-[11px] text-muted-foreground">top-level — nothing in the backbone depends on it</p>
+   436→          )}
+   437→        </div>
+   438→
+   439→        {blastEntry && (
+   440→          <div className="space-y-1.5 rounded-lg border border-red-500/25 bg-red-500/5 px-3 py-2.5">
+   441→            <SectionLabel>Blast radius</SectionLabel>
+   442→            <p className="font-mono text-[11px] text-red-300">{blastEntry.file}</p>
+   443→            <p className="text-[11px] text-muted-foreground">
+   444→              touching it re-invalidates{' '}
+   445→              <span className="font-mono font-semibold text-foreground">
+   446→                <CountUp value={blastEntry.affectedWorkspace} />
+   447→              </span>{' '}
+   448→              crates
+   449→            </p>
+   450→            <p className="font-mono text-[11px] text-muted-foreground">{blastEntry.chain.join(' → ')}</p>
+   451→            <p className="flex flex-wrap items-center gap-1.5 text-[11px]">
+   452→              <span className="font-mono text-red-300">+{blastEntry.incrementalDelta}s incremental (estimated)</span>
+   453→              <MeasurementBadge status="estimated" />
+   454→            </p>
+   455→          </div>
+   456→        )}
+   457→
+   458→        <div className="flex flex-col gap-2.5 border-t border-border/60 pt-3">
+   459→          <ExplainDialog
+   460→            kind="issue"
+   461→            context={JSON.stringify({ node, edges: touching })}
+   462→            question="Why is this crate important in the workspace graph?"
+   463→          />
+   464→          <Button variant="outline" size="sm" className="w-full" onClick={() => onNavigate?.('simulator')}>
+   465→            Open Impact Simulator
+   466→          </Button>
+   467→        </div>
+   468→      </div>
+   469→    </Panel>
+   470→  )
+   471→}
+   472→
+   473→/* -------------------------------------------------------------- duplicates */
+   474→
+   475→/**
+   476→ * Round-10 cross-view resolution CTA: routes to the Impact Simulator with
+   477→ * the matching upgrade scenario preselected. `full` resolutions get an
+   478→ * emerald "unifies the tree" framing; `partial` ones stay amber and say
+   479→ * exactly which pin survives (honesty contract — never overclaim).
+   480→ */
+   481→function ResolutionCta({
+   482→  resolution,
+   483→  crate,
+   484→  onNavigate,
+   485→  compact = false,
+   486→}: {
+   487→  resolution: DuplicateResolution
+   488→  crate: string
+   489→  onNavigate?: ViewProps['onNavigate']
+   490→  compact?: boolean
+   491→}) {
+   492→  const setIntent = useSimulatorIntentStore((s) => s.setIntent)
+   493→  const full = resolution.kind === 'full'
+   494→  return (
+   495→    <div
+   496→      className={cn(
+   497→        'rounded-lg border px-3 py-2.5',
+   498→        full ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/25 bg-amber-500/5',
+   499→      )}
+   500→    >
+   501→      <div className="flex flex-wrap items-center gap-2">
+   502→        <SplitSquareHorizontal
+   503→          className={cn('size-3.5 shrink-0', full ? 'text-emerald-400' : 'text-amber-400')}
+   504→          aria-hidden
+   505→        />
+   506→        <span
+   507→          className={cn(
+   508→            'font-mono text-[11px] font-semibold',
+   509→            full ? 'text-emerald-300' : 'text-amber-300',
+   510→          )}
+   511→        >
+   512→          {full ? 'resolution available' : 'partial resolution'}
+   513→        </span>
+   514→        <span className="font-mono text-[11px] text-muted-foreground">
+   515→          {resolution.from} → {resolution.to}
+   516→        </span>
+   517→        <span
+   518→          className={cn(
+   519→            'rounded-full border px-1.5 py-0.5 font-mono text-[10px]',
+   520→            resolution.ciDelta < 0
+   521→              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+   522→              : 'border-border bg-muted/50 text-muted-foreground',
+   523→          )}
+   524→        >
+   525→          CI {resolution.ciDelta > 0 ? '+' : ''}
+   526→          {resolution.ciDelta.toFixed(1)}s
+   527→        </span>
+   528→        <Button
+   529→          size="sm"
+   530→          variant="outline"
+   531→          className={cn(
+   532→            'ml-auto h-7 gap-1 px-2 text-[11px]',
+   533→            full && 'border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/10 hover:text-emerald-100',
+   534→          )}
+   535→          onClick={() => {
+   536→            setIntent({
+   537→              mode: 'upgrade-dep',
+   538→              target: resolution.scenarioId,
+   539→              source: `Engineering Graph · duplicate ${crate}`,
+   540→            })
+   541→            onNavigate?.('simulator')
+   542→          }}
+   543→          aria-label={`Simulate ${crate} ${resolution.from} to ${resolution.to} upgrade in the Impact Simulator`}
+   544→        >
+   545→          Simulate resolution
+   546→          <ArrowRight className="size-3" aria-hidden />
+   547→        </Button>
+   548→      </div>
+   549→      {!compact && (
+   550→        <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{resolution.note}</p>
+   551→      )}
+   552→    </div>
+   553→  )
+   554→}
+   555→
+   556→function DuplicatesPanel({
+   557→  duplicates,
+   558→  resolutions,
+   559→  onNavigate,
+   560→}: {
+   561→  duplicates: GraphPayload['duplicates']
+   562→  resolutions?: Record<string, DuplicateResolution>
+   563→  onNavigate?: ViewProps['onNavigate']
+   564→}) {
+   565→  const total = duplicates.reduce((acc, d) => acc + d.wastedSeconds, 0)
+   566→  const resolvable = duplicates.filter((d) => resolutions?.[d.name])
+   567→  return (
+   568→    <Panel
+   569→      title="Duplicate dependency versions"
+   570→      subtitle="Cargo.lock multiplicity — deterministic (Gate 13)"
+   571→    >
+   572→      <Table>
+   573→        <TableHeader>
+   574→          <TableRow>
+   575→            <TableHead>Crate</TableHead>
+   576→            <TableHead>Versions</TableHead>
+   577→            <TableHead>Dependents</TableHead>
+   578→            <TableHead className="text-right">Wasted</TableHead>
+   579→          </TableRow>
+   580→        </TableHeader>
+   581→        <TableBody>
+   582→          {duplicates.map((d) => (
+   583→            <TableRow key={d.name}>
+   584→              <TableCell className="font-mono text-xs">{d.name}</TableCell>
+   585→              <TableCell>
+   586→                <div className="flex gap-1">
+   587→                  {d.versions.map((v) => (
+   588→                    <Badge key={v} variant="outline" className="font-mono text-[10px]">
+   589→                      {v}
+   590→                    </Badge>
+   591→                  ))}
+   592→                </div>
+   593→              </TableCell>
+   594→              <TableCell className="text-xs text-muted-foreground">{d.dependents.join(', ')}</TableCell>
+   595→              <TableCell className="text-right font-mono text-xs text-amber-300">
+   596→                {d.wastedSeconds.toFixed(1)}s
+   597→              </TableCell>
+   598→            </TableRow>
+   599→          ))}
+   600→        </TableBody>
+   601→        <TableFooter>
+   602→          <TableRow>
+   603→            <TableCell colSpan={3} className="text-xs font-medium">
+   604→              TOTAL wasted
+   605→            </TableCell>
+   606→            <TableCell className="text-right font-mono text-xs font-semibold text-amber-300">
+   607→              {total.toFixed(1)}s / clean build
+   608→            </TableCell>
+   609→          </TableRow>
+   610→        </TableFooter>
+   611→      </Table>
+   612→
+   613→      {resolvable.length > 0 && (
+   614→        <div className="mt-3 space-y-2">
+   615→          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+   616→            simulated resolutions · routed to the impact simulator
+   617→          </p>
+   618→          {resolvable.map((d) => (
+   619→            <ResolutionCta
+   620→              key={d.name}
+   621→              crate={d.name}
+   622→              resolution={resolutions![d.name]}
+   623→              onNavigate={onNavigate}
+   624→            />
+   625→          ))}
+   626→        </div>
+   627→      )}
+   628→
+   629→      <div className="mt-3 flex flex-wrap items-center gap-2">
+   630→        <MeasurementBadge status="measured" />
+   631→        <p className="text-[11px] text-muted-foreground">
+   632→          existence of duplicate versions is measured; unification is tracked as{' '}
+   633→          <span className="font-mono text-foreground/80">FER-BLD-002</span>
+   634→        </p>
+   635→      </div>
+   636→    </Panel>
+   637→  )
+   638→}
+   639→
+   640→/* -------------------------------------------------------------- blast list */
+   641→
+   642→function BlastPanel({ blast, onNavigate }: { blast: BlastEntry[]; onNavigate?: ViewProps['onNavigate'] }) {
+   643→  const [openIdx, setOpenIdx] = useState<number>(0)
+   644→
+   645→  return (
+   646→    <Panel title="Blast radius explorer" subtitle="what happens if I touch this file?">
+   647→      <div className="space-y-1.5">
+   648→        {blast.map((b, i) => {
+   649→          const open = i === openIdx
+   650→          return (
+   651→            <div key={b.file}>
+   652→              <button
+   653→                type="button"
+   654→                aria-expanded={open}
+   655→                onClick={() => setOpenIdx(open ? -1 : i)}
+   656→                className={cn(
+   657→                  'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors',
+   658→                  open
+   659→                    ? 'border-primary/50 bg-primary/10'
+   660→                    : 'border-border/70 bg-card hover:border-primary/30',
+   661→                )}
+   662→              >
+   663→                <span className="flex-1 truncate font-mono text-[11px]">{b.file}</span>
+   664→                <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+   665→                  {b.crate}
+   666→                </Badge>
+   667→                <span className="shrink-0 font-mono text-xs text-amber-300">{b.affectedWorkspace}</span>
+   668→                <ChevronDown className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
+   669→              </button>
+   670→
+   671→              {open && (
+   672→                <motion.div
+   673→                  initial={{ opacity: 0, y: -4 }}
+   674→                  animate={{ opacity: 1, y: 0 }}
+   675→                  transition={{ duration: 0.2 }}
+   676→                  className="mt-1.5 space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3"
+   677→                >
+   678→                  <div className="flex items-baseline gap-2">
+   679→                    <span className="font-mono text-3xl font-semibold text-foreground">
+   680→                      <CountUp value={b.affectedWorkspace} />
+   681→                    </span>
+   682→                    <span className="text-xs text-muted-foreground">workspace crates re-invalidate</span>
+   683→                  </div>
+   684→
+   685→                  <div className="flex flex-wrap items-center gap-1.5">
+   686→                    {b.chain.map((c, j) => (
+   687→                      <span key={`${c}-${j}`} className="flex items-center gap-1.5">
+   688→                        {j > 0 && <ArrowRight className="size-3 text-muted-foreground" />}
+   689→                        <span className="rounded-md border border-border/70 bg-card px-1.5 py-0.5 font-mono text-[10px]">
+   690→                          {c}
+   691→                        </span>
+   692→                      </span>
+   693→                    ))}
+   694→                  </div>
+   695→
+   696→                  <p className="font-mono text-[11px] text-red-300">
+   697→                    +{b.incrementalDelta}s incremental (estimated)
+   698→                  </p>
+   699→
+   700→                  <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-2">
+   701→                    <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+   702→                    <p className="text-[11px] text-amber-200/90">{b.suggestion}</p>
+   703→                  </div>
+   704→
+   705→                  <div className="flex flex-wrap items-center gap-2">
+   706→                    <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => onNavigate?.('simulator')}>
+   707→                      Simulate edit
+   708→                    </Button>
+   709→                    <ExplainDialog
+   710→                      kind="impact"
+   711→                      context={JSON.stringify(b)}
+   712→                      question="What happens if I edit this file?"
+   713→                    />
+   714→                  </div>
+   715→                </motion.div>
+   716→              )}
+   717→            </div>
+   718→          )
+   719→        })}
+   720→      </div>
+   721→    </Panel>
+   722→  )
+   723→}
+   724→
+   725→/* -------------------------------------------------------------------- view */
+   726→
+   727→const LEGEND_ITEMS: { label: string; swatch: ReactNode }[] = [
+   728→  { label: 'workspace', swatch: <span className="size-2 rounded-full bg-primary" /> },
+   729→  { label: 'external', swatch: <span className="size-2 rounded-full bg-zinc-500" /> },
+   730→  { label: 'proc-macro', swatch: <span className="size-2 rounded-full" style={{ background: 'var(--chart-5)' }} /> },
+   731→  { label: 'critical', swatch: <span className="size-2 rounded-full bg-primary ring-1 ring-amber-400" /> },
+   732→  { label: 'duplicate', swatch: <span className="size-2 rounded-full border border-dashed border-amber-400" /> },
+   733→]
+   734→
+   735→export default function DependenciesView({ onNavigate }: ViewProps) {
+   736→  const graph = useGraph()
+   737→  const data = graph.data
+   738→  const activeWorkspace = useWorkspaceStore((s) => s.active)
+   739→
+   740→  const [query, setQuery] = useState('')
+   741→  const [showExternal, setShowExternal] = useState(true)
+   742→  const [selected, setSelected] = useState('common')
+   743→
+   744→  const handleSelect = useCallback((id: string) => setSelected(id), [])
+   745→  const resetSelection = useCallback(() => {
+   746→    setSelected('common')
+   747→    setQuery('')
+   748→  }, [])
+   749→
+   750→  if (graph.isPending) {
+   751→    return (
+   752→      <div className="space-y-5">
+   753→        <SectionHeading eyebrow="Engineering Graph" title="Dependency backbone" />
+   754→        <div className="grid gap-4 xl:grid-cols-3">
+   755→          <Skeleton className="h-[520px] xl:col-span-2" />
+   756→          <Skeleton className="h-[520px]" />
+   757→        </div>
+   758→        <div className="grid gap-4 xl:grid-cols-2">
+   759→          <Skeleton className="h-64" />
+   760→          <Skeleton className="h-64" />
+   761→        </div>
+   762→      </div>
+   763→    )
+   764→  }
+   765→
+   766→  if (graph.isError || !data) {
+   767→    return (
+   768→      <div className="space-y-5">
+   769→        <SectionHeading eyebrow="Engineering Graph" title="Dependency backbone" />
+   770→        <Panel title="Interactive graph">
+   771→          <div className="flex flex-col items-start gap-3 py-10">
+   772→            <p className="text-sm text-red-300">
+   773→              Could not load the workspace graph
+   774→              {graph.error ? ` — ${(graph.error as Error).message}` : ''}.
+   775→            </p>
+   776→            <Button variant="outline" size="sm" onClick={() => graph.refetch()}>
+   777→              Retry
+   778→            </Button>
+   779→          </div>
+   780→        </Panel>
+   781→      </div>
+   782→    )
+   783→  }
+   784→
+   785→  const node = data.nodes.find((n) => n.id === selected) ?? data.nodes[0]
+   786→  const externals = data.nodes.filter((n) => n.band === 'external').length
+   787→  const lastScan = data.meta.lastScan.slice(0, 10)
+   788→
+   789→  return (
+   790→    <div className="space-y-5">
+   791→      <SectionHeading
+   792→        eyebrow="Engineering Graph"
+   793→        title="Dependency backbone"
+   794→        description={`${data.meta.workspaceCrates} first-class workspace crates · ${externals} externals shown · ${data.meta.totalEdges} edges · last scan ${lastScan}`}
+   795→      />
+   796→
+   797→      <div className="flex flex-wrap items-center gap-1.5" aria-label="Graph legend">
+   798→        {LEGEND_ITEMS.map((item) => (
+   799→          <span
+   800→            key={item.label}
+   801→            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-2 py-0.5 text-[10px] text-muted-foreground"
+   802→          >
+   803→            {item.swatch}
+   804→            {item.label}
+   805→          </span>
+   806→        ))}
+   807→      </div>
+   808→
+   809→      <div className="grid gap-4 xl:grid-cols-3">
+   810→        <GraphPanel
+   811→          nodes={data.nodes}
+   812→          edges={data.edges}
+   813→          query={query}
+   814→          showExternal={showExternal}
+   815→          selected={selected}
+   816→          onSelect={handleSelect}
+   817→          workspaceName={activeWorkspace}
+   818→        />
+   819→        <NodeDetails
+   820→          node={node}
+   821→          edges={data.edges}
+   822→          blast={data.blast}
+   823→          resolutions={data.resolutions}
+   824→          onNavigate={onNavigate}
+   825→        />
+   826→      </div>
+   827→
+   828→      <div className="grid gap-4 xl:grid-cols-2">
+   829→        <DuplicatesPanel
+   830→          duplicates={data.duplicates}
+   831→          resolutions={data.resolutions}
+   832→          onNavigate={onNavigate}
+   833→        />
+   834→        <BlastPanel blast={data.blast} onNavigate={onNavigate} />
+   835→      </div>
+   836→    </div>
+   837→  )
+   838→}
+   839→
