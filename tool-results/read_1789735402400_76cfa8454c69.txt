@@ -1,0 +1,1097 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { Fragment, useMemo, useState, type ReactNode } from 'react'
+     4→     4→import { motion, useReducedMotion } from 'framer-motion'
+     5→     5→import { ArrowDown, ArrowRight, Copy, Lightbulb, ShieldAlert, ShieldCheck, TrendingDown, X } from 'lucide-react'
+     6→     6→import { Badge } from '@/components/ui/badge'
+     7→     7→import { Button } from '@/components/ui/button'
+     8→     8→import { Checkbox } from '@/components/ui/checkbox'
+     9→     9→import {
+    10→    10→  Dialog,
+    11→    11→  DialogContent,
+    12→    12→  DialogDescription,
+    13→    13→  DialogHeader,
+    14→    14→  DialogTitle,
+    15→    15→} from '@/components/ui/dialog'
+    16→    16→import { Skeleton } from '@/components/ui/skeleton'
+    17→    17→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    18→    18→import { useToast } from '@/hooks/use-toast'
+    19→    19→import { useGraph, useImpact } from '@/lib/wanyrix/hooks'
+    20→    20→import { useDiffQueueStore } from '@/lib/wanyrix/diff-store'
+    21→    21→import { useSimulatorIntentStore } from '@/lib/wanyrix/simulator-intent'
+    22→    22→import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+    23→    23→import type { AddDepImpact, BlastEntry, EditFileImpact, ImpactPayload, SplitImpact, UpgradeImpact } from '@/lib/wanyrix/types'
+    24→    24→import { cn } from '@/lib/utils'
+    25→    25→import { ExplainDialog } from '../explain-dialog'
+    26→    26→import { CountUp, MeasurementBadge, Panel, SectionHeading } from '../shared'
+    27→    27→import type { ViewProps } from '../view-types'
+    28→    28→
+    29→    29→/* ----------------------------------------------------------------- helpers */
+    30→    30→
+    31→    31→type Mode = 'add-dep' | 'edit-file' | 'split-crate' | 'upgrade-dep'
+    32→    32→
+    33→    33→/** Minimal structural view of a TanStack Query result — keeps props simple. */
+    34→    34→interface QueryLike<T> {
+    35→    35→  data: T | undefined
+    36→    36→  isPending: boolean
+    37→    37→  isError: boolean
+    38→    38→  error: Error | null
+    39→    39→  refetch: () => void
+    40→    40→}
+    41→    41→
+    42→    42→// the add-dep catalog is served per workspace via the graph payload (issue #34)
+    43→    43→
+    44→    44→function SectionLabel({ children }: { children: ReactNode }) {
+    45→    45→  return <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{children}</h3>
+    46→    46→}
+    47→    47→
+    48→    48→function QueryError({ message, onRetry }: { message: string; onRetry: () => void }) {
+    49→    49→  return (
+    50→    50→    <div className="flex flex-col items-start gap-2.5 rounded-lg border border-red-500/25 bg-red-500/5 px-4 py-3.5">
+    51→    51→      <p className="text-xs text-red-300">Failed to load impact estimate — {message}</p>
+    52→    52→      <Button size="sm" variant="outline" onClick={onRetry}>
+    53→    53→        Retry
+    54→    54→      </Button>
+    55→    55→    </div>
+    56→    56→  )
+    57→    57→}
+    58→    58→
+    59→    59→function TilesSkeleton({ count = 7 }: { count?: number }) {
+    60→    60→  return (
+    61→    61→    <div className="space-y-3">
+    62→    62→      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+    63→    63→        {Array.from({ length: count }).map((_, i) => (
+    64→    64→          <Skeleton key={i} className="h-[74px]" />
+    65→    65→        ))}
+    66→    66→      </div>
+    67→    67→      <Skeleton className="h-28" />
+    68→    68→    </div>
+    69→    69→  )
+    70→    70→}
+    71→    71→
+    72→    72→function ImpactTile({
+    73→    73→  label,
+    74→    74→  value,
+    75→    75→  decimals = 0,
+    76→    76→  prefix = '',
+    77→    77→  suffix = '',
+    78→    78→  cost = false,
+    79→    79→}: {
+    80→    80→  label: string
+    81→    81→  value: number
+    82→    82→  decimals?: number
+    83→    83→  prefix?: string
+    84→    84→  suffix?: string
+    85→    85→  cost?: boolean
+    86→    86→}) {
+    87→    87→  // negative deltas are genuine improvements (e.g. de-dup wins in upgrade-dep)
+    88→    88→  const improvement = value < 0
+    89→    89→  return (
+    90→    90→    <div
+    91→    91→      className={cn(
+    92→    92→        'rounded-lg border px-3 py-2.5 transition-shadow',
+    93→    93→        improvement
+    94→    94→          ? 'border-emerald-500/30 bg-emerald-500/[0.07] shadow-[0_0_16px_-8px_oklch(0.72_0.17_160/60%)]'
+    95→    95→          : 'border-border/70 bg-muted/20',
+    96→    96→      )}
+    97→    97→    >
+    98→    98→      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+    99→    99→      <p
+   100→   100→        className={cn(
+   101→   101→          'mt-1 font-mono text-lg font-semibold',
+   102→   102→          improvement ? 'text-emerald-300' : cost ? 'text-red-300' : 'text-foreground',
+   103→   103→        )}
+   104→   104→      >
+   105→   105→        {improvement && <TrendingDown className="mr-1 inline size-3.5 align-baseline" aria-hidden />}
+   106→   106→        <CountUp
+   107→   107→          value={Math.abs(value)}
+   108→   108→          decimals={decimals}
+   109→   109→          prefix={improvement ? '−' : prefix}
+   110→   110→          suffix={suffix}
+   111→   111→        />
+   112→   112→      </p>
+   113→   113→    </div>
+   114→   114→  )
+   115→   115→}
+   116→   116→
+   117→   117→function ChainStepper({ items }: { items: { label: string; note?: string }[] }) {
+   118→   118→  return (
+   119→   119→    <ol className="relative ml-1.5 space-y-4 border-l border-border/60 pl-5">
+   120→   120→      {items.map((c, i) => (
+   121→   121→        <li key={`${c.label}-${i}`} className="relative">
+   122→   122→          <span
+   123→   123→            className={cn(
+   124→   124→              'absolute -left-[25.5px] top-0.5 size-2.5 rounded-full border-2 border-background',
+   125→   125→              i === 0 ? 'bg-primary' : 'bg-primary/50',
+   126→   126→            )}
+   127→   127→          />
+   128→   128→          <p className="text-sm font-medium leading-tight">{c.label}</p>
+   129→   129→          {c.note && <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{c.note}</p>}
+   130→   130→        </li>
+   131→   131→      ))}
+   132→   132→    </ol>
+   133→   133→  )
+   134→   134→}
+   135→   135→
+   136→   136→/* ------------------------------------------------------------ add-dep tab */
+   137→   137→
+   138→   138→function CatalogCard({
+   139→   139→  id,
+   140→   140→  version,
+   141→   141→  active,
+   142→   142→  onSelect,
+   143→   143→}: {
+   144→   144→  id: string
+   145→   145→  version: string
+   146→   146→  active: boolean
+   147→   147→  onSelect: () => void
+   148→   148→}) {
+   149→   149→  const query = useImpact('add-dep', id)
+   150→   150→  const d = query.data && query.data.kind === 'add-dep' ? query.data : undefined
+   151→   151→
+   152→   152→  return (
+   153→   153→    <button
+   154→   154→      type="button"
+   155→   155→      role="radio"
+   156→   156→      aria-checked={active}
+   157→   157→      onClick={onSelect}
+   158→   158→      className={cn(
+   159→   159→        'w-full rounded-lg border p-3 text-left transition-colors',
+   160→   160→        active ? 'border-primary/60 bg-primary/10' : 'border-border/70 bg-card hover:border-primary/30',
+   161→   161→      )}
+   162→   162→    >
+   163→   163→      <div className="flex items-center justify-between gap-2">
+   164→   164→        <span className="truncate font-mono text-xs font-semibold">{id}</span>
+   165→   165→        <Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+   166→   166→          v{version}
+   167→   167→        </Badge>
+   168→   168→      </div>
+   169→   169→      <div className="mt-2 flex items-center gap-3 font-mono text-[11px]">
+   170→   170→        {d ? (
+   171→   171→          <>
+   172→   172→            <span className="text-muted-foreground">{d.cratesAdded} crates</span>
+   173→   173→            <span className="text-red-300">+{d.ciDelta}s CI</span>
+   174→   174→          </>
+   175→   175→        ) : (
+   176→   176→          <span className="animate-pulse text-muted-foreground">loading…</span>
+   177→   177→        )}
+   178→   178→      </div>
+   179→   179→    </button>
+   180→   180→  )
+   181→   181→}
+   182→   182→
+   183→   183→function AddDepReport({ query }: { query: QueryLike<ImpactPayload> }) {
+   184→   184→  const [pending, setPending] = useState<string | null>(null)
+   185→   185→  const { toast } = useToast()
+   186→   186→  const activeWs = useWorkspaceStore((s) => s.active)
+   187→   187→  const enqueueDiff = useDiffQueueStore((s) => s.enqueue)
+   188→   188→  const d = query.data && query.data.kind === 'add-dep' ? (query.data as AddDepImpact) : undefined
+   189→   189→
+   190→   190→  if (query.isPending || (query.data === undefined && !query.isError)) {
+   191→   191→    return (
+   192→   192→      <Panel title="Dependency impact">
+   193→   193→        <TilesSkeleton />
+   194→   194→      </Panel>
+   195→   195→    )
+   196→   196→  }
+   197→   197→
+   198→   198→  if (!d) {
+   199→   199→    return (
+   200→   200→      <Panel title="Dependency impact">
+   201→   201→        <QueryError message={query.error?.message ?? 'unknown error'} onRetry={() => query.refetch()} />
+   202→   202→      </Panel>
+   203→   203→    )
+   204→   204→  }
+   205→   205→
+   206→   206→  const tiles: {
+   207→   207→    label: string
+   208→   208→    value: number
+   209→   209→    decimals?: number
+   210→   210→    prefix?: string
+   211→   211→    suffix?: string
+   212→   212→    cost?: boolean
+   213→   213→  }[] = [
+   214→   214→    { label: 'crates added', value: d.cratesAdded },
+   215→   215→    { label: 'proc-macros added', value: d.procMacrosAdded },
+   216→   216→    { label: 'target size', value: d.targetMB, decimals: 1, suffix: ' MB' },
+   217→   217→    { label: 'transitive deps', value: d.transitiveDeps },
+   218→   218→    { label: 'clean build', value: d.cleanDelta, decimals: 1, prefix: '+', suffix: 's', cost: true },
+   219→   219→    { label: 'incremental', value: d.incrementalDelta, decimals: 1, prefix: '+', suffix: 's', cost: true },
+   220→   220→    { label: 'CI', value: d.ciDelta, prefix: '+', suffix: 's', cost: true },
+   221→   221→  ]
+   222→   222→
+   223→   223→  return (
+   224→   224→    <Panel
+   225→   225→      title={`Dependency impact — ${d.crate} ${d.version}`}
+   226→   226→      subtitle="what enters your tree if you add this crate"
+   227→   227→      actions={<MeasurementBadge status={d.measurementStatus} />}
+   228→   228→    >
+   229→   229→      <div className="space-y-5">
+   230→   230→        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+   231→   231→          {tiles.map((t) => (
+   232→   232→            <ImpactTile key={t.label} {...t} />
+   233→   233→          ))}
+   234→   234→        </div>
+   235→   235→
+   236→   236→        <section>
+   237→   237→          <SectionLabel>Cascading rebuild chain</SectionLabel>
+   238→   238→          <div className="mt-3">
+   239→   239→            <ChainStepper items={d.chain} />
+   240→   240→          </div>
+   241→   241→        </section>
+   242→   242→
+   243→   243→        <section>
+   244→   244→          <SectionLabel>Security &amp; supply chain</SectionLabel>
+   245→   245→          <ul className="mt-2.5 space-y-1.5">
+   246→   246→            {d.security.map((s, i) => (
+   247→   247→              <li key={i} className="flex items-start gap-2 text-xs">
+   248→   248→                {s.level === 'warn' ? (
+   249→   249→                  <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+   250→   250→                ) : (
+   251→   251→                  <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-teal-300" />
+   252→   252→                )}
+   253→   253→                <span className={s.level === 'warn' ? 'text-amber-200/90' : 'text-muted-foreground'}>
+   254→   254→                  {s.label}
+   255→   255→                </span>
+   256→   256→              </li>
+   257→   257→            ))}
+   258→   258→          </ul>
+   259→   259→        </section>
+   260→   260→
+   261→   261→        <section>
+   262→   262→          <SectionLabel>Suggestions</SectionLabel>
+   263→   263→          <ol className="mt-2.5 space-y-2">
+   264→   264→            {d.suggestions.map((s, i) => (
+   265→   265→              <li
+   266→   266→                key={i}
+   267→   267→                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2"
+   268→   268→              >
+   269→   269→                <p className="text-xs leading-snug">
+   270→   270→                  <span className="mr-2 font-mono text-muted-foreground">{String(i + 1).padStart(2, '0')}</span>
+   271→   271→                  {s}
+   272→   272→                </p>
+   273→   273→                <Button
+   274→   274→                  size="sm"
+   275→   275→                  variant="outline"
+   276→   276→                  className="h-7 shrink-0 text-[11px]"
+   277→   277→                  onClick={() => setPending(s)}
+   278→   278→                >
+   279→   279→                  Apply suggestion
+   280→   280→                </Button>
+   281→   281→              </li>
+   282→   282→            ))}
+   283→   283→          </ol>
+   284→   284→        </section>
+   285→   285→      </div>
+   286→   286→
+   287→   287→      <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+   288→   288→        <DialogContent className="max-w-md">
+   289→   289→          <DialogHeader>
+   290→   290→            <DialogTitle>Queue a reviewable diff?</DialogTitle>
+   291→   291→            <DialogDescription>
+   292→   292→              Wanyrix never modifies your repository silently. A reviewable diff will be proposed (Gate 19).
+   293→   293→            </DialogDescription>
+   294→   294→          </DialogHeader>
+   295→   295→          <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/90">
+   296→   296→            {pending}
+   297→   297→          </div>
+   298→   298→          <div className="flex justify-end gap-2">
+   299→   299→            <Button size="sm" variant="ghost" onClick={() => setPending(null)}>
+   300→   300→              Cancel
+   301→   301→            </Button>
+   302→   302→            <Button
+   303→   303→              size="sm"
+   304→   304→              onClick={() => {
+   305→   305→                if (!pending) return
+   306→   306→                enqueueDiff({
+   307→   307→                  id: `diff-${Date.now()}`,
+   308→   308→                  workspace: activeWs,
+   309→   309→                  at: Date.now(),
+   310→   310→                  source: 'simulator:add-dep',
+   311→   311→                  kind: 'config',
+   312→   312→                  title: `Dependency change — ${d.crate} ${d.version}`,
+   313→   313→                  target: `${d.crate} ${d.version} · Cargo.toml`,
+   314→   314→                  suggestion: pending,
+   315→   315→                  estimate: `+${d.cleanDelta}s clean · +${d.ciDelta}s CI per build`,
+   316→   316→                  status: 'pending',
+   317→   317→                })
+   318→   318→                toast({
+   319→   319→                  title: 'Diff queued for review',
+   320→   320→                  description: 'Open Pending diffs in the topbar to inspect or export it (Gate 19).',
+   321→   321→                })
+   322→   322→                setPending(null)
+   323→   323→              }}
+   324→   324→            >
+   325→   325→              Queue as diff
+   326→   326→            </Button>
+   327→   327→          </div>
+   328→   328→        </DialogContent>
+   329→   329→      </Dialog>
+   330→   330→    </Panel>
+   331→   331→  )
+   332→   332→}
+   333→   333→
+   334→   334→/* ---------------------------------------------------------- edit-file tab */
+   335→   335→
+   336→   336→function EditFileReport({
+   337→   337→  query,
+   338→   338→  onNavigate,
+   339→   339→}: {
+   340→   340→  query: QueryLike<ImpactPayload>
+   341→   341→  onNavigate?: ViewProps['onNavigate']
+   342→   342→}) {
+   343→   343→  const d = query.data && query.data.kind === 'edit-file' ? (query.data as EditFileImpact) : undefined
+   344→   344→
+   345→   345→  if (query.isPending || (query.data === undefined && !query.isError)) {
+   346→   346→    return (
+   347→   347→      <Panel title="File impact">
+   348→   348→        <TilesSkeleton count={2} />
+   349→   349→      </Panel>
+   350→   350→    )
+   351→   351→  }
+   352→   352→
+   353→   353→  if (!d) {
+   354→   354→    return (
+   355→   355→      <Panel title="File impact">
+   356→   356→        <QueryError message={query.error?.message ?? 'unknown error'} onRetry={() => query.refetch()} />
+   357→   357→      </Panel>
+   358→   358→    )
+   359→   359→  }
+   360→   360→
+   361→   361→  return (
+   362→   362→    <Panel
+   363→   363→      title="File impact"
+   364→   364→      subtitle={d.file}
+   365→   365→      actions={<MeasurementBadge status={d.measurementStatus} />}
+   366→   366→    >
+   367→   367→      <div className="space-y-5">
+   368→   368→        <div className="rounded-lg border border-red-500/25 bg-red-500/5 px-4 py-3.5">
+   369→   369→          <p className="font-mono text-4xl font-semibold text-red-300">
+   370→   370→            <CountUp value={d.affectedWorkspace} />
+   371→   371→          </p>
+   372→   372→          <p className="mt-1 text-sm text-muted-foreground">
+   373→   373→            workspace crates re-invalidate when <span className="font-mono text-[11px] text-foreground/80">{d.file}</span> changes
+   374→   374→          </p>
+   375→   375→        </div>
+   376→   376→
+   377→   377→        <div className="grid grid-cols-2 gap-2.5">
+   378→   378→          <ImpactTile label="incremental rebuild" value={d.incrementalDelta} decimals={1} prefix="+" suffix="s" cost />
+   379→   379→          <ImpactTile label="CI pipeline" value={d.ciDelta} decimals={1} prefix="+" suffix="s" cost />
+   380→   380→        </div>
+   381→   381→
+   382→   382→        <section>
+   383→   383→          <SectionLabel>Invalidation chain</SectionLabel>
+   384→   384→          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+   385→   385→            {d.chain.map((c, i) => (
+   386→   386→              <Fragment key={`${c}-${i}`}>
+   387→   387→                {i > 0 && <ArrowRight className="size-3 text-muted-foreground" />}
+   388→   388→                <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-0.5 font-mono text-[10px]">
+   389→   389→                  {c}
+   390→   390→                </span>
+   391→   391→              </Fragment>
+   392→   392→            ))}
+   393→   393→          </div>
+   394→   394→        </section>
+   395→   395→
+   396→   396→        <section>
+   397→   397→          <SectionLabel>Notes</SectionLabel>
+   398→   398→          <ul className="mt-2 space-y-1.5">
+   399→   399→            {d.notes.map((n, i) => (
+   400→   400→              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+   401→   401→                <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary/70" />
+   402→   402→                {n}
+   403→   403→              </li>
+   404→   404→            ))}
+   405→   405→          </ul>
+   406→   406→        </section>
+   407→   407→
+   408→   408→        <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5">
+   409→   409→          <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+   410→   410→          <p className="text-xs text-amber-200/90">{d.suggestion}</p>
+   411→   411→        </div>
+   412→   412→
+   413→   413→        <Button variant="outline" size="sm" onClick={() => onNavigate?.('graph')}>
+   414→   414→          View in graph
+   415→   415→        </Button>
+   416→   416→      </div>
+   417→   417→    </Panel>
+   418→   418→  )
+   419→   419→}
+   420→   420→
+   421→   421→/* -------------------------------------------------------- split-crate tab */
+   422→   422→
+   423→   423→function TimeBar({
+   424→   424→  label,
+   425→   425→  seconds,
+   426→   426→  widthPct,
+   427→   427→  tone,
+   428→   428→}: {
+   429→   429→  label: string
+   430→   430→  seconds: number
+   431→   431→  widthPct: number
+   432→   432→  tone: string
+   433→   433→}) {
+   434→   434→  return (
+   435→   435→    <div className="flex items-center gap-3">
+   436→   436→      <span className="w-36 shrink-0 font-mono text-[11px] text-muted-foreground">{label}</span>
+   437→   437→      <div className="h-3.5 flex-1 overflow-hidden rounded-full bg-muted/40">
+   438→   438→        <motion.div
+   439→   439→          className={cn('h-full rounded-full', tone)}
+   440→   440→          initial={{ width: 0 }}
+   441→   441→          animate={{ width: `${widthPct}%` }}
+   442→   442→          transition={{ duration: 0.9, ease: 'easeOut' }}
+   443→   443→        />
+   444→   444→      </div>
+   445→   445→      <span className="w-14 shrink-0 text-right font-mono text-xs text-foreground">{seconds.toFixed(1)}s</span>
+   446→   446→    </div>
+   447→   447→  )
+   448→   448→}
+   449→   449→
+   450→   450→function SplitReport({
+   451→   451→  query,
+   452→   452→  onNavigate,
+   453→   453→}: {
+   454→   454→  query: QueryLike<ImpactPayload>
+   455→   455→  onNavigate?: ViewProps['onNavigate']
+   456→   456→}) {
+   457→   457→  const { toast } = useToast()
+   458→   458→  const [done, setDone] = useState<boolean[]>([])
+   459→   459→  const d = query.data && query.data.kind === 'split-crate' ? (query.data as SplitImpact) : undefined
+   460→   460→
+   461→   461→  if (query.isPending || (query.data === undefined && !query.isError)) {
+   462→   462→    return (
+   463→   463→      <Panel title="Architecture proposal">
+   464→   464→        <TilesSkeleton count={4} />
+   465→   465→      </Panel>
+   466→   466→    )
+   467→   467→  }
+   468→   468→
+   469→   469→  if (!d) {
+   470→   470→    return (
+   471→   471→      <Panel title="Architecture proposal">
+   472→   472→        <QueryError message={query.error?.message ?? 'unknown error'} onRetry={() => query.refetch()} />
+   473→   473→      </Panel>
+   474→   474→    )
+   475→   475→  }
+   476→   476→
+   477→   477→  const toggle = (i: number) => {
+   478→   478→    const next = d.migration.map((_, j) => (j === i ? !(done[j] ?? false) : (done[j] ?? false)))
+   479→   479→    setDone(next)
+   480→   480→    if (next.every(Boolean)) {
+   481→   481→      toast({ title: 'All steps marked — create the experiment to verify' })
+   482→   482→    }
+   483→   483→  }
+   484→   484→
+   485→   485→  const afterPct = (d.proposal.buildSeconds / d.before.buildSeconds) * 100
+   486→   486→
+   487→   487→  return (
+   488→   488→    <Panel
+   489→   489→      title={`Architecture proposal — split ${d.source}`}
+   490→   490→      subtitle="monolith → focused crates, sized by real build telemetry"
+   491→   491→      actions={<MeasurementBadge status={d.measurementStatus} />}
+   492→   492→    >
+   493→   493→      <div className="space-y-6">
+   494→   494→        {/* before / after diagrams */}
+   495→   495→        <div className="grid items-stretch gap-4 lg:grid-cols-[1fr_auto_1.6fr]">
+   496→   496→          <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+   497→   497→            <div className="flex items-center justify-between gap-2">
+   498→   498→              <p className="font-mono text-sm font-semibold">{d.source}</p>
+   499→   499→              <Badge variant="outline" className="font-mono text-[10px]">
+   500→   500→                before
+   501→   501→              </Badge>
+   502→   502→            </div>
+   503→   503→            <div className="mt-3 flex flex-wrap gap-1.5">
+   504→   504→              {d.before.modules.map((m) => (
+   505→   505→                <span
+   506→   506→                  key={m}
+   507→   507→                  className="rounded-md border border-border/70 bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+   508→   508→                >
+   509→   509→                  {m}
+   510→   510→                </span>
+   511→   511→              ))}
+   512→   512→            </div>
+   513→   513→            <p className="mt-4 font-mono text-2xl font-semibold">{d.before.buildSeconds.toFixed(1)}s</p>
+   514→   514→            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+   515→   515→              fan-out {d.before.fanOut} · downstream {d.before.downstream}
+   516→   516→            </p>
+   517→   517→          </div>
+   518→   518→
+   519→   519→          <div className="flex items-center justify-center">
+   520→   520→            <ArrowDown className="size-5 text-primary lg:hidden" />
+   521→   521→            <ArrowRight className="hidden size-5 text-primary lg:block" />
+   522→   522→          </div>
+   523→   523→
+   524→   524→          <div className="rounded-xl border border-dashed border-primary/40 bg-card p-4">
+   525→   525→            <div className="flex items-center justify-between gap-2">
+   526→   526→              <p className="text-[11px] font-semibold uppercase tracking-wide text-primary/90">proposed split</p>
+   527→   527→              <Badge
+   528→   528→                variant="outline"
+   529→   529→                className="border-emerald-500/30 bg-emerald-500/10 font-mono text-[10px] text-emerald-300"
+   530→   530→              >
+   531→   531→                total {d.proposal.buildSeconds.toFixed(1)}s
+   532→   532→              </Badge>
+   533→   533→            </div>
+   534→   534→            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+   535→   535→              {d.proposal.crates.map((c) => (
+   536→   536→                <div key={c.name} className="rounded-lg border border-dashed border-border/80 bg-muted/20 p-3">
+   537→   537→                  <p className="font-mono text-xs font-semibold">{c.name}</p>
+   538→   538→                  <div className="mt-2 flex flex-wrap gap-1">
+   539→   539→                    {c.modules.map((m) => (
+   540→   540→                      <span
+   541→   541→                        key={m}
+   542→   542→                        className="rounded border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground"
+   543→   543→                      >
+   544→   544→                        {m}
+   545→   545→                      </span>
+   546→   546→                    ))}
+   547→   547→                  </div>
+   548→   548→                  <p className="mt-3 font-mono text-lg font-semibold">{c.buildSeconds.toFixed(1)}s</p>
+   549→   549→                  <p className="font-mono text-[10px] text-muted-foreground">downstream {c.downstream}</p>
+   550→   550→                </div>
+   551→   551→              ))}
+   552→   552→            </div>
+   553→   553→          </div>
+   554→   554→        </div>
+   555→   555→
+   556→   556→        {/* build-time bars */}
+   557→   557→        <section>
+   558→   558→          <SectionLabel>Build time — affected subtree, clean build</SectionLabel>
+   559→   559→          <div className="mt-3 space-y-2.5">
+   560→   560→            <TimeBar
+   561→   561→              label={`before · ${d.source}`}
+   562→   562→              seconds={d.before.buildSeconds}
+   563→   563→              widthPct={100}
+   564→   564→              tone="bg-red-400/50"
+   565→   565→            />
+   566→   566→            <TimeBar
+   567→   567→              label="after · split"
+   568→   568→              seconds={d.proposal.buildSeconds}
+   569→   569→              widthPct={afterPct}
+   570→   570→              tone="bg-emerald-400/60"
+   571→   571→            />
+   572→   572→          </div>
+   573→   573→          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+   574→   574→            <p className="font-mono text-3xl font-semibold text-emerald-300">
+   575→   575→              +<CountUp value={d.improvementPct} decimals={1} suffix="%" />
+   576→   576→            </p>
+   577→   577→            <div className="space-y-1">
+   578→   578→              <p className="text-xs font-medium text-emerald-200/90">clean-build improvement from the split</p>
+   579→   579→              <MeasurementBadge status={d.measurementStatus} />
+   580→   580→            </div>
+   581→   581→          </div>
+   582→   582→        </section>
+   583→   583→
+   584→   584→        {/* migration checklist */}
+   585→   585→        <section>
+   586→   586→          <SectionLabel>Migration steps</SectionLabel>
+   587→   587→          <div className="mt-3 space-y-1.5">
+   588→   588→            {d.migration.map((step, i) => {
+   589→   589→              const checked = done[i] ?? false
+   590→   590→              return (
+   591→   591→                <label
+   592→   592→                  key={i}
+   593→   593→                  className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 px-3 py-2.5 transition-colors hover:border-primary/30"
+   594→   594→                >
+   595→   595→                  <Checkbox
+   596→   596→                    checked={checked}
+   597→   597→                    onCheckedChange={() => toggle(i)}
+   598→   598→                    className="mt-0.5"
+   599→   599→                    aria-label={`Migration step ${i + 1}`}
+   600→   600→                  />
+   601→   601→                  <span className="font-mono text-[11px] text-muted-foreground">{String(i + 1).padStart(2, '0')}</span>
+   602→   602→                  <span className={cn('text-xs leading-snug', checked && 'text-muted-foreground line-through')}>
+   603→   603→                    {step}
+   604→   604→                  </span>
+   605→   605→                </label>
+   606→   606→              )
+   607→   607→            })}
+   608→   608→          </div>
+   609→   609→        </section>
+   610→   610→
+   611→   611→        {/* CTA */}
+   612→   612→        <div className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
+   613→   613→          <Button
+   614→   614→            onClick={() => {
+   615→   615→              toast({ title: 'Experiment draft created from this proposal (demo)' })
+   616→   616→              onNavigate?.('experiments')
+   617→   617→            }}
+   618→   618→          >
+   619→   619→            Create experiment from this proposal
+   620→   620→          </Button>
+   621→   621→          <p className="font-mono text-[11px] text-muted-foreground">opens experiments with a draft EXP</p>
+   622→   622→        </div>
+   623→   623→      </div>
+   624→   624→    </Panel>
+   625→   625→  )
+   626→   626→}
+   627→   627→
+   628→   628→/* -------------------------------------------------------- upgrade-dep tab */
+   629→   629→
+   630→   630→const SEMVER_TONE: Record<UpgradeImpact['semver'], string> = {
+   631→   631→  major: 'border-red-500/40 bg-red-500/10 text-red-300',
+   632→   632→  minor: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
+   633→   633→  patch: 'border-teal-500/40 bg-teal-500/10 text-teal-300',
+   634→   634→}
+   635→   635→
+   636→   636→function UpgradeCatalogCard({
+   637→   637→  id,
+   638→   638→  from,
+   639→   639→  to,
+   640→   640→  active,
+   641→   641→  onSelect,
+   642→   642→}: {
+   643→   643→  id: string
+   644→   644→  from: string
+   645→   645→  to: string
+   646→   646→  active: boolean
+   647→   647→  onSelect: () => void
+   648→   648→}) {
+   649→   649→  const query = useImpact('upgrade-dep', id)
+   650→   650→  const d = query.data && query.data.kind === 'upgrade-dep' ? query.data : undefined
+   651→   651→
+   652→   652→  return (
+   653→   653→    <button
+   654→   654→      type="button"
+   655→   655→      role="radio"
+   656→   656→      aria-checked={active}
+   657→   657→      onClick={onSelect}
+   658→   658→      className={cn(
+   659→   659→        'w-full rounded-lg border p-3 text-left transition-colors',
+   660→   660→        active ? 'border-primary/60 bg-primary/10' : 'border-border/70 bg-card hover:border-primary/30',
+   661→   661→      )}
+   662→   662→    >
+   663→   663→      <div className="flex items-center justify-between gap-2">
+   664→   664→        <span className="truncate font-mono text-xs font-semibold">{id}</span>
+   665→   665→        <Badge variant="outline" className={cn('shrink-0 font-mono text-[10px]', SEMVER_TONE[d?.semver ?? 'minor'])}>
+   666→   666→          {d ? d.semver : '…'}
+   667→   667→        </Badge>
+   668→   668→      </div>
+   669→   669→      <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
+   670→   670→        {from} <ArrowRight className="inline size-3" aria-hidden /> {to}
+   671→   671→      </p>
+   672→   672→      <div className="mt-2 flex items-center gap-3 font-mono text-[11px]">
+   673→   673→        {d ? (
+   674→   674→          <>
+   675→   675→            <span className="text-muted-foreground">{d.recompileCrates} recompile</span>
+   676→   676→            <span className={d.ciDelta < 0 ? 'font-semibold text-emerald-300' : 'text-red-300'}>
+   677→   677→              {d.ciDelta < 0 ? '−' : '+'}
+   678→   678→              {Math.abs(d.ciDelta)}s CI
+   679→   679→            </span>
+   680→   680→          </>
+   681→   681→        ) : (
+   682→   682→          <span className="animate-pulse text-muted-foreground">loading…</span>
+   683→   683→        )}
+   684→   684→      </div>
+   685→   685→    </button>
+   686→   686→  )
+   687→   687→}
+   688→   688→
+   689→   689→function UpgradeReport({ query }: { query: QueryLike<ImpactPayload> }) {
+   690→   690→  const [pending, setPending] = useState<string | null>(null)
+   691→   691→  const { toast } = useToast()
+   692→   692→  const activeWs = useWorkspaceStore((s) => s.active)
+   693→   693→  const enqueueDiff = useDiffQueueStore((s) => s.enqueue)
+   694→   694→  // a11y: honor prefers-reduced-motion for the version-transition pulse
+   695→   695→  const reduceMotion = useReducedMotion()
+   696→   696→  const d = query.data && query.data.kind === 'upgrade-dep' ? (query.data as UpgradeImpact) : undefined
+   697→   697→
+   698→   698→  if (query.isPending || (query.data === undefined && !query.isError)) {
+   699→   699→    return (
+   700→   700→      <Panel title="Version upgrade impact">
+   701→   701→        <TilesSkeleton />
+   702→   702→      </Panel>
+   703→   703→    )
+   704→   704→  }
+   705→   705→
+   706→   706→  if (!d) {
+   707→   707→    return (
+   708→   708→      <Panel title="Version upgrade impact">
+   709→   709→        <QueryError message={query.error?.message ?? 'unknown error'} onRetry={() => query.refetch()} />
+   710→   710→      </Panel>
+   711→   711→    )
+   712→   712→  }
+   713→   713→
+   714→   714→  const isWin = d.ciDelta < 0
+   715→   715→  const tiles = [
+   716→   716→    { label: 'crates recompiled', value: d.recompileCrates },
+   717→   717→    { label: 'clean build', value: d.cleanDelta, decimals: 1, suffix: 's', cost: !isWin },
+   718→   718→    { label: 'incremental', value: d.incrementalDelta, decimals: 1, suffix: 's', cost: !isWin },
+   719→   719→    { label: 'CI', value: d.ciDelta, suffix: 's', cost: !isWin },
+   720→   720→  ]
+   721→   721→
+   722→   722→  return (
+   723→   723→    <Panel
+   724→   724→      title={`Upgrade — ${d.crate} ${d.from} → ${d.to}`}
+   725→   725→      subtitle={isWin ? 'this upgrade is a de-duplication win' : 'what the version bump recompiles and what it changes'}
+   726→   726→      actions={<MeasurementBadge status={d.measurementStatus} />}
+   727→   727→    >
+   728→   728→      <div className="space-y-5">
+   729→   729→        {/* version transition graphic */}
+   730→   730→        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3.5">
+   731→   731→          <span className="rounded-lg border border-border/80 bg-card px-3 py-1.5 font-mono text-sm font-semibold text-muted-foreground">
+   732→   732→            {d.crate} {d.from}
+   733→   733→          </span>
+   734→   734→          <span className="relative flex items-center">
+   735→   735→            <ArrowRight className="size-5 text-primary" aria-hidden />
+   736→   736→            {!reduceMotion && (
+   737→   737→              <motion.span
+   738→   738→                className="absolute inset-y-0 w-1.5 rounded-full bg-primary/25"
+   739→   739→                initial={{ x: -10, opacity: 0 }}
+   740→   740→                animate={{ x: 14, opacity: [0, 0.8, 0] }}
+   741→   741→                transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }}
+   742→   742→                aria-hidden
+   743→   743→              />
+   744→   744→            )}
+   745→   745→          </span>
+   746→   746→          <span className="rounded-lg border border-primary/50 bg-primary/10 px-3 py-1.5 font-mono text-sm font-semibold text-foreground shadow-[0_0_20px_-8px_oklch(0.72_0.16_45/55%)]">
+   747→   747→            {d.crate} {d.to}
+   748→   748→          </span>
+   749→   749→          <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', SEMVER_TONE[d.semver])}>
+   750→   750→            semver {d.semver}
+   751→   751→          </Badge>
+   752→   752→          {d.duplicateBefore && (
+   753→   753→            <Badge
+   754→   754→              variant="outline"
+   755→   755→              className="border-amber-500/40 bg-amber-500/10 font-mono text-[10px] text-amber-300"
+   756→   756→            >
+   757→   757→              2 versions in tree → 1
+   758→   758→            </Badge>
+   759→   759→          )}
+   760→   760→        </div>
+   761→   761→
+   762→   762→        {/* de-dup callout */}
+   763→   763→        {d.duplicateBefore && (
+   764→   764→          <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+   765→   765→            <p className="flex items-center gap-2 text-xs font-semibold text-emerald-200">
+   766→   766→              <TrendingDown className="size-4" aria-hidden />
+   767→   767→              De-duplication win — collapses {d.crate} 1.8.0 + 1.9.0 into one artifact
+   768→   768→            </p>
+   769→   769→            <p className="text-xs leading-relaxed text-emerald-100/80">
+   770→   770→              This is the exact remediation for the PR #97 regression: the buffer-pool helper vendored {d.crate}{' '}
+   771→   771→              1.9.0 next to the workspace's 1.8.0. Unifying the tree reverses the +2.1s added to atlas-common touches.
+   772→   772→            </p>
+   773→   773→          </div>
+   774→   774→        )}
+   775→   775→
+   776→   776→        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+   777→   777→          {tiles.map((t) => (
+   778→   778→            <ImpactTile key={t.label} {...t} />
+   779→   779→          ))}
+   780→   780→        </div>
+   781→   781→
+   782→   782→        {d.breaking.length > 0 && (
+   783→   783→          <section>
+   784→   784→            <SectionLabel>Breaking changes ({d.breaking.length})</SectionLabel>
+   785→   785→            <ul className="mt-2.5 space-y-2">
+   786→   786→              {d.breaking.map((b, i) => (
+   787→   787→                <li
+   788→   788→                  key={i}
+   789→   789→                  className="flex items-start gap-2.5 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2.5"
+   790→   790→                >
+   791→   791→                  <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-red-400" aria-hidden />
+   792→   792→                  <div>
+   793→   793→                    <p className="text-xs font-semibold leading-tight text-red-200/95">{b.title}</p>
+   794→   794→                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{b.detail}</p>
+   795→   795→                  </div>
+   796→   796→                </li>
+   797→   797→              ))}
+   798→   798→            </ul>
+   799→   799→          </section>
+   800→   800→        )}
+   801→   801→
+   802→   802→        {d.migrations.length > 0 && (
+   803→   803→          <section>
+   804→   804→            <SectionLabel>Migration snippets</SectionLabel>
+   805→   805→            <div className="mt-2.5 space-y-2.5">
+   806→   806→              {d.migrations.map((m, i) => (
+   807→   807→                <div key={i} className="overflow-hidden rounded-lg border border-border/70">
+   808→   808→                  <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-3 py-1.5">
+   809→   809→                    <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+   810→   810→                      step {i + 1}
+   811→   811→                    </span>
+   812→   812→                    <Button
+   813→   813→                      size="sm"
+   814→   814→                      variant="ghost"
+   815→   815→                      className="h-6 gap-1 px-2 text-[10px]"
+   816→   816→                      aria-label={`Copy migration snippet ${i + 1}`}
+   817→   817→                      onClick={() => {
+   818→   818→                        void navigator.clipboard.writeText(m.code)
+   819→   819→                        toast({ title: 'Migration snippet copied', description: 'Paste into your editor — no auto-apply (Gate 19).' })
+   820→   820→                      }}
+   821→   821→                    >
+   822→   822→                      <Copy className="size-3" aria-hidden />
+   823→   823→                      copy
+   824→   824→                    </Button>
+   825→   825→                  </div>
+   826→   826→                  <pre className="diff-body overflow-x-auto px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/90">
+   827→   827→                    {m.code}
+   828→   828→                  </pre>
+   829→   829→                  <p className="border-t border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-muted-foreground">
+   830→   830→                    {m.note}
+   831→   831→                  </p>
+   832→   832→                </div>
+   833→   833→              ))}
+   834→   834→            </div>
+   835→   835→          </section>
+   836→   836→        )}
+   837→   837→
+   838→   838→        <section>
+   839→   839→          <SectionLabel>Engine notes</SectionLabel>
+   840→   840→          <ul className="mt-2 space-y-1.5">
+   841→   841→            {d.notes.map((n, i) => (
+   842→   842→              <li key={i} className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
+   843→   843→                <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary/70" aria-hidden />
+   844→   844→                {n}
+   845→   845→              </li>
+   846→   846→            ))}
+   847→   847→          </ul>
+   848→   848→        </section>
+   849→   849→
+   850→   850→        <section>
+   851→   851→          <SectionLabel>Suggestions</SectionLabel>
+   852→   852→          <ol className="mt-2.5 space-y-2">
+   853→   853→            {d.suggestions.map((s, i) => (
+   854→   854→              <li
+   855→   855→                key={i}
+   856→   856→                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2"
+   857→   857→              >
+   858→   858→                <p className="text-xs leading-snug">
+   859→   859→                  <span className="mr-2 font-mono text-muted-foreground">{String(i + 1).padStart(2, '0')}</span>
+   860→   860→                  {s}
+   861→   861→                </p>
+   862→   862→                <Button
+   863→   863→                  size="sm"
+   864→   864→                  variant="outline"
+   865→   865→                  className="h-7 shrink-0 text-[11px]"
+   866→   866→                  onClick={() => setPending(s)}
+   867→   867→                >
+   868→   868→                  Apply suggestion
+   869→   869→                </Button>
+   870→   870→              </li>
+   871→   871→            ))}
+   872→   872→          </ol>
+   873→   873→        </section>
+   874→   874→      </div>
+   875→   875→
+   876→   876→      <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+   877→   877→        <DialogContent className="max-w-md">
+   878→   878→          <DialogHeader>
+   879→   879→            <DialogTitle>Queue a reviewable diff?</DialogTitle>
+   880→   880→            <DialogDescription>
+   881→   881→              Wanyrix never modifies your repository silently. A reviewable diff will be proposed (Gate 19).
+   882→   882→            </DialogDescription>
+   883→   883→          </DialogHeader>
+   884→   884→          <div className="diff-body rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/90">
+   885→   885→            {pending}
+   886→   886→          </div>
+   887→   887→          <div className="flex justify-end gap-2">
+   888→   888→            <Button size="sm" variant="ghost" onClick={() => setPending(null)}>
+   889→   889→              Cancel
+   890→   890→            </Button>
+   891→   891→            <Button
+   892→   892→              size="sm"
+   893→   893→              onClick={() => {
+   894→   894→                if (!pending) return
+   895→   895→                enqueueDiff({
+   896→   896→                  id: `diff-${Date.now()}`,
+   897→   897→                  workspace: activeWs,
+   898→   898→                  at: Date.now(),
+   899→   899→                  source: 'simulator:upgrade-dep',
+   900→   900→                  kind: 'config',
+   901→   901→                  title: `Version upgrade — ${d.crate} ${d.from} → ${d.to}`,
+   902→   902→                  target: `${d.crate} ${d.to} · Cargo.toml`,
+   903→   903→                  suggestion: pending,
+   904→   904→                  estimate: isWin
+   905→   905→                    ? `−${Math.abs(d.ciDelta)}s CI · −${Math.abs(d.incrementalDelta)}s incremental (de-dup win)`
+   906→   906→                    : `+${d.ciDelta}s CI · ${d.recompileCrates} crates recompiled`,
+   907→   907→                  status: 'pending',
+   908→   908→                })
+   909→   909→                toast({
+   910→   910→                  title: 'Diff queued for review',
+   911→   911→                  description: 'Open Pending diffs in the topbar to inspect or export it (Gate 19).',
+   912→   912→                })
+   913→   913→                setPending(null)
+   914→   914→              }}
+   915→   915→            >
+   916→   916→              Queue as diff
+   917→   917→            </Button>
+   918→   918→          </div>
+   919→   919→        </DialogContent>
+   920→   920→      </Dialog>
+   921→   921→    </Panel>
+   922→   922→  )
+   923→   923→}
+   924→   924→
+   925→   925→/* -------------------------------------------------------------------- view */
+   926→   926→
+   927→   927→export default function SimulatorView({ onNavigate }: ViewProps) {
+   928→   928→  /* cross-view deep links (round 10): consume a pending intent exactly once,
+   929→   929→   * during the first render's lazy initializer — StrictMode double-invocation
+   930→   930→   * discards the second call's result, so the take-once contract holds and
+   931→   931→   * no setState-in-effect is needed. */
+   932→   932→  const [initialIntent] = useState(() => useSimulatorIntentStore.getState().consumeIntent())
+   933→   933→
+   934→   934→  const [mode, setMode] = useState<Mode>(initialIntent?.mode ?? 'add-dep')
+   935→   935→  const [target, setTarget] = useState(
+   936→   936→    initialIntent?.mode === 'add-dep' && initialIntent.target ? initialIntent.target : '',
+   937→   937→  )
+   938→   938→  const [file, setFile] = useState(
+   939→   939→    initialIntent?.mode === 'edit-file' && initialIntent.file ? initialIntent.file : '',
+   940→   940→  )
+   941→   941→  const [upgrade, setUpgrade] = useState(
+   942→   942→    initialIntent?.mode === 'upgrade-dep' && initialIntent.target ? initialIntent.target : '',
+   943→   943→  )
+   944→   944→  const [routedFrom, setRoutedFrom] = useState<string | null>(initialIntent?.source ?? null)
+   945→   945→
+   946→   946→  const graph = useGraph()
+   947→   947→  const blast: BlastEntry[] = useMemo(() => graph.data?.blast ?? [], [graph.data])
+   948→   948→  // Catalogs are payload-driven per workspace; defaults derive during render
+   949→   949→  // so a workspace switch never shows stale selections.
+   950→   950→  const addDepOptions = graph.data?.catalog?.addDeps ?? []
+   951→   951→  const activeTarget = target || addDepOptions[0]?.id || ''
+   952→   952→  const splitSource = graph.data?.catalog?.splitCandidates[0] ?? ''
+   953→   953→  const activeFile = file || blast[0]?.file || ''
+   954→   954→  const upgradeOptions = graph.data?.catalog?.upgrades ?? []
+   955→   955→  const activeUpgrade = upgrade || upgradeOptions[0]?.id || ''
+   956→   956→  const addDepQuery = useImpact('add-dep', activeTarget)
+   957→   957→  const editFileQuery = useImpact('edit-file', activeFile)
+   958→   958→  const splitQuery = useImpact('split-crate', splitSource)
+   959→   959→  const upgradeQuery = useImpact('upgrade-dep', activeUpgrade)
+   960→   960→
+   961→   961→  return (
+   962→   962→    <div className="space-y-5">
+   963→   963→      <SectionHeading
+   964→   964→        eyebrow="Engineering Cost Calculator"
+   965→   965→        title="What will this change cost?"
+   966→   966→        description="Estimates derived from build telemetry × graph traversal — verified only through experiments."
+   967→   967→        actions={<MeasurementBadge status="estimated" />}
+   968→   968→      />
+   969→   969→
+   970→   970→      {routedFrom && (
+   971→   971→        <motion.div
+   972→   972→          initial={{ opacity: 0, y: -4 }}
+   973→   973→          animate={{ opacity: 1, y: 0 }}
+   974→   974→          className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
+   975→   975→          role="status"
+   976→   976→        >
+   977→   977→          <ArrowRight className="size-3.5 shrink-0 text-primary" aria-hidden />
+   978→   978→          <span className="text-foreground/90">
+   979→   979→            routed from <span className="font-mono text-primary">{routedFrom}</span> — scenario preselected below
+   980→   980→          </span>
+   981→   981→          <button
+   982→   982→            type="button"
+   983→   983→            onClick={() => setRoutedFrom(null)}
+   984→   984→            className="ml-auto rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+   985→   985→            aria-label="Dismiss routing notice"
+   986→   986→          >
+   987→   987→            <X className="size-3.5" aria-hidden />
+   988→   988→          </button>
+   989→   989→        </motion.div>
+   990→   990→      )}
+   991→   991→
+   992→   992→      <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+   993→   993→        <TabsList className="h-auto flex-wrap">
+   994→   994→          <TabsTrigger value="add-dep">Add a dependency</TabsTrigger>
+   995→   995→          <TabsTrigger value="upgrade-dep">Upgrade a dependency</TabsTrigger>
+   996→   996→          <TabsTrigger value="edit-file">Edit a source file</TabsTrigger>
+   997→   997→          <TabsTrigger value="split-crate">Split a crate</TabsTrigger>
+   998→   998→        </TabsList>
+   999→   999→
+  1000→  1000→        <TabsContent value="add-dep" className="mt-4">
+  1001→  1001→          <div className="grid gap-4 lg:grid-cols-3">
+  1002→  1002→            <div className="space-y-2 lg:col-span-1" role="radiogroup" aria-label="Dependency catalog">
+  1003→  1003→              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Catalog</p>
+  1004→  1004→              {graph.isPending &&
+  1005→  1005→                Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+  1006→  1006→              {addDepOptions.map((opt) => (
+  1007→  1007→                <CatalogCard
+  1008→  1008→                  key={opt.id}
+  1009→  1009→                  id={opt.id}
+  1010→  1010→                  version={opt.version}
+  1011→  1011→                  active={activeTarget === opt.id}
+  1012→  1012→                  onSelect={() => setTarget(opt.id)}
+  1013→  1013→                />
+  1014→  1014→              ))}
+  1015→  1015→            </div>
+  1016→  1016→            <div className="lg:col-span-2">
+  1017→  1017→              <AddDepReport query={addDepQuery} />
+  1018→  1018→            </div>
+  1019→  1019→          </div>
+  1020→  1020→        </TabsContent>
+  1021→  1021→
+  1022→  1022→        <TabsContent value="upgrade-dep" className="mt-4">
+  1023→  1023→          <div className="grid gap-4 lg:grid-cols-3">
+  1024→  1024→            <div className="space-y-2 lg:col-span-1" role="radiogroup" aria-label="Version upgrade catalog">
+  1025→  1025→              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Catalog</p>
+  1026→  1026→              {graph.isPending &&
+  1027→  1027→                Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
+  1028→  1028→              {upgradeOptions.map((opt) => (
+  1029→  1029→                <UpgradeCatalogCard
+  1030→  1030→                  key={opt.id}
+  1031→  1031→                  id={opt.id}
+  1032→  1032→                  from={opt.from}
+  1033→  1033→                  to={opt.to}
+  1034→  1034→                  active={activeUpgrade === opt.id}
+  1035→  1035→                  onSelect={() => setUpgrade(opt.id)}
+  1036→  1036→                />
+  1037→  1037→              ))}
+  1038→  1038→            </div>
+  1039→  1039→            <div className="lg:col-span-2">
+  1040→  1040→              <UpgradeReport query={upgradeQuery} />
+  1041→  1041→            </div>
+  1042→  1042→          </div>
+  1043→  1043→        </TabsContent>
+  1044→  1044→
+  1045→  1045→        <TabsContent value="edit-file" className="mt-4">
+  1046→  1046→          <div className="grid gap-4 lg:grid-cols-5">
+  1047→  1047→            <div className="space-y-2 lg:col-span-2" role="radiogroup" aria-label="High-traffic source files">
+  1048→  1048→              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+  1049→  1049→                High-traffic files
+  1050→  1050→              </p>
+  1051→  1051→              {graph.isPending &&
+  1052→  1052→                Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+  1053→  1053→              {graph.isError && (
+  1054→  1054→                <QueryError message={graph.error?.message ?? 'graph unavailable'} onRetry={() => graph.refetch()} />
+  1055→  1055→              )}
+  1056→  1056→              {blast.map((b) => (
+  1057→  1057→                <button
+  1058→  1058→                  key={b.file}
+  1059→  1059→                  type="button"
+  1060→  1060→                  role="radio"
+  1061→  1061→                  aria-checked={b.file === activeFile}
+  1062→  1062→                  onClick={() => setFile(b.file)}
+  1063→  1063→                  className={cn(
+  1064→  1064→                    'w-full rounded-lg border p-3 text-left transition-colors',
+  1065→  1065→                    b.file === activeFile
+  1066→  1066→                      ? 'border-primary/60 bg-primary/10'
+  1067→  1067→                      : 'border-border/70 bg-card hover:border-primary/30',
+  1068→  1068→                  )}
+  1069→  1069→                >
+  1070→  1070→                  <p className="truncate font-mono text-[11px]">{b.file}</p>
+  1071→  1071→                  <div className="mt-1.5 flex items-center gap-2">
+  1072→  1072→                    <Badge variant="outline" className="font-mono text-[10px]">
+  1073→  1073→                      {b.crate}
+  1074→  1074→                    </Badge>
+  1075→  1075→                    <span className="font-mono text-[11px] text-muted-foreground">{b.affectedWorkspace} crates</span>
+  1076→  1076→                  </div>
+  1077→  1077→                </button>
+  1078→  1078→              ))}
+  1079→  1079→            </div>
+  1080→  1080→            <div className="lg:col-span-3">
+  1081→  1081→              <EditFileReport query={editFileQuery} onNavigate={onNavigate} />
+  1082→  1082→            </div>
+  1083→  1083→          </div>
+  1084→  1084→        </TabsContent>
+  1085→  1085→
+  1086→  1086→        <TabsContent value="split-crate" className="mt-4">
+  1087→  1087→          <SplitReport query={splitQuery} onNavigate={onNavigate} />
+  1088→  1088→        </TabsContent>
+  1089→  1089→      </Tabs>
+  1090→  1090→
+  1091→  1091→      <p className="font-mono text-[11px] text-muted-foreground">
+  1092→  1092→        All figures estimated (Gate 21) · wanyrix experiment converts estimates into measured, verified results.
+  1093→  1093→      </p>
+  1094→  1094→    </div>
+  1095→  1095→  )
+  1096→  1096→}
+  1097→  1097→
