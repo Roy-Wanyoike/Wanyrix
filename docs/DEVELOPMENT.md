@@ -53,9 +53,9 @@ determinism is asserted byte-level where timestamps allow.
 
 `scripts/check-branding.sh` scans tracked text files for legacy brand tokens (the
 exact pattern constant lives in the script; case-insensitive). A small whitelist covers
-the intentional legacy mentions — the migration docs/protocol (`docs/migrations/`),
-`legacy-migration.ts` + its golden test, the Settings migration-status panel, audit
-records, and the historic finding-id prefix rule called out in docs. New code must not
+the intentional legacy mentions — `legacy-migration.ts` + its golden test, the Settings
+migration-status panel, this repo's own process scripts, and the historic finding-id
+prefix rule called out in docs. New code must not
 add legacy tokens; run the gate before every PR.
 
 ## Contract-fix conventions

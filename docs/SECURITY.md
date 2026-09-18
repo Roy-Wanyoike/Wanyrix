@@ -14,7 +14,7 @@ actually enforced in code today vs. what is **Roadmap**. See also
 - Consequence: nothing in this app authorizes anything. Organization/tier data is
   explicitly badged fixture (AUDIT-I3 acceptance: *"must not expose or mutate anything
   beyond fixtures until real auth exists"*). Cloud/auth features are **Roadmap**
-  (`docs/COMMERCIAL.md`).
+  (nothing is authorized or billed today).
 - No state-changing HTTP surface exists: `POST/PUT/DELETE/PATCH` on GET-only routes
   return `405` (with `Allow`); the only POST route (`/explain`) is a pure reasoning
   endpoint that writes nothing.
@@ -102,8 +102,7 @@ through typed getters; no user string is ever used as a file path or query.
 - SBOM generation, SAST/DAST in CI, dependency-audit gates, secret-scanning CI.
 - Signed releases and provenance attestation (meaningful only once releases are cut —
   AUDIT-I5).
-- Authentication, multi-tenancy, plugin sandboxing (Phases 13–14 —
-  `docs/COMMERCIAL.md`).
+- Authentication, multi-tenancy, plugin sandboxing (Phases 13–14 — roadmap).
 
 ## Reporting
 

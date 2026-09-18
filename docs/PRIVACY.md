@@ -58,7 +58,7 @@ above. All state is client-side; clearing site data removes everything.
 
 ## Cloud
 
-Wanyrix Cloud (history sync, team dashboards, hosted AI) is **roadmap — disabled today**
-(`docs/COMMERCIAL.md`). When it ships, the local deterministic core remains fully
+Wanyrix Cloud (history sync, team dashboards, hosted AI) is **roadmap — disabled today**.
+When it ships, the local deterministic core remains fully
 functional without an account, and billing failures can never corrupt local engineering
 data (entitlement separation).

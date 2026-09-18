@@ -1,10 +1,11 @@
 # W-EIR — Wanyrix Engineering Intermediate Representation
 
 W-EIR is the normalized evidence model every Wanyrix surface derives from. This
-document describes W-EIR **as actually encoded in this repository** (`src/lib/wanyrix/`)
-— not the full engine-side spec (the Rust engine is a separate repo,
-the engine roadmap). Types live in `src/lib/wanyrix/types.ts`; fixture
-data in `src/lib/wanyrix/data.ts`; serialization in `report.ts` + `flavors.ts`.
+document describes W-EIR **as actually encoded in this repository**: types live in
+`src/lib/wanyrix/types.ts`, fixture data in the per-domain modules under
+`src/lib/wanyrix/fixtures/` (re-exported through the `data.ts` barrel), serialization
+in `report.ts` + `flavors.ts`, and the Rust-side engine that measures the same shapes
+lives in-tree under `engine/` (see `engine/README.md`).
 
 ```text
 Engine → Collectors → W-EIR → Engineering Graph → Analyzers
@@ -34,9 +35,10 @@ Engine → Collectors → W-EIR → Engineering Graph → Analyzers
 
 - **Findings** are stable-ID diagnoses with the historic `FER-<SECTION>-<nnn>` scheme
   (e.g. `FER-BLD-001`); the prefix predates the 2026-09 identity rename and is retained
-  by design (see `docs/migrations/`). Newer registries use `WAN-*` (issues)
-  and `EXP-*` (experiments). IDs are stable across every surface, so the doctor, the
-  graph, the traceability board, and report flavors cross-reference without joins.
+  by design — IDs are stable contracts, not brand surface. Newer registries use `WAN-*`
+  (issues) and `EXP-*` (experiments). IDs are stable across every surface, so the
+  doctor, the graph, the traceability board, and report flavors cross-reference
+  without joins.
 - **Workspaces** are stable ids (`helios-platform`, `atlas-consortium`) resolved through
   one guard (`workspaceGuard`) against one registry; unknown ids are a hard 404 — a
   W-EIR-derived artifact can never carry a `workspace` field that does not match its

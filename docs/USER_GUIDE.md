@@ -157,5 +157,4 @@ in-app **CLI contract** dialog and documented in [`docs/CLI.md`](CLI.md), so the
 engine binary plugs into a stable spec.
 
 **Is it free?** The local deterministic core is free/local-first. Commercial tiers
-(90-day trial, Team, Enterprise) are described in [`docs/COMMERCIAL.md`](COMMERCIAL.md)
-and are **Roadmap** — nothing is billed today.
+(Team, Enterprise) are **Roadmap** — nothing is billed today.

@@ -55,7 +55,7 @@ Rust teams lose days to incremental-build pathologies, duplicate dependency tree
 
 ### Who it is for
 
-Rust engineers, platform/build teams, and engineering managers who want evidence instead of folklore. Investors: see [`docs/INVESTOR_OVERVIEW.md`](docs/INVESTOR_OVERVIEW.md). Recruiters: the [Engineering practice](#engineering-practice) section shows how this repo is built.
+Rust engineers, platform/build teams, and engineering managers who want evidence instead of folklore. Recruiters: the [Engineering practice](#engineering-practice) section shows how this repo is built.
 
 ---
 
@@ -197,23 +197,21 @@ This repository is built the way it asks you to build software — with verifiab
 
 - **Local-first** — workspaces, scan history, diff queue, and preferences live in your browser's localStorage. No background sync, no product telemetry. (A scaffolded anonymous page-view snippet was discovered and **removed** — see [`docs/SECURITY.md`](docs/SECURITY.md).)
 - **AI explain** sends only what you explicitly submit (context payload + question), capped at 256 KB.
-- **Cloud features are roadmap** (disabled today) — [`docs/PRIVACY.md`](docs/PRIVACY.md), [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
+- **Cloud features are roadmap** (disabled today) — see [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 ## Documentation
 
 | | | |
 | --- | --- | --- |
-| [User Guide](docs/USER_GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [CLI contract](docs/CLI.md) |
-| [W-EIR schema](docs/W-EIR.md) | [Security](docs/SECURITY.md) | [Privacy](docs/PRIVACY.md) |
-| [Performance](docs/PERFORMANCE.md) | [Development](docs/DEVELOPMENT.md) | [Contributing](docs/CONTRIBUTING.md) |
-| [Commercial model](docs/COMMERCIAL.md) | [Investor overview](docs/INVESTOR_OVERVIEW.md) | [Community guide](docs/RUST_COMMUNITY_GUIDE.md) |
-| [crates.io strategy](docs/CRATES_IO_STRATEGY.md) | [Open-source strategy](docs/OPEN_SOURCE_STRATEGY.md) | [Engine README](engine/README.md) |
+| [User Guide](docs/USER_GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [W-EIR schema](docs/W-EIR.md) |
+| [CLI contract](docs/CLI.md) | [Engine README](engine/README.md) | [Engine benchmarks](engine/BENCHMARKS.md) |
+| [Performance](docs/PERFORMANCE.md) | [Security](docs/SECURITY.md) | [Privacy](docs/PRIVACY.md) |
+| [Development](docs/DEVELOPMENT.md) | [Contributing](docs/CONTRIBUTING.md) | [Issue tracker](https://github.com/Roy-Wanyoike/wanyrix/issues) |
 
 ## Roadmap
 
-Phases 1–9 are demonstrated by this platform (engine v0.2 executes doctor · graph · health · synth · store). Open work, tracked on the [issue tracker](https://github.com/Roy-Wanyoike/wanyrix/issues):
+Phases 1–9 are demonstrated by this platform (engine v0.3 executes doctor · graph · health · synth · store · daemon · telemetry). Open work, tracked on the [issue tracker](https://github.com/Roy-Wanyoike/wanyrix/issues):
 
-- **#58 — engine phase-2**: daemon, rustc telemetry, 500-crate budget gates (SQLite store + synth shipped)
 - **#53** — fixture-generator adoption across web fixtures *(generator shipped; adoption open)*
 - **#49** — product-core umbrella
 
@@ -221,19 +219,19 @@ Roadmap features never destabilize the shipped core. Release decision: **CONDITI
 
 ## Commercial model
 
-Free 90-day trial · Local / Cloud / Team / Enterprise packaging · billing strictly separated from the local deterministic core. Pricing is a configurable proposal pending market validation — [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
+Free local core · Local / Cloud / Team / Enterprise packaging planned · billing strictly separated from the local deterministic core. Pricing remains a configurable proposal pending market validation; nothing is billed today.
 
 ## Governance & brand history
 
 - Work lands only through reviewed PRs referencing their issue; CI and the brand gate run on every change.
-- **Ferrix was renamed to Wanyrix** (2026-09) — see [`docs/migrations/FERRIX_TO_WANYRIX.md`](docs/migrations/FERRIX_TO_WANYRIX.md). Stable finding IDs keep their historic `FER-` prefix; new registries use `WAN-`.
+- **Ferrix was renamed to Wanyrix** (2026-09). Stable finding IDs keep their historic `FER-` prefix by design — IDs are stable contracts; new registries use `WAN-`.
 
 ## License
 
-Proprietary — © Wanyrix. All rights reserved. Dual **MIT OR Apache-2.0** licensing of the deterministic core is the documented plan ([`docs/OPEN_SOURCE_STRATEGY.md`](docs/OPEN_SOURCE_STRATEGY.md)); it takes effect by explicit maintainer decision.
+Proprietary — © Wanyrix. All rights reserved. The engine crate (`engine/`) is declared **MIT OR Apache-2.0** in its `Cargo.toml`; extending that dual license to the rest of the tree is a documented option that takes effect only by explicit maintainer decision.
 
-## Community, ecosystem & open source
+## Community & contributing
 
-- [`docs/RUST_COMMUNITY_GUIDE.md`](docs/RUST_COMMUNITY_GUIDE.md) — channels, launch sequencing, what is shareable today vs roadmap, contribution pathways, triage labels, 90-day engagement calendar.
-- [`docs/CRATES_IO_STRATEGY.md`](docs/CRATES_IO_STRATEGY.md) — publication order (`wanyrix-protocol` → `wanyrix-core` → `wanyrix`), versioning/MSRV/feature-flag policy, publish checklist, ecosystem inventory.
-- [`docs/OPEN_SOURCE_STRATEGY.md`](docs/OPEN_SOURCE_STRATEGY.md) — license recommendation, open-core boundary, governance path, release cadence, community-health metrics.
+- [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) — how to file issues, what a good PR looks like, the verification bar every change must meet.
+- Issues and PRs live on the [GitHub tracker](https://github.com/Roy-Wanyoike/wanyrix/issues); every closed issue carries measured evidence.
+- The engine will be published to crates.io once the release checklist (versioning, MSRV, feature flags) is exercised — see the tracker.

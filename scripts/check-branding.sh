@@ -9,8 +9,9 @@
 # bun.lock, db/.
 #
 # Whitelisted (intentional legacy mentions, skipped with exit 0):
-#   docs/migrations/, docs/audits/, worklog.md, README.md,
-#   src/lib/wanyrix/legacy-migration.ts, scripts/check-branding.sh,
+#   worklog.md (maintainer-local handover, gitignored),
+#   README.md (documents the 2026-09 Ferrix→Wanyrix rename + FER- prefix rule),
+#   src/lib/wanyrix/legacy-migration.ts,
 #   tests/unit/legacy-migration.test.ts (AUDIT-I1 regression test — asserts the
 #     legacy-key migration itself),
 #   docs/PRIVACY.md, docs/ARCHITECTURE.md, docs/USER_GUIDE.md (document the
@@ -58,12 +59,10 @@ while IFS= read -r path; do
   path="${path#./}"
 
   case "$path" in
-    docs/migrations/*|docs/audits/*|worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh|tests/unit/legacy-migration.test.ts|docs/PRIVACY.md|docs/ARCHITECTURE.md|docs/USER_GUIDE.md|src/components/wanyrix/views/settings-view.tsx|scripts/github/lib.sh|scripts/github/README.md|docs/OPEN_SOURCE_STRATEGY.md|docs/CRATES_IO_STRATEGY.md|docs/RUST_COMMUNITY_GUIDE.md)
-      # Intentional legacy references — skip.
-      #   scripts/github/*: the GitHub rename flow needs the old repo name
-      #     (WANYRIX_OLD_REPO bootstrap renames ferrix → wanyrix).
-      #   docs/*STRATEGY*/RUST_COMMUNITY_GUIDE: document the rename/publish
-      #     history and community messaging honestly.
+    worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh|tests/unit/legacy-migration.test.ts|docs/PRIVACY.md|docs/ARCHITECTURE.md|docs/USER_GUIDE.md|src/components/wanyrix/views/settings-view.tsx)
+      # Intentional legacy references — skip. The list is deliberately
+      # minimal: every entry documents the rename or implements its
+      # storage-migration protocol.
       continue
       ;;
   esac

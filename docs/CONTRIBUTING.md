@@ -68,8 +68,8 @@ Run `bash scripts/check-branding.sh` before every PR (exit 0 = PASS). It fails o
 unsanctioned legacy brand tokens — the exact case-insensitive pattern constant lives in
 `scripts/check-branding.sh`. The whitelist covers only intentional legacy mentions
 (migration protocol, its regression test, audit records, docs about them). New files
-must not reintroduce legacy tokens; stable finding IDs keep their historic finding-id
-prefix by design (see `docs/migrations/`).
+must not reintroduce legacy tokens; stable finding IDs keep their historic `FER-` prefix
+by design — IDs are contracts.
 
 ## 5. Commit & PR conventions (as observed in `git log`)
 
