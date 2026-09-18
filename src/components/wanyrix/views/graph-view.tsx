@@ -636,7 +636,7 @@ function DuplicatesPanel({
         <MeasurementBadge status="measured" />
         <p className="text-[11px] text-muted-foreground">
           existence of duplicate versions is measured; unification is tracked as{' '}
-          <span className="font-mono text-foreground/80">FER-BLD-002</span>
+          <span className="font-mono text-foreground/80">WAN-BLD-002</span>
         </p>
       </div>
     </Panel>

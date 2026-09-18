@@ -41,7 +41,7 @@ const REMEDIATION_META: Record<RemediationKind, { icon: LucideIcon; label: strin
 // experiment eligibility comes from the Finding payload (issue #34)
 
 /**
- * Evidence-first drill-down for a single FER-xxx finding (issue #25).
+ * Evidence-first drill-down for a single WAN-xxx finding (issue #25).
  * Every rendered field comes from the Finding payload — nothing invented.
  */
 export function FindingSheet({

@@ -41,7 +41,7 @@ export const WORKSPACE = {
 
 export const FINDINGS: Finding[] = [
   {
-    id: 'FER-BLD-001',
+    id: 'WAN-BLD-001',
     section: 'Build',
     severity: 'critical',
     title: 'common-runtime sits on the critical path',
@@ -68,7 +68,7 @@ export const FINDINGS: Finding[] = [
     experimentEligible: true,
   },
   {
-    id: 'FER-BLD-002',
+    id: 'WAN-BLD-002',
     section: 'Build',
     severity: 'warning',
     title: '3 crates compile multiple versions',
@@ -93,7 +93,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'measured',
   },
   {
-    id: 'FER-BLD-003',
+    id: 'WAN-BLD-003',
     section: 'Build',
     severity: 'warning',
     title: 'Feature unification creates 2 duplicate builds',
@@ -117,7 +117,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'estimated',
   },
   {
-    id: 'FER-BLD-004',
+    id: 'WAN-BLD-004',
     section: 'Build',
     severity: 'warning',
     title: 'Proc-macro chain adds ~11.2s to cold builds',
@@ -141,7 +141,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'estimated',
   },
   {
-    id: 'FER-BLD-005',
+    id: 'WAN-BLD-005',
     section: 'CI',
     severity: 'info',
     title: 'Incremental compilation disabled in CI',
@@ -152,7 +152,7 @@ export const FINDINGS: Finding[] = [
       { label: 'Shared cache', value: 'none configured', source: 'workflow definition' },
     ],
     affected: ['ci'],
-    impact: 'CI-only; see FER-DEP-006 for the measured miss rate',
+    impact: 'CI-only; see WAN-DEP-006 for the measured miss rate',
     recommendation: 'Adopt cargo-chef + sccache with a shared backend as the cache strategy.',
     remediationKind: 'config',
     verificationPath: 'Cache hit rate metric in CI telemetry must exceed 85% after rollout.',
@@ -162,7 +162,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'measured',
   },
   {
-    id: 'FER-DEP-006',
+    id: 'WAN-DEP-006',
     section: 'CI',
     severity: 'critical',
     title: 'CI cache miss rate is 68%',
@@ -185,7 +185,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'estimated',
   },
   {
-    id: 'FER-WRK-007',
+    id: 'WAN-WRK-007',
     section: 'Workspace',
     severity: 'critical',
     title: 'common blocks 41 downstream crates',
@@ -212,7 +212,7 @@ export const FINDINGS: Finding[] = [
     experimentEligible: true,
   },
   {
-    id: 'FER-WRK-008',
+    id: 'WAN-WRK-008',
     section: 'Workspace',
     severity: 'warning',
     title: 'api crate contains 17 unrelated modules',
@@ -235,7 +235,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'estimated',
   },
   {
-    id: 'FER-WRK-009',
+    id: 'WAN-WRK-009',
     section: 'Workspace',
     severity: 'info',
     title: '4 crates exceed 25k LOC',
@@ -258,7 +258,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'measured',
   },
   {
-    id: 'FER-IDE-010',
+    id: 'WAN-IDE-010',
     section: 'IDE',
     severity: 'critical',
     title: 'rust-analyzer checks all 47 workspace crates on save',
@@ -281,7 +281,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'estimated',
   },
   {
-    id: 'FER-IDE-011',
+    id: 'WAN-IDE-011',
     section: 'IDE',
     severity: 'warning',
     title: 'cargo check and rust-analyzer contend on one target dir',
@@ -302,7 +302,7 @@ export const FINDINGS: Finding[] = [
     measurementStatus: 'estimated',
   },
   {
-    id: 'FER-ASY-012',
+    id: 'WAN-ASY-012',
     section: 'Async',
     severity: 'warning',
     title: 'Blocking call inside async task (worker::scan)',
@@ -356,7 +356,7 @@ export const DOCTOR: DoctorReport = {
   summary: { developerBuild: '−34%', ciBuild: '−41%', diskUsage: '−27%' },
   criticalPathExplanation: 'common-runtime blocks 41 crates; split proposal verified in EXP-014',
   criticalPathCaption:
-    'proc-macro chain = syn + quote + proc-macro2 compiled in 3 version sets (FER-BLD-004) · linking includes codegen',
+    'proc-macro chain = syn + quote + proc-macro2 compiled in 3 version sets (WAN-BLD-004) · linking includes codegen',
 }
 
 // ---------------------------------------------------------------------------
@@ -672,13 +672,13 @@ const RAW_BLAST: Omit<BlastEntry, 'affectedWorkspace' | 'chain'>[] = [
     file: 'common/src/error.rs',
     crate: 'common',
     incrementalDelta: 12.8,
-    suggestion: 'Move error abstractions into common-types (FER-WRK-007).',
+    suggestion: 'Move error abstractions into common-types (WAN-WRK-007).',
   },
   {
     file: 'common-runtime/src/scheduler.rs',
     crate: 'common-runtime',
     incrementalDelta: 18.3,
-    suggestion: 'Split scheduler into runtime-telemetry (FER-BLD-001).',
+    suggestion: 'Split scheduler into runtime-telemetry (WAN-BLD-001).',
   },
   {
     file: 'database/src/pool.rs',
@@ -986,11 +986,11 @@ export const DIAGNOSTICS: DiagnosticsPayload = {
       { id: 'T2', label: 'db query task', parent: 'T1', state: 'awaited', detail: 'select account — awaited via join!' },
       { id: 'T3', label: 'provider call task', parent: 'T1', state: 'resumed', detail: '31.7ms external HTTP — resumed twice' },
       { id: 'T4', label: 'queue flush task', parent: 'T1', state: 'done', detail: 'spawned near response; detached' },
-      { id: 'T5', label: 'scan task (worker)', state: 'blocked', detail: 'std::fs read_dir inside async fn — blocks worker thread (FER-ASY-012)', findingId: 'FER-ASY-012' },
+      { id: 'T5', label: 'scan task (worker)', state: 'blocked', detail: 'std::fs read_dir inside async fn — blocks worker thread (WAN-ASY-012)', findingId: 'WAN-ASY-012' },
     ],
     warnings: [
       'provider call dominates: 74% of request latency is external I/O',
-      'worker thread stall 340ms p95 detected during scan task (FER-ASY-012)',
+      'worker thread stall 340ms p95 detected during scan task (WAN-ASY-012)',
     ],
   },
 }
@@ -1092,7 +1092,7 @@ export const EXPERIMENTS: Experiment[] = [
   {
     id: 'EXP-014',
     title: 'Split common-runtime into core + telemetry',
-    findingId: 'FER-BLD-001',
+    findingId: 'WAN-BLD-001',
     commit: 'a3f19c2',
     status: 'verified',
     claim: 'verified',
@@ -1120,7 +1120,7 @@ export const EXPERIMENTS: Experiment[] = [
   {
     id: 'EXP-015',
     title: 'Unify duplicate tokio versions',
-    findingId: 'FER-BLD-002',
+    findingId: 'WAN-BLD-002',
     commit: '77bd0e4',
     status: 'running',
     claim: 'measured',
@@ -1144,7 +1144,7 @@ export const EXPERIMENTS: Experiment[] = [
   {
     id: 'EXP-016',
     title: 'Isolate sqlx behind database-impl',
-    findingId: 'FER-WRK-007',
+    findingId: 'WAN-WRK-007',
     commit: 'e91f7aa',
     status: 'draft',
     claim: 'estimated',
@@ -1432,7 +1432,7 @@ export const ISSUES: IssueItem[] = [
   {
     id: 'WAN-111',
     ghIssue: 25,
-    title: 'Finding detail drawer — drill into any FER-xxx finding',
+    title: 'Finding detail drawer — drill into any WAN-xxx finding',
     gate: 'Gate 8 · Actionability',
     labels: ['frontend', 'doctor'],
     state: 'merged',
@@ -1670,7 +1670,7 @@ export const HEALTH: HealthPayload = {
       time: '1h ago',
       kind: 'duplicate',
       title: 'Duplicate tokio versions after lockfile update',
-      detail: '1.34.2 + 1.40.0 both compiled — FER-BLD-002',
+      detail: '1.34.2 + 1.40.0 both compiled — WAN-BLD-002',
       severity: 'warning',
     },
     {
@@ -1678,7 +1678,7 @@ export const HEALTH: HealthPayload = {
       time: '3h ago',
       kind: 'amplification',
       title: 'common-runtime change amplified ×38 rebuilds',
-      detail: 'scheduler.rs touched; 38 crates re-invalidated — FER-BLD-001',
+      detail: 'scheduler.rs touched; 38 crates re-invalidated — WAN-BLD-001',
       severity: 'warning',
     },
     {
@@ -1694,7 +1694,7 @@ export const HEALTH: HealthPayload = {
       time: '2d ago',
       kind: 'improvement',
       title: 'CI cache miss rate 68% → 54%',
-      detail: 'cargo-chef migration on 2 of 5 pipelines — FER-DEP-006',
+      detail: 'cargo-chef migration on 2 of 5 pipelines — WAN-DEP-006',
       severity: 'info',
     },
     {
@@ -1702,7 +1702,7 @@ export const HEALTH: HealthPayload = {
       time: '3d ago',
       kind: 'config',
       title: 'rust-analyzer flycheck config applied',
-      detail: 'check.workspace=false rolled out to 12 developers — FER-IDE-010',
+      detail: 'check.workspace=false rolled out to 12 developers — WAN-IDE-010',
       severity: 'info',
     },
   ],
