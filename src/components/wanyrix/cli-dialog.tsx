@@ -40,8 +40,8 @@ function CommandRow({ cmd, maps }: { cmd: string; maps: string }) {
   const { toast } = useToast()
   return (
     <li className="group flex items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 transition-colors hover:border-border/70 hover:bg-accent/40">
-      <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground/90">{cmd}</code>
-      <span className="hidden shrink-0 text-[11px] text-muted-foreground md:inline">{maps}</span>
+      <code className="min-w-0 flex-[2] truncate font-mono text-[12px] text-foreground/90">{cmd}</code>
+      <span className="hidden min-w-0 flex-[3] truncate text-[11px] text-muted-foreground md:inline">{maps}</span>
       <Button
         size="icon"
         variant="ghost"
@@ -72,7 +72,7 @@ export function CliContractDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <span onClick={() => onOpenChange(true)}>{trigger}</span>}
-      <DialogContent className="max-w-lg" aria-describedby="cli-dialog-desc">
+      <DialogContent className="max-w-lg sm:max-w-2xl" aria-describedby="cli-dialog-desc">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TerminalSquare className="size-4 text-primary" aria-hidden />
