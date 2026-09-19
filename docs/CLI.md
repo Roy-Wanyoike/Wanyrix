@@ -1,95 +1,97 @@
 # Wanyrix CLI — contract reference
 
-Status: the `wanyrix` CLI **binary now exists as engine v0** — `wanyrix
-doctor|graph|health` ([`engine/README.md`](../engine/README.md)); deeper CLI surfaces
-(daemon, telemetry) are Roadmap. The web contract remains: the in-app
-**CLI contract** dialog (`src/components/wanyrix/cli-dialog.tsx`, opened from the top
-bar's terminal entry) pins the command set, the flags, and the exit codes. Every web
-surface maps 1:1 to a CLI command — same payloads, same exit codes, `--json` on
-everything — so when the engine binary lands it plugs into the interface documented
-below, and everything on this page that describes a future binary is labeled
-**Roadmap**.
+Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.3.0
+([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
+store · synth · daemon · telemetry`. Every engine command emits a versioned JSON
+envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
+`wanyrix.daemon/v1`, `wanyrix.telemetry/v1`) behind a `--json` switch, plus
+human-readable output by default. The web platform mirrors the same payloads over
+HTTP; the in-app **CLI contract** dialog
+(`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)
+pins the command set, the flags, and the exit codes shown here.
 
 ## Design rules (as surfaced by the dialog)
 
-1. **Every command has a `--json` switch.** Human output is the default; `--json`
-   emits the machine-readable payloads defined here (Gate 18).
+1. **Every read command has a `--json` switch.** Human output is the default; `--json`
+   emits the machine-readable, versioned payload (Gate 18).
 2. **Deterministic core, no AI in the path.** Copying a command in the dialog toasts:
    *"deterministic surface, no AI in the path."* The AI layer (`wanyrix explain`
    equivalent in the web UI) is additive and never required.
-3. **Same payloads as the web.** A CLI JSON payload is byte-for-byte the HTTP payload
-   the mirrored route serves (see the mapping table).
+3. **Same payloads as the web.** An engine JSON payload is the versioned envelope the
+   mirrored web surface renders (see the mapping table below).
 4. **No silent modification.** AI never edits code silently; patches stay reviewable
    diffs behind explicit approval (Gates 9/19).
+5. **Honesty contract.** The engine measures the filesystem and labels what is absent;
+   the store persists exactly what `doctor` measured; the daemon serves cached
+   *measured* scans; telemetry is redacted by default. Nothing is simulated.
 
-## Commands (8, from the CLI contract dialog)
+## Engine commands (the real binary surface)
 
-| # | Command | Maps to (web surface / HTTP) |
+| # | Command | Emits | Mirrors (web surface) |
+| --- | --- | --- | --- |
+| 1 | `wanyrix doctor [--path <dir>] [--json] [--pretty]` | `wanyrix.doctor/v1` — crate list + measured findings with evidence | Build Doctor view (`GET /api/wanyrix/doctor?ws=…`) |
+| 2 | `wanyrix graph [--path <dir>] [--json] [--pretty]` | `wanyrix.graph/v1` — dependency graph from the measured edge list | Engineering Graph (`GET /api/wanyrix/graph?ws=…`) |
+| 3 | `wanyrix health [--path <dir>] [--json] [--pretty]` | `wanyrix.health/v1` — KPI summary derived from doctor + graph | Scorecard view (`GET /api/wanyrix/health?ws=…`) |
+| 4 | `wanyrix store init|save|list|fsck` | SQLite scan store (WAL journal, layout v1) — persists exactly what `doctor --json` measured | History view / scan-run records |
+| 5 | `wanyrix daemon start|call` | `wanyrix.daemon/v1` — one measured scan kept in memory, served over a local Unix socket (no TCP, no network) | Runtime view |
+| 6 | `wanyrix telemetry ingest -` | `wanyrix.telemetry/v1` — redacted, aggregated rustc JSON diagnostics (source snippets dropped unconditionally) | Diagnostics view (`GET /api/wanyrix/diagnostics?ws=…`) |
+| 7 | `wanyrix synth --crates <n> --out <dir> [--seed <s>]` | deterministic synthetic Rust workspace (same `(seed, count)` → byte-identical tree) | fixture generator used by tests/benchmarks |
+
+Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
+(pretty has no effect without `--json`), and per-subcommand options documented by
+`wanyrix --help` and `wanyrix <command> --help`. `store save -` reads a
+`wanyrix doctor --json` payload from stdin; `telemetry ingest -` reads a
+`cargo build --message-format=json` stream from stdin; `daemon call` takes
+`status | doctor | graph | health | shutdown` as the request kind.
+
+## Web-only surfaces (platform features, no engine subcommand)
+
+These surfaces are served by the Next.js API routes directly. They are labeled
+**web-only** rather than pretending an engine subcommand exists:
+
+| Surface | Web route | Payload |
 | --- | --- | --- |
-| 1 | `wanyrix doctor` | Build Doctor view — findings + evidence (`GET /api/wanyrix/doctor?ws=…`, human rendering) |
-| 2 | `wanyrix doctor --json` | `GET /api/wanyrix/doctor?ws=…` — the `DoctorReport` JSON |
-| 3 | `wanyrix graph --duplicates --json` | Engineering Graph · duplicates panel (`GET /api/wanyrix/graph?ws=…` — `duplicates[]`, plus `resolutions` deep links) |
-| 4 | `wanyrix impact add-dep <crate> --json` | Impact Simulator · add a dependency (`GET /api/wanyrix/impact?type=add-dep&target=<crate>&ws=…`) |
-| 5 | `wanyrix impact upgrade-dep <crate> --json` | Impact Simulator · upgrade a dependency (`GET /api/wanyrix/impact?type=upgrade-dep&target=<crate>&ws=…`) |
-| 6 | `wanyrix impact edit-file <path> --json` | Impact Simulator · edit a source file (`GET /api/wanyrix/impact?type=edit-file&target=<path>&ws=…`) |
-| 7 | `wanyrix report --json` | Topbar Report → JSON snapshot (`GET /api/wanyrix/report?format=json&ws=…` → `wanyrix.report/v1`) |
-| 8 | `wanyrix experiment start <finding-id>` | Experiments view — scaffold an experiment from a finding (`GET /api/wanyrix/experiments?ws=…` payloads; `EXP-*` records) |
+| Impact Simulator (add-dep / upgrade-dep / edit-file what-ifs) | `GET /api/wanyrix/impact?type=…&target=…&ws=…` | web-computed projection of the measured graph |
+| Topbar Report (Markdown / JSON snapshot) | `GET /api/wanyrix/report?format=json\|markdown&ws=…` | `wanyrix.report/v1` · `wanyrix.markdown/v1` |
+| Release scorecard download | `GET /api/wanyrix/report?flavor=scorecard&ws=…` | `wanyrix.release-scorecard/v1` |
+| Scan history export | `GET /api/wanyrix/report?flavor=scan-history&ws=…` | `wanyrix.scan-history/v1` (server-side `runs` honestly empty — runs are per-browser localStorage; the `note` field says so) |
+| Experiments board | `GET /api/wanyrix/experiments?ws=…` | `EXP-*` records |
 
-Flags observed in the contract: `--json` (every command), `--duplicates`
-(graph subsets the duplicate-version groups), and explicit positional targets
-(`<crate>`, `<path>`, `<finding-id>`). On the HTTP side these become query params
-(`type`, `target`, `ws`); the web workspace switcher is the moral equivalent of a
-`--workspace <id>` flag.
-
-## Exit codes (as designed — Roadmap until the binary exists)
+## Exit codes (as implemented by the binary)
 
 | Code | Meaning | Set when |
 | --- | --- | --- |
-| `0` | success | command completed; for `doctor`, zero findings |
-| `1` | findings present | scan/report ran fine but findings exist (CI gate signal — the mirror of the severity ladder `critical`/`warning`/`info`) |
-| `2` | usage error | bad flag, unknown command, unknown target/type — the mirror of the HTTP `400` class |
-| `3` | infrastructure failure | engine/store unavailable — the mirror of the HTTP `404`/`5xx` class |
+| `0` | success | command completed — for `doctor`, findings do **not** fail the exit code; CI consumers parse the JSON |
+| `2` | error | bad usage/flags, unreadable workspace, store/IO failure, or `daemon call` receiving an `ok:false` frame |
 
-The engine binary implements the same ladder (`wanyrix doctor` exits 2 on scan
-failure, 0 on success — findings do not fail the exit code; CI consumers parse the
-JSON) — see [`engine/README.md`](../engine/README.md).
+That is the entire ladder: `main.rs` maps any `EngineError` to `2` with a
+`wanyrix: error: …` line on stderr, and success to `0`. There is deliberately no
+"findings present" exit code — presence of findings is data, not failure, and the
+severity ladder lives inside the payload (`critical` / `warning` / `info`).
 
-## Machine-readable payloads (the serialization contract)
+## Web error contract (HTTP side)
 
-CLI `--json` payloads are the same versioned flavors the web serves:
-
-| Flavor | Where the web serves it today |
-| --- | --- |
-| `wanyrix.report/v1` | `GET /api/wanyrix/report?format=json&ws=…` — full workspace snapshot (summary, doctor, graph, pr, experiments, gates, storage, honestyNotes) |
-| `wanyrix.markdown/v1` | `GET /api/wanyrix/report?format=markdown&ws=…` (default) — versioned envelope `{schema, filename, markdown, bytes}` |
-| `wanyrix.release-scorecard/v1` | `GET /api/wanyrix/report?flavor=scorecard&ws=…` |
-| `wanyrix.scan-history/v1` | `GET /api/wanyrix/report?flavor=scan-history&ws=…` (server-side `runs` honestly empty — runs are per-browser localStorage; the `note` field says so) |
-
-Error contract mirrored by CLI exit codes (`docs/ARCHITECTURE.md` has the full table):
-
-- unknown `ws` → HTTP 404 `{error, knownWorkspaces}` → exit 3 (never silent substitution)
-- missing param / unknown `type` / unknown `kind` → HTTP 400 → exit 2
-- unknown impact target → HTTP 404 → exit 3
-- 405s carry `Allow` → a CLI wrapper can always discover the method
+- unknown `ws` → HTTP 404 `{error, knownWorkspaces}` — never a silent substitution
+  of the default workspace
+- missing param / unknown `type` / unknown `kind` → HTTP 400
+- 405s carry an `Allow` header so any CLI wrapper can discover the method
 
 ## Web platform as the contract mirror
 
-The web platform is the executable half of the contract today:
-
-- `src/lib/wanyrix/hooks.ts` — every view fetches its command's payload through one
-  hook per command, keyed by active workspace (`?ws=`), so UI and CLI consumers read
-  identical bytes.
-- `src/lib/wanyrix/api.ts` — shared workspace guard + `Allow`-carrying 405 factory used
-  by all routes.
+- `src/lib/wanyrix/hooks.ts` — every view fetches its payload through one hook per
+  surface, keyed by active workspace (`?ws=`), so UI consumers read the same shape
+  the engine emits.
+- `src/lib/wanyrix/api.ts` — shared workspace guard + `Allow`-carrying 405 factory
+  used by all routes.
 - `src/lib/wanyrix/flavors.ts` — server-side builders for the scorecard/scan-history
   flavors, field-for-field identical to the in-app download exporters.
 - Human ⇄ JSON parity is enforced in the UI: Build Doctor's Human/`--json` mode toggle
   renders the same finding content two ways.
 
-## What is explicitly NOT here yet (Roadmap)
+## Roadmap
 
-- The `wanyrix` binary itself, `wanyrix init`, repository discovery, and daemon
-  operation — engine-repo scope (AUDIT-I8).
+- `wanyrix init`, repository discovery, and config-file support — engine-repo scope.
+- An `impact`/`report` engine subcommand to absorb the web-only surfaces above is
+  intentionally not faked in the binary; the web platform serves them today.
 - Anything that would fake engine evidence in this repo is forbidden by the honesty
-  gates (`docs/CONTRIBUTING.md`); the dialog documents the contract instead of
-  pretending to run it.
+  gates (`docs/CONTRIBUTING.md`).

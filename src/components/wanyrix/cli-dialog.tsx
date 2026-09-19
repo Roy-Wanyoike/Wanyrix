@@ -14,27 +14,25 @@ import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
 /**
- * CLI contract quick reference (round 10) — the web surfaces are a mirror of
- * the `wanyrix` CLI: same payloads, same exit codes, same `--json` switch on
- * every command. Every command row is copyable (Gate 19 toast on copy).
+ * CLI contract quick reference — the engine-backed web surfaces mirror the real
+ * `wanyrix` binary (engine v0.3.0): same payloads, versioned envelopes, same
+ * `--json` switch, same exit codes (0 success / 2 error). Every command row is
+ * copyable (Gate 19 toast on copy). Web-only platform tools are labeled as such.
  */
 
 const COMMANDS: { cmd: string; maps: string }[] = [
-  { cmd: 'wanyrix doctor', maps: 'Build Doctor view — findings + evidence' },
-  { cmd: 'wanyrix doctor --json', maps: 'GET /api/wanyrix/doctor?ws=…' },
-  { cmd: 'wanyrix graph --duplicates --json', maps: 'Engineering Graph · duplicates panel' },
-  { cmd: 'wanyrix impact add-dep <crate> --json', maps: 'Impact Simulator · add a dependency' },
-  { cmd: 'wanyrix impact upgrade-dep <crate> --json', maps: 'Impact Simulator · upgrade a dependency' },
-  { cmd: 'wanyrix impact edit-file <path> --json', maps: 'Impact Simulator · edit a source file' },
-  { cmd: 'wanyrix report --json', maps: 'Topbar Report → JSON snapshot' },
-  { cmd: 'wanyrix experiment start <finding-id>', maps: 'Experiments view — scaffold from a finding' },
+  { cmd: 'wanyrix doctor --json', maps: 'Build Doctor view — findings + evidence (wanyrix.doctor/v1)' },
+  { cmd: 'wanyrix graph --json', maps: 'Engineering Graph — measured edge list (wanyrix.graph/v1)' },
+  { cmd: 'wanyrix health --json', maps: 'Scorecard view — KPI summary (wanyrix.health/v1)' },
+  { cmd: 'wanyrix store list', maps: 'History view — persisted scan runs (SQLite + WAL)' },
+  { cmd: 'wanyrix daemon start', maps: 'Runtime view — cached measured scan over a local Unix socket' },
+  { cmd: 'wanyrix telemetry ingest -', maps: 'Diagnostics view — redacted rustc JSON diagnostics (wanyrix.telemetry/v1)' },
+  { cmd: 'wanyrix synth --crates 50 --out tmp/ws', maps: 'fixture workspaces — deterministic (seed, count) → byte-identical tree' },
 ]
 
 const EXIT_CODES: { code: string; label: string; cls: string }[] = [
-  { code: '0', label: 'success', cls: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
-  { code: '1', label: 'findings present', cls: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  { code: '2', label: 'usage error', cls: 'text-orange-300 border-orange-500/30 bg-orange-500/10' },
-  { code: '3', label: 'infrastructure failure', cls: 'text-red-300 border-red-500/30 bg-red-500/10' },
+  { code: '0', label: 'success — findings are data, not failure', cls: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  { code: '2', label: 'error — bad usage, IO failure, or ok:false daemon frame', cls: 'text-orange-300 border-orange-500/30 bg-orange-500/10' },
 ]
 
 function CommandRow({ cmd, maps }: { cmd: string; maps: string }) {
@@ -81,8 +79,11 @@ export function CliContractDialog({
             wanyrix CLI contract
           </DialogTitle>
           <DialogDescription id="cli-dialog-desc">
-            Every web surface maps 1:1 to a CLI command — same payloads, same exit codes, and{' '}
-            <span className="font-mono text-foreground/85">--json</span> on everything (Gate 18).
+            The engine-backed surfaces mirror the real binary (engine v0.3.0) —
+            same payloads, same exit codes (0 / 2), and{' '}
+            <span className="font-mono text-foreground/85">--json</span> with a
+            versioned envelope on every read command (Gate 18). Simulator,
+            report export, and experiments are web-only platform tools.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,9 +95,9 @@ export function CliContractDialog({
 
         <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
-            exit codes
+            exit codes (as implemented)
           </p>
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <div className="mt-2 grid grid-cols-1 gap-1.5">
             {EXIT_CODES.map((e) => (
               <div key={e.code} className="flex items-center gap-2">
                 <span
