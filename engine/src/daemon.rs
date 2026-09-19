@@ -141,7 +141,11 @@ impl DaemonState {
     /// Fingerprint-first scan: a manifest-fingerprint hit reuses the cached
     /// measured scan (zero manifests re-parsed); anything else performs a
     /// full measured re-scan. Returns the scan and whether it was cached.
-    fn scan_cached(&mut self, path: &Path, now: &str) -> Result<(WorkspaceScan, bool), EngineError> {
+    fn scan_cached(
+        &mut self,
+        path: &Path,
+        now: &str,
+    ) -> Result<(WorkspaceScan, bool), EngineError> {
         let canon = path.canonicalize().map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => EngineError::PathNotFound(path.to_path_buf()),
             _ => EngineError::Io(e),
@@ -177,7 +181,13 @@ impl DaemonState {
         let req = match parsed {
             Ok(req) => req,
             Err(e) => {
-                return self.error_line(None, "unparsed", "bad-request", &format!("request is not valid JSON: {e}"), now);
+                return self.error_line(
+                    None,
+                    "unparsed",
+                    "bad-request",
+                    &format!("request is not valid JSON: {e}"),
+                    now,
+                );
             }
         };
         let method = req.method.clone();
@@ -186,13 +196,22 @@ impl DaemonState {
                 req.id.clone(),
                 &method,
                 "unknown-method",
-                &format!("unknown method {method:?}; known methods: {}", METHODS.join(", ")),
+                &format!(
+                    "unknown method {method:?}; known methods: {}",
+                    METHODS.join(", ")
+                ),
                 now,
             );
         }
         if method == "shutdown" {
             self.stop_requested = true;
-            return self.ok_line(req.id.clone(), "shutdown", None, Some(serde_json::json!({"shuttingDown": true})), now);
+            return self.ok_line(
+                req.id.clone(),
+                "shutdown",
+                None,
+                Some(serde_json::json!({"shuttingDown": true})),
+                now,
+            );
         }
         if method == "status" {
             let data = self.status_data();
@@ -200,16 +219,34 @@ impl DaemonState {
         }
         // analysis methods: params.path is required
         let Some(params) = req.params.as_ref() else {
-            return self.error_line(req.id.clone(), &method, "bad-request", "params.path is required: missing params object for analysis methods", now);
+            return self.error_line(
+                req.id.clone(),
+                &method,
+                "bad-request",
+                "params.path is required: missing params object for analysis methods",
+                now,
+            );
         };
         let Some(path_str) = params.get("path").and_then(Value::as_str) else {
-            return self.error_line(req.id.clone(), &method, "bad-request", "params.path (string) is required for analysis methods", now);
+            return self.error_line(
+                req.id.clone(),
+                &method,
+                "bad-request",
+                "params.path (string) is required for analysis methods",
+                now,
+            );
         };
         let path = PathBuf::from(path_str);
         let scan = match self.scan_cached(&path, now) {
             Ok((scan, cached)) => (scan, cached),
             Err(e) => {
-                return self.error_line(req.id.clone(), &method, "scan-failed", &e.to_string(), now);
+                return self.error_line(
+                    req.id.clone(),
+                    &method,
+                    "scan-failed",
+                    &e.to_string(),
+                    now,
+                );
             }
         };
         let (scan, cached) = scan;
@@ -218,7 +255,10 @@ impl DaemonState {
         // emit for the same inputs — with the `generatedAt` of the scan it
         // was MEASURED at (stored provenance), never a fabricated "now".
         let data = {
-            let entry = self.cache.as_mut().expect("scan_cached just populated or hit the cache");
+            let entry = self
+                .cache
+                .as_mut()
+                .expect("scan_cached just populated or hit the cache");
             if let Some(v) = entry.reports.get(&method) {
                 v.clone()
             } else {
@@ -235,9 +275,17 @@ impl DaemonState {
                     _ => {
                         let findings = crate::analysis::analyze(&scan);
                         let g = build_graph(&scan);
-                        let (kpis, slowest, counts, insight) = crate::health::build_health(&scan, &findings, &g);
+                        let (kpis, slowest, counts, insight) =
+                            crate::health::build_health(&scan, &findings, &g);
                         serde_json::to_value(report::health_report(
-                            &scan, &findings, &g, kpis, slowest, counts, insight, measured_at,
+                            &scan,
+                            &findings,
+                            &g,
+                            kpis,
+                            slowest,
+                            counts,
+                            insight,
+                            measured_at,
                         ))
                     }
                 };
@@ -247,7 +295,13 @@ impl DaemonState {
                         v
                     }
                     Err(e) => {
-                        return self.error_line(req.id.clone(), &method, "internal", &format!("report serialization failed: {e}"), now);
+                        return self.error_line(
+                            req.id.clone(),
+                            &method,
+                            "internal",
+                            &format!("report serialization failed: {e}"),
+                            now,
+                        );
                     }
                 }
             }
@@ -267,7 +321,14 @@ impl DaemonState {
         })
     }
 
-    fn ok_line(&self, id: Option<Value>, method: &str, cached: Option<bool>, data: Option<Value>, now: &str) -> String {
+    fn ok_line(
+        &self,
+        id: Option<Value>,
+        method: &str,
+        cached: Option<bool>,
+        data: Option<Value>,
+        now: &str,
+    ) -> String {
         let envelope = DaemonEnvelope {
             schema: DAEMON_SCHEMA,
             id: id.unwrap_or(Value::Null),
@@ -297,7 +358,14 @@ impl DaemonState {
         })
     }
 
-    fn error_line(&self, id: Option<Value>, method: &str, code: &str, message: &str, now: &str) -> String {
+    fn error_line(
+        &self,
+        id: Option<Value>,
+        method: &str,
+        code: &str,
+        message: &str,
+        now: &str,
+    ) -> String {
         let envelope = DaemonEnvelope {
             schema: DAEMON_SCHEMA,
             id: id.unwrap_or(Value::Null),
@@ -305,7 +373,10 @@ impl DaemonState {
             ok: false,
             cached: None,
             data: None,
-            error: Some(DaemonErrorBody { code: code.to_owned(), message: message.to_owned() }),
+            error: Some(DaemonErrorBody {
+                code: code.to_owned(),
+                message: message.to_owned(),
+            }),
             generated_at: now.to_owned(),
         };
         serde_json::to_string(&envelope).unwrap_or_else(|_| format!(
@@ -375,7 +446,10 @@ fn unix_run_server(socket: &Path, opts: &ServerOptions) -> Result<ServerReport, 
     if let Some(parent) = socket.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                EngineError::Daemon(format!("cannot create socket directory {}: {e}", parent.display()))
+                EngineError::Daemon(format!(
+                    "cannot create socket directory {}: {e}",
+                    parent.display()
+                ))
             })?;
         }
     }
@@ -389,16 +463,23 @@ fn unix_run_server(socket: &Path, opts: &ServerOptions) -> Result<ServerReport, 
             }
             Err(_) => {
                 std::fs::remove_file(socket).map_err(|e| {
-                    EngineError::Daemon(format!("cannot remove stale socket {}: {e}", socket.display()))
+                    EngineError::Daemon(format!(
+                        "cannot remove stale socket {}: {e}",
+                        socket.display()
+                    ))
                 })?;
             }
         }
     }
-    let listener = UnixListener::bind(socket)
-        .map_err(|e| EngineError::Daemon(format!("cannot bind socket {}: {e}", socket.display())))?;
+    let listener = UnixListener::bind(socket).map_err(|e| {
+        EngineError::Daemon(format!("cannot bind socket {}: {e}", socket.display()))
+    })?;
     std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600)).map_err(|e| {
         let _ = std::fs::remove_file(socket);
-        EngineError::Daemon(format!("cannot chmod 0600 socket {}: {e}", socket.display()))
+        EngineError::Daemon(format!(
+            "cannot chmod 0600 socket {}: {e}",
+            socket.display()
+        ))
     })?;
     listener
         .set_nonblocking(true)
@@ -420,7 +501,8 @@ fn unix_run_server(socket: &Path, opts: &ServerOptions) -> Result<ServerReport, 
         }
         {
             let s = state.lock().unwrap_or_else(|p| p.into_inner());
-            if s.stop_requested || (opts.max_requests > 0 && s.requests_served >= opts.max_requests) {
+            if s.stop_requested || (opts.max_requests > 0 && s.requests_served >= opts.max_requests)
+            {
                 break;
             }
         }
@@ -479,7 +561,10 @@ fn unix_call(socket: &Path, request_line: &str) -> Result<String, EngineError> {
     use std::os::unix::net::UnixStream;
 
     let mut stream = UnixStream::connect(socket).map_err(|e| {
-        EngineError::Daemon(format!("cannot connect to daemon socket {}: {e}", socket.display()))
+        EngineError::Daemon(format!(
+            "cannot connect to daemon socket {}: {e}",
+            socket.display()
+        ))
     })?;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
     writeln!(&mut stream, "{request_line}")
@@ -491,7 +576,9 @@ fn unix_call(socket: &Path, request_line: &str) -> Result<String, EngineError> {
         .map_err(|e| EngineError::Daemon(format!("cannot read response: {e}")))?;
     let trimmed = response.trim().to_owned();
     if trimmed.is_empty() {
-        return Err(EngineError::Daemon("daemon closed the connection without a response".into()));
+        return Err(EngineError::Daemon(
+            "daemon closed the connection without a response".into(),
+        ));
     }
     Ok(trimmed)
 }
@@ -522,7 +609,9 @@ pub fn client_request_line(method: &str, path: Option<&Path>) -> Result<String, 
     }
     let params = if ANALYSIS_METHODS.contains(&method) {
         let p = path.ok_or_else(|| {
-            EngineError::Daemon(format!("method {method:?} requires --path (the workspace to analyze)"))
+            EngineError::Daemon(format!(
+                "method {method:?} requires --path (the workspace to analyze)"
+            ))
         })?;
         serde_json::json!({ "path": p.display().to_string() })
     } else {
@@ -589,10 +678,19 @@ mod tests {
         let warm_v: Value = serde_json::from_str(&warm).unwrap();
         assert_eq!(cold_v["schema"], DAEMON_SCHEMA);
         assert_eq!(cold_v["ok"], true);
-        assert_eq!(cold_v["cached"], false, "first analysis request is a measured cold scan");
-        assert_eq!(warm_v["cached"], true, "unchanged manifests ⇒ fingerprint hit, zero re-parses");
+        assert_eq!(
+            cold_v["cached"], false,
+            "first analysis request is a measured cold scan"
+        );
+        assert_eq!(
+            warm_v["cached"], true,
+            "unchanged manifests ⇒ fingerprint hit, zero re-parses"
+        );
         assert_eq!(cold_v["data"]["schema"], "wanyrix.doctor/v1");
-        assert_eq!(cold_v["data"]["summary"]["total"], warm_v["data"]["summary"]["total"]);
+        assert_eq!(
+            cold_v["data"]["summary"]["total"],
+            warm_v["data"]["summary"]["total"]
+        );
         assert_eq!(cold_v["data"]["findings"], warm_v["data"]["findings"]);
         assert_eq!(state.cache_hits, 1);
         assert_eq!(state.cache_misses, 1);
@@ -601,7 +699,8 @@ mod tests {
 
     #[test]
     fn cache_invalidates_when_manifest_changes() {
-        let dir = std::env::temp_dir().join(format!("wanyrix-daemon-invalidate-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("wanyrix-daemon-invalidate-{}", std::process::id()));
         let crate_dir = dir.join("a");
         std::fs::create_dir_all(&crate_dir).unwrap();
         std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"a\"]\n").unwrap();
@@ -624,8 +723,14 @@ mod tests {
         .unwrap();
         let second = state.handle_request(&line, "2026-01-01T00:00:01Z");
         let second_v: Value = serde_json::from_str(&second).unwrap();
-        assert_eq!(second_v["cached"], false, "changed manifest must invalidate the cache");
-        assert_eq!(second_v["data"]["summary"]["total"], first_v["data"]["summary"]["total"]);
+        assert_eq!(
+            second_v["cached"], false,
+            "changed manifest must invalidate the cache"
+        );
+        assert_eq!(
+            second_v["data"]["summary"]["total"],
+            first_v["data"]["summary"]["total"]
+        );
         assert_eq!(state.cache_misses, 2);
         assert_eq!(state.cache_hits, 0);
         std::fs::remove_dir_all(&dir).ok();
@@ -635,7 +740,10 @@ mod tests {
     fn cache_hit_serves_identical_payload_after_unrelated_source_change() {
         // The engine measures manifests only: a changed .rs source file
         // cannot alter any report, so it must NOT invalidate the cache.
-        let dir = std::env::temp_dir().join(format!("wanyrix-daemon-src-irrelevant-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "wanyrix-daemon-src-irrelevant-{}",
+            std::process::id()
+        ));
         let crate_dir = dir.join("a");
         std::fs::create_dir_all(crate_dir.join("src")).unwrap();
         std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"a\"]\n").unwrap();
@@ -648,12 +756,19 @@ mod tests {
         let mut state = DaemonState::new();
         let line = doctor_req(&dir);
         let cold = state.handle_request(&line, "2026-01-01T00:00:00Z");
-        std::fs::write(crate_dir.join("src/lib.rs"), "pub fn f() -> u32 { 2 } // changed").unwrap();
+        std::fs::write(
+            crate_dir.join("src/lib.rs"),
+            "pub fn f() -> u32 { 2 } // changed",
+        )
+        .unwrap();
         let warm = state.handle_request(&line, "2026-01-01T00:00:01Z");
         let cold_v: Value = serde_json::from_str(&cold).unwrap();
         let warm_v: Value = serde_json::from_str(&warm).unwrap();
         assert_eq!(cold_v["cached"], false);
-        assert_eq!(warm_v["cached"], true, "source-only change is outside the measured surface");
+        assert_eq!(
+            warm_v["cached"], true,
+            "source-only change is outside the measured surface"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -662,7 +777,8 @@ mod tests {
         let tiny = fixture("tiny-ws");
         let mut state = DaemonState::new();
         let _ = state.handle_request(&doctor_req(&tiny), "2026-01-01T00:00:00Z");
-        let response = state.handle_request(&req_line("s1", "status", None), "2026-01-01T00:00:05Z");
+        let response =
+            state.handle_request(&req_line("s1", "status", None), "2026-01-01T00:00:05Z");
         let v: Value = serde_json::from_str(&response).unwrap();
         assert_eq!(v["ok"], true);
         assert_eq!(v["method"], "status");
@@ -679,7 +795,8 @@ mod tests {
     #[test]
     fn shutdown_requests_stop() {
         let mut state = DaemonState::new();
-        let response = state.handle_request(&req_line("s2", "shutdown", None), "2026-01-01T00:00:00Z");
+        let response =
+            state.handle_request(&req_line("s2", "shutdown", None), "2026-01-01T00:00:00Z");
         let v: Value = serde_json::from_str(&response).unwrap();
         assert_eq!(v["ok"], true);
         assert_eq!(v["data"]["shuttingDown"], true);
@@ -689,7 +806,8 @@ mod tests {
     #[test]
     fn unknown_method_is_an_honest_error() {
         let mut state = DaemonState::new();
-        let response = state.handle_request(&req_line("u1", "teleport", None), "2026-01-01T00:00:00Z");
+        let response =
+            state.handle_request(&req_line("u1", "teleport", None), "2026-01-01T00:00:00Z");
         let v: Value = serde_json::from_str(&response).unwrap();
         assert_eq!(v["ok"], false);
         assert_eq!(v["error"]["code"], "unknown-method");
@@ -705,16 +823,24 @@ mod tests {
         let v: Value = serde_json::from_str(&response).unwrap();
         assert_eq!(v["ok"], false);
         assert_eq!(v["error"]["code"], "bad-request");
-        assert_eq!(v["id"], Value::Null, "no id could be recovered from the line");
+        assert_eq!(
+            v["id"],
+            Value::Null,
+            "no id could be recovered from the line"
+        );
     }
 
     #[test]
     fn analysis_without_path_is_bad_request() {
         let mut state = DaemonState::new();
-        let response = state.handle_request(&req_line("p1", "doctor", None), "2026-01-01T00:00:00Z");
+        let response =
+            state.handle_request(&req_line("p1", "doctor", None), "2026-01-01T00:00:00Z");
         let v: Value = serde_json::from_str(&response).unwrap();
         assert_eq!(v["error"]["code"], "bad-request");
-        assert!(v["error"]["message"].as_str().unwrap().contains("params.path"));
+        assert!(v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("params.path"));
     }
 
     #[test]
@@ -724,22 +850,46 @@ mod tests {
         let response = state.handle_request(&doctor_req(&ghost), "2026-01-01T00:00:00Z");
         let v: Value = serde_json::from_str(&response).unwrap();
         assert_eq!(v["error"]["code"], "scan-failed");
-        assert!(state.cache.is_none(), "a failed scan must not poison the cache");
+        assert!(
+            state.cache.is_none(),
+            "a failed scan must not poison the cache"
+        );
     }
 
     #[test]
     fn graph_and_health_serve_with_cache_semantics() {
         let tiny = fixture("tiny-ws");
         let mut state = DaemonState::new();
-        let g1 = state.handle_request(&req_line("g1", "graph", Some(&tiny)), "2026-01-01T00:00:00Z");
-        let g2 = state.handle_request(&req_line("g2", "graph", Some(&tiny)), "2026-01-01T00:00:01Z");
-        assert_eq!(serde_json::from_str::<Value>(&g1).unwrap()["data"]["schema"], "wanyrix.graph/v1");
+        let g1 = state.handle_request(
+            &req_line("g1", "graph", Some(&tiny)),
+            "2026-01-01T00:00:00Z",
+        );
+        let g2 = state.handle_request(
+            &req_line("g2", "graph", Some(&tiny)),
+            "2026-01-01T00:00:01Z",
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&g1).unwrap()["data"]["schema"],
+            "wanyrix.graph/v1"
+        );
         assert_eq!(serde_json::from_str::<Value>(&g2).unwrap()["cached"], true);
-        let h1 = state.handle_request(&req_line("h1", "health", Some(&tiny)), "2026-01-01T00:00:02Z");
-        let h2 = state.handle_request(&req_line("h2", "health", Some(&tiny)), "2026-01-01T00:00:03Z");
-        assert_eq!(serde_json::from_str::<Value>(&h1).unwrap()["data"]["schema"], "wanyrix.health/v1");
+        let h1 = state.handle_request(
+            &req_line("h1", "health", Some(&tiny)),
+            "2026-01-01T00:00:02Z",
+        );
+        let h2 = state.handle_request(
+            &req_line("h2", "health", Some(&tiny)),
+            "2026-01-01T00:00:03Z",
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&h1).unwrap()["data"]["schema"],
+            "wanyrix.health/v1"
+        );
         assert_eq!(serde_json::from_str::<Value>(&h2).unwrap()["cached"], true);
-        assert_eq!(state.cache_hits, 3, "cache is per-workspace: health reuses the graph scan");
+        assert_eq!(
+            state.cache_hits, 3,
+            "cache is per-workspace: health reuses the graph scan"
+        );
         assert_eq!(state.cache_misses, 1);
     }
 
@@ -756,14 +906,18 @@ mod tests {
     fn client_request_line_validates_methods() {
         assert!(client_request_line("status", None).is_ok());
         assert!(client_request_line("doctor", Some(Path::new("/tmp/ws"))).is_ok());
-        assert!(client_request_line("doctor", None).is_err(), "analysis methods need a path");
+        assert!(
+            client_request_line("doctor", None).is_err(),
+            "analysis methods need a path"
+        );
         assert!(client_request_line("shutdown", None).is_ok());
         assert!(client_request_line("exec", None).is_err());
     }
 
     #[test]
     fn refuse_to_steal_a_live_socket_and_recover_a_stale_one() {
-        let sock = std::env::temp_dir().join(format!("wanyrix-daemon-steal-{}.sock", std::process::id()));
+        let sock =
+            std::env::temp_dir().join(format!("wanyrix-daemon-steal-{}.sock", std::process::id()));
         let opts = ServerOptions { max_requests: 1 };
         // Start a server that stops after ONE request.
         let server_thread = std::thread::spawn({
@@ -787,7 +941,8 @@ mod tests {
             other => panic!("expected a Daemon error, got {other:?}"),
         }
         // A STALE file at the socket path is removed, then bound.
-        let stale = std::env::temp_dir().join(format!("wanyrix-daemon-stale-{}.sock", std::process::id()));
+        let stale =
+            std::env::temp_dir().join(format!("wanyrix-daemon-stale-{}.sock", std::process::id()));
         std::fs::write(&stale, b"not a socket").unwrap();
         let opts2 = ServerOptions { max_requests: 1 };
         let stale_for_thread = stale.clone();
@@ -800,7 +955,10 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert!(rebound, "stale socket file was not replaced by a live listener");
+        assert!(
+            rebound,
+            "stale socket file was not replaced by a live listener"
+        );
         // Drain both servers (one request each: shutdown).
         let _ = super::call(&sock, &req_line("bye", "shutdown", None));
         let _ = super::call(&stale, &req_line("bye", "shutdown", None));
@@ -817,7 +975,8 @@ mod tests {
     #[test]
     fn socket_permissions_are_owner_only() {
         use std::os::unix::fs::PermissionsExt;
-        let sock = std::env::temp_dir().join(format!("wanyrix-daemon-perm-{}.sock", std::process::id()));
+        let sock =
+            std::env::temp_dir().join(format!("wanyrix-daemon-perm-{}.sock", std::process::id()));
         let handle = std::thread::spawn({
             let sock = sock.clone();
             move || super::run_server(&sock, &ServerOptions { max_requests: 1 })
@@ -854,10 +1013,22 @@ mod tests {
             .map(|l| state.handle_request(l, "2026-01-01T00:00:00Z"))
             .collect();
         assert_eq!(responses.len(), 4);
-        assert_eq!(serde_json::from_str::<Value>(&responses[0]).unwrap()["method"], "status");
-        assert_eq!(serde_json::from_str::<Value>(&responses[1]).unwrap()["cached"], false);
-        assert_eq!(serde_json::from_str::<Value>(&responses[2]).unwrap()["cached"], true);
-        assert_eq!(serde_json::from_str::<Value>(&responses[3]).unwrap()["method"], "shutdown");
+        assert_eq!(
+            serde_json::from_str::<Value>(&responses[0]).unwrap()["method"],
+            "status"
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&responses[1]).unwrap()["cached"],
+            false
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&responses[2]).unwrap()["cached"],
+            true
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&responses[3]).unwrap()["method"],
+            "shutdown"
+        );
         assert!(state.stop_requested);
     }
 }

@@ -28,14 +28,26 @@ fn synth50_fixture_scans_to_pinned_shape() {
     let scan = scan_workspace(&fixture()).unwrap();
     assert_eq!(scan.workspace_name, "synth-50");
     assert_eq!(scan.crates.len(), 50);
-    assert_eq!(scan.manifests_found, 51, "root virtual manifest + 50 crates");
+    assert_eq!(
+        scan.manifests_found, 51,
+        "root virtual manifest + 50 crates"
+    );
     assert_eq!(scan.parse_failures, 0);
-    assert_eq!(scan.edges.len(), 97, "measured edge count of the committed fixture");
+    assert_eq!(
+        scan.edges.len(),
+        97,
+        "measured edge count of the committed fixture"
+    );
 
     // DAG invariant on the measured edge list: backward-only.
     let idx = |name: &str| -> usize { name.trim_start_matches('c').parse().unwrap() };
     for e in &scan.edges {
-        assert!(idx(&e.from) > idx(&e.to), "edge {}→{} must point backward", e.from, e.to);
+        assert!(
+            idx(&e.from) > idx(&e.to),
+            "edge {}→{} must point backward",
+            e.from,
+            e.to
+        );
     }
 
     // Pinned doctor findings (measured from the fixture at pinning time).
@@ -44,7 +56,11 @@ fn synth50_fixture_scans_to_pinned_shape() {
     let count = |prefix: &str| findings.iter().filter(|f| f.id.starts_with(prefix)).count();
     assert_eq!(count("FER-ENG-001"), 17, "missing-license findings");
     assert_eq!(count("FER-ENG-002"), 17, "missing-description findings");
-    assert_eq!(count("FER-ENG-003"), 49, "version-less path-dep findings (every crate with deps)");
+    assert_eq!(
+        count("FER-ENG-003"),
+        49,
+        "version-less path-dep findings (every crate with deps)"
+    );
     assert_eq!(count("FER-ENG-005"), 0, "no cycles");
     assert_eq!(count("FER-ENG-007"), 0, "no broken deps");
 }
@@ -73,11 +89,24 @@ fn synth50_graph_and_health_build_over_the_dag() {
     }
     let root = g.nodes.iter().find(|n| n.id == "c0000").unwrap();
     assert_eq!(root.fan_out, 0);
-    assert_eq!(root.recompile_impact.len(), 49, "every crate transitively reaches c0000");
+    assert_eq!(
+        root.recompile_impact.len(),
+        49,
+        "every crate transitively reaches c0000"
+    );
     assert_eq!(root.downstream, 49);
 
     let (kpis, slowest, counts, insight) = cli::health(&scan, &findings, &g);
-    let health = report::health_report(&scan, &findings, &g, kpis, slowest, counts, insight, "2026-09-18T13:28:56Z".to_owned());
+    let health = report::health_report(
+        &scan,
+        &findings,
+        &g,
+        kpis,
+        slowest,
+        counts,
+        insight,
+        "2026-09-18T13:28:56Z".to_owned(),
+    );
     let text = cli::serialize_json(&health, false).unwrap();
     let v: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(v["schema"], "wanyrix.health/v1");
@@ -91,7 +120,8 @@ fn synth50_graph_and_health_build_over_the_dag() {
 /// committed fixture fails here.
 #[test]
 fn synth50_fixture_regenerates_byte_identically() {
-    let regenerated = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("synth50-regen-{}", std::process::id()));
+    let regenerated = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("synth50-regen-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&regenerated);
     synth::synth(&regenerated, 50, 7).unwrap();
 
@@ -102,7 +132,11 @@ fn synth50_fixture_regenerates_byte_identically() {
                 if path.is_dir() {
                     walk(root, &path, out);
                 } else {
-                    let rel = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                    let rel = path
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned();
                     out.push((rel, std::fs::read(&path).unwrap()));
                 }
             }
@@ -113,6 +147,10 @@ fn synth50_fixture_regenerates_byte_identically() {
         out
     }
 
-    assert_eq!(listing(&regenerated), listing(&fixture()), "committed synth-50 must equal a fresh seed-7 regeneration");
+    assert_eq!(
+        listing(&regenerated),
+        listing(&fixture()),
+        "committed synth-50 must equal a fresh seed-7 regeneration"
+    );
     std::fs::remove_dir_all(&regenerated).ok();
 }

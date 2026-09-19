@@ -176,7 +176,10 @@ pub struct SynthOutcome {
 pub fn generate(out_dir: &Path, plan: &SynthPlan) -> Result<SynthOutcome, EngineError> {
     let width = plan.width();
     std::fs::create_dir_all(out_dir).map_err(|e| {
-        EngineError::Synth(format!("cannot create output dir {}: {e}", out_dir.display()))
+        EngineError::Synth(format!(
+            "cannot create output dir {}: {e}",
+            out_dir.display()
+        ))
     })?;
 
     // Root virtual manifest: valid cargo workspace shape + honest label.
@@ -208,7 +211,11 @@ pub fn generate(out_dir: &Path, plan: &SynthPlan) -> Result<SynthOutcome, Engine
              [package]\n\
              name = \"{}\"\n\
              version = \"0.1.0\"\n",
-            c.name, c.index, plan.crates.len(), plan.seed, c.name
+            c.name,
+            c.index,
+            plan.crates.len(),
+            plan.seed,
+            c.name
         );
         if c.complete {
             // ~60%: publishable metadata so doctor's baseline is mixed
@@ -219,7 +226,9 @@ pub fn generate(out_dir: &Path, plan: &SynthPlan) -> Result<SynthOutcome, Engine
             ));
         } else {
             // Intentionally incomplete: doctor must find FER-ENG-001/002.
-            manifest.push_str("# license and description intentionally omitted (doctor findings fixture)\n");
+            manifest.push_str(
+                "# license and description intentionally omitted (doctor findings fixture)\n",
+            );
         }
         if !c.deps.is_empty() {
             manifest.push_str("\n[dependencies]\n");
@@ -322,7 +331,10 @@ mod tests {
             let p = plan(500, seed).unwrap();
             let complete = p.crates.iter().filter(|c| c.complete).count();
             let pct = complete as f64 / 500.0 * 100.0;
-            assert!((45.0..=75.0).contains(&pct), "seed {seed}: {pct}% complete crates");
+            assert!(
+                (45.0..=75.0).contains(&pct),
+                "seed {seed}: {pct}% complete crates"
+            );
         }
     }
 
@@ -357,7 +369,11 @@ mod tests {
             if path.is_dir() {
                 walk(root, &path, out);
             } else {
-                let rel = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                let rel = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
                 out.push((rel, std::fs::read(&path).unwrap()));
             }
         }

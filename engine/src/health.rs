@@ -65,20 +65,12 @@ pub fn build_health(
     findings: &[Finding],
     graph: &Graph,
 ) -> (Kpis, Vec<SlowCrate>, Vec<SectionCount>, Option<Insight>) {
-    let count_in = |section: &str| {
-        findings
-            .iter()
-            .filter(|f| f.section == section)
-            .count()
-    };
+    let count_in = |section: &str| findings.iter().filter(|f| f.section == section).count();
     let build_findings = count_in("Build");
     let ci_findings = count_in("CI");
     let dep_findings = count_in("Dependencies");
     let ws_findings = count_in("Workspace");
-    let critical = findings
-        .iter()
-        .filter(|f| f.severity == "critical")
-        .count();
+    let critical = findings.iter().filter(|f| f.severity == "critical").count();
 
     let kpis = Kpis {
         build_performance: KpiDelta {

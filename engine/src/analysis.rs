@@ -345,10 +345,13 @@ fn duplicate_dep_findings(scan: &WorkspaceScan) -> Vec<Finding> {
     let mut out = Vec::new();
     for record in scan.manifests.iter() {
         let Some(m) = record.manifest() else { continue };
-        let Some(name) = m.package_name() else { continue };
+        let Some(name) = m.package_name() else {
+            continue;
+        };
 
         // group section entries by real dependency name (rename-aware)
-        let mut by_dep: std::collections::BTreeMap<&str, Vec<(&str, &DepSpec)>> = std::collections::BTreeMap::new();
+        let mut by_dep: std::collections::BTreeMap<&str, Vec<(&str, &DepSpec)>> =
+            std::collections::BTreeMap::new();
         for (section, table) in m.dep_sections() {
             for (key, spec) in table {
                 by_dep
@@ -408,10 +411,7 @@ fn cycle_findings(scan: &WorkspaceScan) -> Vec<Finding> {
     let mut out = Vec::new();
     for scc in sccs {
         let members = scc.members.clone();
-        let dev_only = scc
-            .internal_edges
-            .iter()
-            .all(|e| e.kind == EdgeKind::Dev);
+        let dev_only = scc.internal_edges.iter().all(|e| e.kind == EdgeKind::Dev);
         let kinds = {
             let mut ks: Vec<&str> = scc.internal_edges.iter().map(|e| e.kind.as_str()).collect();
             ks.sort_unstable();
@@ -419,11 +419,7 @@ fn cycle_findings(scan: &WorkspaceScan) -> Vec<Finding> {
             ks.join(", ")
         };
         let (id_prefix, severity, title) = if dev_only {
-            (
-                "FER-ENG-006",
-                SEVERITY_INFO,
-                "Dev-only dependency cycle",
-            )
+            ("FER-ENG-006", SEVERITY_INFO, "Dev-only dependency cycle")
         } else {
             (
                 "FER-ENG-005",
@@ -485,7 +481,9 @@ fn cycle_findings(scan: &WorkspaceScan) -> Vec<Finding> {
 fn parse_failure_findings(scan: &WorkspaceScan) -> Vec<Finding> {
     let mut out = Vec::new();
     for (i, record) in scan.manifests.iter().enumerate() {
-        let Err(reason) = record.result.as_ref() else { continue };
+        let Err(reason) = record.result.as_ref() else {
+            continue;
+        };
         out.push(Finding::measured(
             format!("FER-ENG-ERR-{:02}", i + 1),
             "Build",
@@ -515,7 +513,8 @@ fn parse_failure_findings(scan: &WorkspaceScan) -> Vec<Finding> {
 /// never emit a status other than these, and never `verified`.
 pub const ALLOWED_SEVERITIES: [&str; 3] = [SEVERITY_CRITICAL, SEVERITY_WARNING, SEVERITY_INFO];
 pub const ALLOWED_SECTIONS: [&str; 6] = SECTIONS;
-pub const ALLOWED_REMEDIATION: [&str; 5] = ["command", "config", "architecture", "experiment", "patch"];
+pub const ALLOWED_REMEDIATION: [&str; 5] =
+    ["command", "config", "architecture", "experiment", "patch"];
 pub const ALLOWED_CONFIDENCE: [&str; 4] = ["deterministic", "high", "medium", "estimated"];
 pub const ALLOWED_MEASUREMENT: [&str; 3] = ["measured", "estimated", "verified"];
 
@@ -552,17 +551,28 @@ mod tests {
     fn cycle_ws_emits_critical_hard_cycle_and_info_dev_cycle() {
         let scan = scan_workspace(&fixture("cycle-ws")).unwrap();
         let findings = analyze(&scan);
-        let hard = findings.iter().find(|f| f.id == "FER-ENG-005-ping").expect("hard cycle");
+        let hard = findings
+            .iter()
+            .find(|f| f.id == "FER-ENG-005-ping")
+            .expect("hard cycle");
         assert_eq!(hard.severity, SEVERITY_CRITICAL);
         assert!(hard.affected.contains(&"ping".to_owned()));
         assert!(hard.affected.contains(&"pong".to_owned()));
-        let dev = findings.iter().find(|f| f.id == "FER-ENG-006-deva").expect("dev cycle");
+        let dev = findings
+            .iter()
+            .find(|f| f.id == "FER-ENG-006-deva")
+            .expect("dev cycle");
         assert_eq!(dev.severity, SEVERITY_INFO);
         // ping/pong also carry FER-ENG-003 (path-only normal deps, no version);
         // deva/devb do NOT (cargo strips path-only dev-deps on publish).
         assert_eq!(
             findings.iter().map(|f| f.id.as_str()).collect::<Vec<_>>(),
-            vec!["FER-ENG-005-ping", "FER-ENG-003-ping", "FER-ENG-003-pong", "FER-ENG-006-deva"]
+            vec![
+                "FER-ENG-005-ping",
+                "FER-ENG-003-ping",
+                "FER-ENG-003-pong",
+                "FER-ENG-006-deva"
+            ]
         );
     }
 
@@ -571,7 +581,11 @@ mod tests {
         for ws in ["tiny-ws", "cycle-ws"] {
             let scan = scan_workspace(&fixture(ws)).unwrap();
             for f in analyze(&scan) {
-                assert_eq!(f.measurement_status, "measured", "{} claimed non-measured", f.id);
+                assert_eq!(
+                    f.measurement_status, "measured",
+                    "{} claimed non-measured",
+                    f.id
+                );
                 assert_eq!(f.confidence_class, "deterministic");
                 assert_eq!(f.confidence, 100);
                 assert!(f.impact_seconds.is_none(), "{} asserts a timing", f.id);
@@ -590,7 +604,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("wanyrix-clean-{}", std::process::id()));
         let crate_dir = dir.join("solo");
         std::fs::create_dir_all(crate_dir.join("src")).unwrap();
-        std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"solo\"]\n").unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"solo\"]\n",
+        )
+        .unwrap();
         std::fs::write(
             crate_dir.join("Cargo.toml"),
             "[package]\nname = \"solo\"\nversion = \"0.2.0\"\nlicense = \"Apache-2.0\"\ndescription = \"clean\"\n",
@@ -599,7 +617,11 @@ mod tests {
         std::fs::write(crate_dir.join("src").join("lib.rs"), "pub fn x() {}\n").unwrap();
         let scan = scan_workspace(&dir).unwrap();
         let findings = analyze(&scan);
-        assert!(findings.is_empty(), "unexpected: {ids:?}", ids = findings.iter().map(|f| f.id.clone()).collect::<Vec<_>>());
+        assert!(
+            findings.is_empty(),
+            "unexpected: {ids:?}",
+            ids = findings.iter().map(|f| f.id.clone()).collect::<Vec<_>>()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -39,7 +39,8 @@ fn median(samples: &mut [u128]) -> u128 {
 #[ignore = "measurement harness: cargo test --release --test perf_probe -- --ignored --nocapture"]
 fn measure_engine_on_synth500() {
     // ---- fixture generation (target/tmp — never committed) ----
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("perf-synth500-{}", std::process::id()));
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("perf-synth500-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 
@@ -77,7 +78,16 @@ fn measure_engine_on_synth500() {
         let findings = cli::doctor(&scan);
         let g = build_graph(&scan);
         let (kpis, slowest, counts, insight) = cli::health(&scan, &findings, &g);
-        let rep = report::health_report(&scan, &findings, &g, kpis, slowest, counts, insight, "2026-09-18T13:28:56Z".to_owned());
+        let rep = report::health_report(
+            &scan,
+            &findings,
+            &g,
+            kpis,
+            slowest,
+            counts,
+            insight,
+            "2026-09-18T13:28:56Z".to_owned(),
+        );
         let text = cli::serialize_json(&rep, false).unwrap();
         health_samples.push(t.elapsed().as_millis());
         assert!(!text.is_empty());
@@ -117,15 +127,43 @@ fn measure_engine_on_synth500() {
     let save_median = median(&mut save_samples);
     let list_median = median(&mut list_samples);
 
-    println!("\n===== MEASURED — wanyrix engine on synthetic {}-crate workspace (seed {}) =====", CRATES, SEED);
-    println!("profile: {} (see command in this file's doc comment)", if cfg!(debug_assertions) { "debug" } else { "release" });
-    println!("MEASURED synth generation ({} crates, {} files): {} ms", CRATES, outcome.files_written, synth_ms);
-    println!("MEASURED doctor   x{}: {:?} ms → median {} ms ({} findings)", RUNS, doctor_samples, doctor_median, doctor_findings);
-    println!("MEASURED graph    x{}: {:?} ms → median {} ms", RUNS, graph_samples, graph_median);
-    println!("MEASURED health   x{}: {:?} ms → median {} ms", RUNS, health_samples, health_median);
+    println!(
+        "\n===== MEASURED — wanyrix engine on synthetic {}-crate workspace (seed {}) =====",
+        CRATES, SEED
+    );
+    println!(
+        "profile: {} (see command in this file's doc comment)",
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }
+    );
+    println!(
+        "MEASURED synth generation ({} crates, {} files): {} ms",
+        CRATES, outcome.files_written, synth_ms
+    );
+    println!(
+        "MEASURED doctor   x{}: {:?} ms → median {} ms ({} findings)",
+        RUNS, doctor_samples, doctor_median, doctor_findings
+    );
+    println!(
+        "MEASURED graph    x{}: {:?} ms → median {} ms",
+        RUNS, graph_samples, graph_median
+    );
+    println!(
+        "MEASURED health   x{}: {:?} ms → median {} ms",
+        RUNS, health_samples, health_median
+    );
     println!("MEASURED store init: {} ms", init_ms);
-    println!("MEASURED store save x{} (full doctor payload, 2 commits): {:?} ms → median {} ms", RUNS, save_samples, save_median);
-    println!("MEASURED store list x{}: {:?} ms → median {} ms", RUNS, list_samples, list_median);
+    println!(
+        "MEASURED store save x{} (full doctor payload, 2 commits): {:?} ms → median {} ms",
+        RUNS, save_samples, save_median
+    );
+    println!(
+        "MEASURED store list x{}: {:?} ms → median {} ms",
+        RUNS, list_samples, list_median
+    );
     println!("timing note: wall-clock Instant deltas on the sandbox runner; relative evidence only — see engine/BENCHMARKS.md honesty note");
 
     std::fs::remove_dir_all(&dir).ok();
@@ -169,7 +207,10 @@ fn measure_daemon_incremental_on_synth500() {
         assert!(warm_response.contains("\"cached\":true"));
         let cold_v: serde_json::Value = serde_json::from_str(&cold_response).unwrap();
         let warm_v: serde_json::Value = serde_json::from_str(&warm_response).unwrap();
-        assert_eq!(cold_v["data"], warm_v["data"], "cached payload is identical to the cold payload");
+        assert_eq!(
+            cold_v["data"], warm_v["data"],
+            "cached payload is identical to the cold payload"
+        );
     }
 
     let cold_median = median(&mut cold_samples);
@@ -177,7 +218,10 @@ fn measure_daemon_incremental_on_synth500() {
     let reduction = 100.0 * (1.0 - warm_median as f64 / cold_median as f64);
 
     println!("\n===== MEASURED — daemon incremental analysis on synthetic {}-crate workspace (seed {}) =====", CRATES, SEED);
-    println!("MEASURED doctor COLD (full measured scan) x{}: {:?} ms → median {} ms", RUNS, cold_samples, cold_median);
+    println!(
+        "MEASURED doctor COLD (full measured scan) x{}: {:?} ms → median {} ms",
+        RUNS, cold_samples, cold_median
+    );
     println!("MEASURED doctor WARM (fingerprint cache hit, 0 manifests parsed) x{}: {:?} ms → median {} ms", RUNS, warm_samples, warm_median);
     println!("MEASURED wall-clock reduction: {:.1}% ({} ms → {} ms; structural guarantee: 0 manifests parsed on a hit — pinned by unit tests)", reduction, cold_median, warm_median);
     println!("timing note: relative evidence only; the fingerprint check reads every measured file (hash), skipping parse + analysis + graph + report assembly");

@@ -64,7 +64,14 @@ const REQUIRED_FINDING_KEYS: [&str; 15] = [
 const REQUIRED_EVIDENCE_KEYS: [&str; 3] = ["label", "value", "source"];
 
 const REQUIRED_GRAPH_NODE_KEYS: [&str; 8] = [
-    "id", "band", "kind", "buildTime", "fanIn", "fanOut", "downstream", "changeFreq",
+    "id",
+    "band",
+    "kind",
+    "buildTime",
+    "fanIn",
+    "fanOut",
+    "downstream",
+    "changeFreq",
 ];
 
 const REQUIRED_META_KEYS: [&str; 8] = [
@@ -127,10 +134,21 @@ fn run_fixture(name: &str) -> Fixture {
     let graph = serde_json::to_value(report::graph_report(&scan, &g, cli::now_iso8601()))
         .expect("graph serializes");
     let health = serde_json::to_value(report::health_report(
-        &scan, &findings, &g, kpis, slowest, counts, insight, cli::now_iso8601(),
+        &scan,
+        &findings,
+        &g,
+        kpis,
+        slowest,
+        counts,
+        insight,
+        cli::now_iso8601(),
     ))
     .expect("health serializes");
-    Fixture { doctor, graph, health }
+    Fixture {
+        doctor,
+        graph,
+        health,
+    }
 }
 
 fn assert_keys(obj: &Value, keys: &[&str], ctx: &str) {
@@ -138,23 +156,54 @@ fn assert_keys(obj: &Value, keys: &[&str], ctx: &str) {
         panic!("{ctx} is not a JSON object");
     };
     for k in keys {
-        assert!(map.contains_key(*k), "{ctx} missing required key `{k}` (keys present: {:?})", map.keys().collect::<Vec<_>>());
+        assert!(
+            map.contains_key(*k),
+            "{ctx} missing required key `{k}` (keys present: {:?})",
+            map.keys().collect::<Vec<_>>()
+        );
     }
 }
 
 fn check_findings(doctor: &Value, ws: &str) {
     assert_eq!(doctor["schema"], "wanyrix.doctor/v1");
-    assert_keys(doctor, &["schema", "workspace", "crates", "findings", "summary", "measurement", "generatedAt"], "doctor envelope");
+    assert_keys(
+        doctor,
+        &[
+            "schema",
+            "workspace",
+            "crates",
+            "findings",
+            "summary",
+            "measurement",
+            "generatedAt",
+        ],
+        "doctor envelope",
+    );
     let findings = doctor["findings"].as_array().expect("findings array");
     assert!(!findings.is_empty(), "{ws}: fixture must surface findings");
     for f in findings {
         let id = f["id"].as_str().unwrap_or("?").to_owned();
         assert_keys(f, &REQUIRED_FINDING_KEYS, &format!("finding {id}"));
-        assert!(SECTIONS.contains(&f["section"].as_str().unwrap()), "{id}: section enum");
-        assert!(SEVERITIES.contains(&f["severity"].as_str().unwrap()), "{id}: severity enum");
-        assert!(REMEDIATION.contains(&f["remediationKind"].as_str().unwrap()), "{id}: remediationKind enum");
-        assert!(CONFIDENCE_CLASSES.contains(&f["confidenceClass"].as_str().unwrap()), "{id}: confidenceClass enum");
-        assert!(MEASUREMENT_STATUSES.contains(&f["measurementStatus"].as_str().unwrap()), "{id}: measurementStatus enum");
+        assert!(
+            SECTIONS.contains(&f["section"].as_str().unwrap()),
+            "{id}: section enum"
+        );
+        assert!(
+            SEVERITIES.contains(&f["severity"].as_str().unwrap()),
+            "{id}: severity enum"
+        );
+        assert!(
+            REMEDIATION.contains(&f["remediationKind"].as_str().unwrap()),
+            "{id}: remediationKind enum"
+        );
+        assert!(
+            CONFIDENCE_CLASSES.contains(&f["confidenceClass"].as_str().unwrap()),
+            "{id}: confidenceClass enum"
+        );
+        assert!(
+            MEASUREMENT_STATUSES.contains(&f["measurementStatus"].as_str().unwrap()),
+            "{id}: measurementStatus enum"
+        );
         assert!(f["confidence"].is_u64(), "{id}: confidence is a number");
         assert!(f["affected"].is_array(), "{id}: affected is an array");
         // evidence entries conform to the web Evidence shape
@@ -167,7 +216,11 @@ fn check_findings(doctor: &Value, ws: &str) {
     // crate list is measured and shaped
     let crates = doctor["crates"].as_array().expect("crates array");
     for c in crates {
-        assert_keys(c, &["name", "version", "manifestPath", "band", "kind"], "crate entry");
+        assert_keys(
+            c,
+            &["name", "version", "manifestPath", "band", "kind"],
+            "crate entry",
+        );
     }
     // severity counts agree with the findings array (derived, never typed)
     let summary = &doctor["summary"];
@@ -180,7 +233,19 @@ fn check_findings(doctor: &Value, ws: &str) {
 
 fn check_graph(graph: &Value, ws: &str) {
     assert_eq!(graph["schema"], "wanyrix.graph/v1");
-    assert_keys(graph, &["schema", "workspace", "nodes", "edges", "meta", "measurement", "generatedAt"], "graph envelope");
+    assert_keys(
+        graph,
+        &[
+            "schema",
+            "workspace",
+            "nodes",
+            "edges",
+            "meta",
+            "measurement",
+            "generatedAt",
+        ],
+        "graph envelope",
+    );
     let nodes = graph["nodes"].as_array().expect("nodes array");
     let edges = graph["edges"].as_array().expect("edges array");
     assert!(!nodes.is_empty(), "{ws}: graph has nodes");
@@ -203,22 +268,49 @@ fn check_graph(graph: &Value, ws: &str) {
         // aggregates agree with the served edge list (derived, never typed)
         let fan_in = edges.iter().filter(|e| e["to"] == n["id"]).count();
         let fan_out = edges.iter().filter(|e| e["from"] == n["id"]).count();
-        assert_eq!(n["fanIn"].as_u64(), Some(fan_in as u64), "{id}: fanIn derived from edges");
-        assert_eq!(n["fanOut"].as_u64(), Some(fan_out as u64), "{id}: fanOut derived from edges");
-        let downstream = n["recompileImpact"].as_array().expect("recompileImpact array").len();
-        assert_eq!(n["downstream"].as_u64(), Some(downstream as u64), "{id}: downstream == recompileImpact.len()");
+        assert_eq!(
+            n["fanIn"].as_u64(),
+            Some(fan_in as u64),
+            "{id}: fanIn derived from edges"
+        );
+        assert_eq!(
+            n["fanOut"].as_u64(),
+            Some(fan_out as u64),
+            "{id}: fanOut derived from edges"
+        );
+        let downstream = n["recompileImpact"]
+            .as_array()
+            .expect("recompileImpact array")
+            .len();
+        assert_eq!(
+            n["downstream"].as_u64(),
+            Some(downstream as u64),
+            "{id}: downstream == recompileImpact.len()"
+        );
     }
     for e in edges {
         assert_keys(e, &["from", "to"], "graph edge");
         // no ghost nodes: both endpoints must be served nodes
         let node_ids: Vec<&str> = nodes.iter().filter_map(|n| n["id"].as_str()).collect();
-        assert!(node_ids.contains(&e["from"].as_str().unwrap()), "edge from-node served");
-        assert!(node_ids.contains(&e["to"].as_str().unwrap()), "edge to-node served");
+        assert!(
+            node_ids.contains(&e["from"].as_str().unwrap()),
+            "edge from-node served"
+        );
+        assert!(
+            node_ids.contains(&e["to"].as_str().unwrap()),
+            "edge to-node served"
+        );
     }
     assert_keys(&graph["meta"], &REQUIRED_META_KEYS, "graph meta");
     assert_eq!(graph["meta"]["aggregateSource"], "served-edges");
-    assert_eq!(graph["meta"]["servedNodes"].as_u64(), Some(nodes.len() as u64));
-    assert_eq!(graph["meta"]["servedEdges"].as_u64(), Some(edges.len() as u64));
+    assert_eq!(
+        graph["meta"]["servedNodes"].as_u64(),
+        Some(nodes.len() as u64)
+    );
+    assert_eq!(
+        graph["meta"]["servedEdges"].as_u64(),
+        Some(edges.len() as u64)
+    );
 }
 
 fn check_health(health: &Value, ws: &str) {
@@ -232,21 +324,42 @@ fn check_health(health: &Value, ws: &str) {
     }
     // delta-shaped vs count-shaped KPIs per the web contract
     for k in ["buildPerformance", "ciCost", "dependencyRisk"] {
-        assert!(health["kpis"][k]["delta"].is_i64(), "kpis.{k}.delta is a number");
-        assert!(health["kpis"][k]["label"].is_string(), "kpis.{k}.label is a string");
+        assert!(
+            health["kpis"][k]["delta"].is_i64(),
+            "kpis.{k}.delta is a number"
+        );
+        assert!(
+            health["kpis"][k]["label"].is_string(),
+            "kpis.{k}.label is a string"
+        );
     }
     for k in ["prRegressions", "architectureDebt", "runtimeBottlenecks"] {
-        assert!(health["kpis"][k]["count"].is_u64(), "kpis.{k}.count is a number");
-        assert!(health["kpis"][k]["label"].is_string(), "kpis.{k}.label is a string");
+        assert!(
+            health["kpis"][k]["count"].is_u64(),
+            "kpis.{k}.count is a number"
+        );
+        assert!(
+            health["kpis"][k]["label"].is_string(),
+            "kpis.{k}.label is a string"
+        );
     }
     assert!(health["buildTrend"].is_array());
     assert!(health["activity"].is_array());
-    for s in health["slowestCrates"].as_array().expect("slowestCrates array") {
+    for s in health["slowestCrates"]
+        .as_array()
+        .expect("slowestCrates array")
+    {
         assert_keys(s, &["name", "seconds", "downstream"], "slowestCrate entry");
     }
-    for c in health["findingCounts"].as_array().expect("findingCounts array") {
+    for c in health["findingCounts"]
+        .as_array()
+        .expect("findingCounts array")
+    {
         assert_keys(c, &["section", "count"], "findingCount entry");
-        assert!(SECTIONS.contains(&c["section"].as_str().unwrap()), "section enum in findingCounts");
+        assert!(
+            SECTIONS.contains(&c["section"].as_str().unwrap()),
+            "section enum in findingCounts"
+        );
     }
 }
 
@@ -265,7 +378,12 @@ fn conformance_tiny_ws() {
         .collect();
     assert_eq!(
         ids,
-        vec!["FER-ENG-001-gamma", "FER-ENG-002-gamma", "FER-ENG-003-beta", "FER-ENG-004-beta-log"]
+        vec![
+            "FER-ENG-001-gamma",
+            "FER-ENG-002-gamma",
+            "FER-ENG-003-beta",
+            "FER-ENG-004-beta-log"
+        ]
     );
     assert_eq!(f.graph["meta"]["workspaceCrates"], 3);
     assert_eq!(f.graph["meta"]["totalEdges"], 1);
@@ -285,12 +403,27 @@ fn conformance_cycle_ws() {
         .collect();
     assert_eq!(
         ids,
-        vec!["FER-ENG-005-ping", "FER-ENG-003-ping", "FER-ENG-003-pong", "FER-ENG-006-deva"]
+        vec![
+            "FER-ENG-005-ping",
+            "FER-ENG-003-ping",
+            "FER-ENG-003-pong",
+            "FER-ENG-006-deva"
+        ]
     );
     assert_eq!(f.graph["meta"]["workspaceCrates"], 4);
     assert_eq!(f.graph["meta"]["totalEdges"], 4);
     // the cyclic graph still renders a complete, closed edge set
-    let ids: Vec<&str> = f.doctor["findings"].as_array().unwrap().iter().filter_map(|x| x["id"].as_str()).collect();
+    let ids: Vec<&str> = f.doctor["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|x| x["id"].as_str())
+        .collect();
     assert!(ids.contains(&"FER-ENG-005-ping"));
-    assert!(f.health["kpis"]["dependencyRisk"]["delta"].as_i64().unwrap() >= 2);
+    assert!(
+        f.health["kpis"]["dependencyRisk"]["delta"]
+            .as_i64()
+            .unwrap()
+            >= 2
+    );
 }

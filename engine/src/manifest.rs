@@ -128,7 +128,11 @@ impl DepSpec {
     pub fn version_text(&self) -> Option<String> {
         match self {
             DepSpec::Simple(s) => Some(s.clone()),
-            DepSpec::Detailed(d) => d.version.as_ref().and_then(MetaValue::text).map(str::to_owned),
+            DepSpec::Detailed(d) => d
+                .version
+                .as_ref()
+                .and_then(MetaValue::text)
+                .map(str::to_owned),
         }
     }
 }

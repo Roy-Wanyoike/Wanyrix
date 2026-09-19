@@ -10,8 +10,8 @@ use crate::graph::{build_graph, Graph};
 use crate::health::build_health;
 use crate::model::{EngineError, WorkspaceScan};
 use crate::scan::scan_workspace;
-use crate::{daemon, store, synth, telemetry};
 use crate::timestamp::iso8601_now;
+use crate::{daemon, store, synth, telemetry};
 
 #[derive(Parser)]
 #[command(
@@ -250,7 +250,10 @@ pub fn store_run(cmd: StoreCmd) -> Result<String, EngineError> {
             let rows = store::list(&db, workspace.as_deref())?;
             let mut out = String::new();
             match &workspace {
-                Some(w) => out.push_str(&format!("wanyrix store list — {} scan(s) for workspace {w:?}\n", rows.len())),
+                Some(w) => out.push_str(&format!(
+                    "wanyrix store list — {} scan(s) for workspace {w:?}\n",
+                    rows.len()
+                )),
                 None => out.push_str(&format!("wanyrix store list — {} scan(s)\n", rows.len())),
             }
             out.push_str(&format!(
@@ -267,7 +270,11 @@ pub fn store_run(cmd: StoreCmd) -> Result<String, EngineError> {
         }
         StoreCmd::Fsck { db, repair } => {
             let report = store::fsck(&db, repair)?;
-            let mut out = format!("wanyrix store fsck — {}{}\n", db.display(), if repair { " (--repair)" } else { "" });
+            let mut out = format!(
+                "wanyrix store fsck — {}{}\n",
+                db.display(),
+                if repair { " (--repair)" } else { "" }
+            );
             out.push_str(&report.summary());
             Ok(out)
         }
@@ -285,14 +292,18 @@ fn read_scan_payload(scan: &Path) -> Result<String, EngineError> {
             .map_err(|e| EngineError::Store(format!("cannot read payload from stdin: {e}")))?;
         Ok(buf)
     } else {
-        std::fs::read_to_string(scan).map_err(|e| EngineError::Store(format!("cannot read scan payload {}: {e}", scan.display())))
+        std::fs::read_to_string(scan).map_err(|e| {
+            EngineError::Store(format!("cannot read scan payload {}: {e}", scan.display()))
+        })
     }
 }
 
 /// Run `wanyrix synth` and format its human output.
 pub fn synth_run(crates: usize, out: &Path, seed: u64) -> Result<String, EngineError> {
     if crates == 0 {
-        return Err(EngineError::Synth("--crates must be at least 1 (a zero-crate workspace scans to nothing)".into()));
+        return Err(EngineError::Synth(
+            "--crates must be at least 1 (a zero-crate workspace scans to nothing)".into(),
+        ));
     }
     let outcome = synth::synth(out, crates, seed)?;
     let incomplete = outcome.crates_written - outcome.complete_crates;
@@ -316,17 +327,27 @@ pub fn synth_run(crates: usize, out: &Path, seed: u64) -> Result<String, EngineE
 /// get an honest exit code, never a green shell around a red payload.
 pub fn daemon_run(cmd: DaemonCmd) -> Result<String, EngineError> {
     match cmd {
-        DaemonCmd::Start { socket, max_requests } => {
+        DaemonCmd::Start {
+            socket,
+            max_requests,
+        } => {
             let report = daemon::run_server(&socket, &daemon::ServerOptions { max_requests })?;
             Ok(daemon::human_server_summary(&report))
         }
-        DaemonCmd::Call { socket, method, path, pretty } => {
+        DaemonCmd::Call {
+            socket,
+            method,
+            path,
+            pretty,
+        } => {
             let line = daemon::client_request_line(&method, Some(&path))?;
             let response = daemon::call(&socket, &line)?;
-            let value: serde_json::Value = serde_json::from_str(&response)
-                .map_err(|e| EngineError::Daemon(format!("daemon response is not valid JSON: {e}")))?;
+            let value: serde_json::Value = serde_json::from_str(&response).map_err(|e| {
+                EngineError::Daemon(format!("daemon response is not valid JSON: {e}"))
+            })?;
             let printed = if pretty {
-                serde_json::to_string_pretty(&value).map_err(|e| EngineError::Json(e.to_string()))?
+                serde_json::to_string_pretty(&value)
+                    .map_err(|e| EngineError::Json(e.to_string()))?
             } else {
                 response
             };
@@ -334,9 +355,17 @@ pub fn daemon_run(cmd: DaemonCmd) -> Result<String, EngineError> {
                 Ok(printed)
             } else {
                 let err = value.get("error");
-                let code = err.and_then(|e| e.get("code")).and_then(serde_json::Value::as_str).unwrap_or("unknown");
-                let message = err.and_then(|e| e.get("message")).and_then(serde_json::Value::as_str).unwrap_or("no message");
-                Err(EngineError::Daemon(format!("daemon responded ok=false [{code}]: {message}")))
+                let code = err
+                    .and_then(|e| e.get("code"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("unknown");
+                let message = err
+                    .and_then(|e| e.get("message"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("no message");
+                Err(EngineError::Daemon(format!(
+                    "daemon responded ok=false [{code}]: {message}"
+                )))
             }
         }
     }
@@ -345,8 +374,16 @@ pub fn daemon_run(cmd: DaemonCmd) -> Result<String, EngineError> {
 /// Run a `wanyrix telemetry …` subcommand.
 pub fn telemetry_run(cmd: TelemetryCmd) -> Result<String, EngineError> {
     match cmd {
-        TelemetryCmd::Ingest { input, out, keep_paths, summary_only } => {
-            let opts = telemetry::IngestOptions { keep_paths, summary_only };
+        TelemetryCmd::Ingest {
+            input,
+            out,
+            keep_paths,
+            summary_only,
+        } => {
+            let opts = telemetry::IngestOptions {
+                keep_paths,
+                summary_only,
+            };
             telemetry::ingest_run(&input, out.as_deref(), &opts)
         }
     }

@@ -50,7 +50,16 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             let g = cli::graph(&scan);
             if json {
                 let (kpis, slowest, counts, insight) = cli::health(&scan, &findings, &g);
-                let r = report::health_report(&scan, &findings, &g, kpis, slowest, counts, insight, cli::now_iso8601());
+                let r = report::health_report(
+                    &scan,
+                    &findings,
+                    &g,
+                    kpis,
+                    slowest,
+                    counts,
+                    insight,
+                    cli::now_iso8601(),
+                );
                 cli::serialize_json(&r, pretty)
             } else {
                 Ok(cli::human_summary("health", &scan, &findings))

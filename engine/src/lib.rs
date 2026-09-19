@@ -65,10 +65,12 @@ pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
 pub use graph::{Graph, GraphEdge, GraphNode};
-pub use model::{Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan};
+pub use model::{
+    Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan,
+};
 pub use report::{DoctorReport, GraphReport, HealthReport};
 pub use scan::scan_workspace;
-pub use store::{ScanRow, SaveOutcome, STORE_SCHEMA_VERSION};
+pub use store::{SaveOutcome, ScanRow, STORE_SCHEMA_VERSION};
 pub use synth::{SynthOutcome, SynthPlan, DEFAULT_SEED, MAX_CRATES};
 pub use telemetry::{TelemetryReport, TELEMETRY_SCHEMA};
 
@@ -108,7 +110,10 @@ mod tests {
             let text = serde_json::to_string(&doc).unwrap();
             // `verified` may only appear inside honesty PROSE, never as a
             // JSON value (which would be a quoted string).
-            assert!(!text.contains("\"verified\""), "flavor must not claim verified status");
+            assert!(
+                !text.contains("\"verified\""),
+                "flavor must not claim verified status"
+            );
         }
     }
 
@@ -130,7 +135,10 @@ mod tests {
             assert_eq!(a_stripped, b_stripped, "{ws} output must be deterministic");
             // generatedAt is the LAST key of the envelope
             let tail = &a_str[a_str.len().saturating_sub(60)..];
-            assert!(tail.contains("\"generatedAt\":\""), "generatedAt must trail the envelope, tail: {tail}");
+            assert!(
+                tail.contains("\"generatedAt\":\""),
+                "generatedAt must trail the envelope, tail: {tail}"
+            );
             assert!(a_str.ends_with('}'));
         }
     }

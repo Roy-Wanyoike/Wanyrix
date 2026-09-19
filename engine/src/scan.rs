@@ -25,12 +25,10 @@ const MAX_DEPTH: usize = 48;
 /// Scan `root`, parsing every `Cargo.toml` found under it (skipping `target/`,
 /// `.git`, hidden dirs and symlinked dirs — without following symlinks).
 pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
-    let root = root
-        .canonicalize()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => EngineError::PathNotFound(root.to_path_buf()),
-            _ => EngineError::Io(e),
-        })?;
+    let root = root.canonicalize().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => EngineError::PathNotFound(root.to_path_buf()),
+        _ => EngineError::Io(e),
+    })?;
     if !root.is_dir() {
         return Err(EngineError::PathNotFound(root));
     }
@@ -75,7 +73,8 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
                 let parsed = read_to_string(&path)
                     .map_err(|e| format!("unreadable manifest: {e}"))
                     .and_then(|text| {
-                        toml::from_str::<Manifest>(&text).map_err(|e| format!("TOML parse error: {e}"))
+                        toml::from_str::<Manifest>(&text)
+                            .map_err(|e| format!("TOML parse error: {e}"))
                     });
                 let canon = path.canonicalize().unwrap_or(path);
                 found.push((canon, rel, parsed));
@@ -116,7 +115,12 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
         .as_ref()
         .filter(|m| m.has_workspace_table())
         .and_then(|m| m.workspace.as_ref())
-        .map(|w| (w.package.clone().unwrap_or_default(), w.dependencies.clone()))
+        .map(|w| {
+            (
+                w.package.clone().unwrap_or_default(),
+                w.dependencies.clone(),
+            )
+        })
         .unwrap_or_default();
 
     // Build the crate set (parsed manifests that declare a [package]).
@@ -127,12 +131,19 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
 
     for (canon, rel, parsed) in found.into_iter() {
         let declares_workspace = parsed.as_ref().is_ok_and(Manifest::has_workspace_table);
-        let crate_name = parsed.as_ref().ok().and_then(Manifest::package_name).map(str::to_owned);
+        let crate_name = parsed
+            .as_ref()
+            .ok()
+            .and_then(Manifest::package_name)
+            .map(str::to_owned);
         if let (Ok(m), Some(name)) = (&parsed, &crate_name) {
             if let Some(dir) = canon.parent() {
                 dir_to_name.insert(dir.to_path_buf(), name.clone());
             }
-            let dir = canon.parent().map(Path::to_path_buf).unwrap_or_else(|| root.clone());
+            let dir = canon
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| root.clone());
             let package = m.package.clone().unwrap_or(Package {
                 name: Some(name.clone()),
                 version: None,
@@ -141,7 +152,9 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
                 description: None,
                 workspace: None,
             });
-            crates.push(build_crate_info(m, &package, name, &rel, &dir, &root, &ws_pkg));
+            crates.push(build_crate_info(
+                m, &package, name, &rel, &dir, &root, &ws_pkg,
+            ));
         }
         records.push(ManifestRecord {
             crate_name,
@@ -150,7 +163,11 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
             declares_workspace,
         });
     }
-    crates.sort_by(|a, b| a.name.cmp(&b.name).then(a.manifest_path.cmp(&b.manifest_path)));
+    crates.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then(a.manifest_path.cmp(&b.manifest_path))
+    });
 
     // Resolve path dependencies → measured records; intra-workspace
     // resolutions become the canonical edge list.
@@ -158,14 +175,18 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
     let mut path_deps: Vec<PathDepRecord> = Vec::new();
     for record in records.iter() {
         let Some(m) = record.manifest() else { continue };
-        let Some(from) = m.package_name() else { continue };
+        let Some(from) = m.package_name() else {
+            continue;
+        };
         let from = from.to_owned();
         let manifest_dir = root.join(manifest_parent_dir(&record.rel));
         for (section, table) in m.dep_sections() {
             let kind = edge_kind(section);
             for (key, spec) in table {
                 let dep_name = DepSpec::dep_name(key, spec);
-                let DepSpec::Detailed(detail) = spec else { continue };
+                let DepSpec::Detailed(detail) = spec else {
+                    continue;
+                };
                 if detail.git.is_some() {
                     continue; // git deps are never intra-workspace edges
                 }
@@ -180,7 +201,9 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
                     Some(detail.clone())
                 };
                 let Some(eff) = effective else { continue };
-                let Some(path_val) = eff.path.clone() else { continue };
+                let Some(path_val) = eff.path.clone() else {
+                    continue;
+                };
                 let has_version = eff.version.is_some();
 
                 let target_dir = manifest_dir.join(&path_val);
@@ -190,7 +213,11 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
                     .and_then(|t| dir_to_name.get(t).cloned());
                 match target_name {
                     Some(to) => {
-                        edges.push(Edge { from: from.clone(), to: to.clone(), kind });
+                        edges.push(Edge {
+                            from: from.clone(),
+                            to: to.clone(),
+                            kind,
+                        });
                         path_deps.push(PathDepRecord {
                             from: from.clone(),
                             dep: dep_name.to_owned(),
@@ -221,7 +248,12 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
             }
         }
     }
-    edges.sort_by(|a, b| a.from.cmp(&b.from).then(a.to.cmp(&b.to)).then(a.kind.cmp(&b.kind)));
+    edges.sort_by(|a, b| {
+        a.from
+            .cmp(&b.from)
+            .then(a.to.cmp(&b.to))
+            .then(a.kind.cmp(&b.kind))
+    });
     edges.dedup();
     path_deps.sort_by(|a, b| {
         a.from
@@ -298,7 +330,9 @@ fn build_crate_info(
         }
     };
 
-    let resolve = |field: &Option<MetaValue>, ws_key: fn(&WorkspacePackage) -> &Option<MetaValue>| -> Option<String> {
+    let resolve = |field: &Option<MetaValue>,
+                   ws_key: fn(&WorkspacePackage) -> &Option<MetaValue>|
+     -> Option<String> {
         match field {
             Some(MetaValue::Text(s)) => Some(s.clone()),
             Some(v) if v.is_inherited() => ws_target
@@ -431,7 +465,10 @@ pub fn manifest_fingerprint(root: &Path) -> Result<u64, EngineError> {
                     continue;
                 }
                 stack.push((path, depth + 1));
-            } else if name == "Cargo.toml" || name == "rust-toolchain.toml" || name == "rust-toolchain" {
+            } else if name == "Cargo.toml"
+                || name == "rust-toolchain.toml"
+                || name == "rust-toolchain"
+            {
                 paths.push(rel_forward(&root, &path));
             }
         }
@@ -525,12 +562,15 @@ mod tests {
         assert_eq!(scan.workspace_name, "tiny-ws");
         assert_eq!(scan.parse_failures, 0);
         assert_eq!(scan.manifests_found, 4); // root + 3 members
-        // beta → alpha path dep is the single measured edge
+                                             // beta → alpha path dep is the single measured edge
         assert_eq!(scan.edges.len(), 1);
         assert_eq!(scan.edges[0].from, "beta");
         assert_eq!(scan.edges[0].to, "alpha");
         assert_eq!(scan.edges[0].kind, EdgeKind::Normal);
-        assert!(scan.path_deps.len() == 1, "beta→alpha recorded as a measured path dep");
+        assert!(
+            scan.path_deps.len() == 1,
+            "beta→alpha recorded as a measured path dep"
+        );
         assert_eq!(scan.path_deps[0].resolved_to.as_deref(), Some("alpha"));
         assert!(!scan.path_deps[0].has_version);
         // measured metadata
@@ -551,8 +591,16 @@ mod tests {
         assert_eq!(names, vec!["deva", "devb", "ping", "pong"]);
         // ping→pong (normal), pong→ping (normal), deva↔devb (dev-only)
         assert_eq!(scan.edges.len(), 4);
-        let normal = scan.edges.iter().filter(|e| e.kind == EdgeKind::Normal).count();
-        let dev = scan.edges.iter().filter(|e| e.kind == EdgeKind::Dev).count();
+        let normal = scan
+            .edges
+            .iter()
+            .filter(|e| e.kind == EdgeKind::Normal)
+            .count();
+        let dev = scan
+            .edges
+            .iter()
+            .filter(|e| e.kind == EdgeKind::Dev)
+            .count();
         assert_eq!(normal, 2);
         assert_eq!(dev, 2);
     }
@@ -584,11 +632,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("wanyrix-broken-{}", std::process::id()));
         let crate_dir = dir.join("b");
         std::fs::create_dir_all(&crate_dir).unwrap();
-        std::fs::write(
-            dir.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"b\"]\n",
-        )
-        .unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"b\"]\n").unwrap();
         std::fs::write(
             crate_dir.join("Cargo.toml"),
             "[package]\nname = \"b\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\ndescription = \"x\"\n\n[dependencies]\nghost = { path = \"../missing\" }\n",
@@ -626,20 +670,40 @@ mod tests {
         // Manifest content change (same length, different byte) ⇒ different.
         let manifest = crate_dir.join("Cargo.toml");
         std::fs::write(&manifest, "[package]\nname = \"a\"\nversion = \"0.1.1\"\nlicense = \"MIT\"\ndescription = \"x\"\n").unwrap();
-        assert_ne!(manifest_fingerprint(&dir).unwrap(), base, "manifest content is measured");
+        assert_ne!(
+            manifest_fingerprint(&dir).unwrap(),
+            base,
+            "manifest content is measured"
+        );
         std::fs::write(&manifest, "[package]\nname = \"a\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\ndescription = \"x\"\n").unwrap();
-        assert_eq!(manifest_fingerprint(&dir).unwrap(), base, "content hash: restoring the bytes restores the fingerprint");
+        assert_eq!(
+            manifest_fingerprint(&dir).unwrap(),
+            base,
+            "content hash: restoring the bytes restores the fingerprint"
+        );
 
         // New manifest ⇒ different.
         let b = dir.join("b");
         std::fs::create_dir_all(&b).unwrap();
-        std::fs::write(b.join("Cargo.toml"), "[package]\nname = \"b\"\nversion = \"0.1.0\"\n").unwrap();
+        std::fs::write(
+            b.join("Cargo.toml"),
+            "[package]\nname = \"b\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
         let with_b = manifest_fingerprint(&dir).unwrap();
         assert_ne!(with_b, base);
 
         // rust-toolchain.toml ⇒ measured (it feeds the toolchain field).
-        std::fs::write(dir.join("rust-toolchain.toml"), "[toolchain]\nchannel = \"stable\"\n").unwrap();
-        assert_ne!(manifest_fingerprint(&dir).unwrap(), with_b, "toolchain file is measured");
+        std::fs::write(
+            dir.join("rust-toolchain.toml"),
+            "[toolchain]\nchannel = \"stable\"\n",
+        )
+        .unwrap();
+        assert_ne!(
+            manifest_fingerprint(&dir).unwrap(),
+            with_b,
+            "toolchain file is measured"
+        );
 
         // Source files and target/ artifacts are NOT part of the surface.
         let base_now = manifest_fingerprint(&dir).unwrap();
@@ -647,7 +711,11 @@ mod tests {
         std::fs::write(crate_dir.join("src/lib.rs"), "pub fn changed() {}").unwrap();
         std::fs::create_dir_all(dir.join("target/debug")).unwrap();
         std::fs::write(dir.join("target/debug/junk"), "build artifact").unwrap();
-        assert_eq!(manifest_fingerprint(&dir).unwrap(), base_now, "engine reads no .rs source and no target/");
+        assert_eq!(
+            manifest_fingerprint(&dir).unwrap(),
+            base_now,
+            "engine reads no .rs source and no target/"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -660,7 +728,10 @@ mod tests {
         ));
         let dir = std::env::temp_dir().join(format!("wanyrix-fp-empty-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        assert!(matches!(manifest_fingerprint(&dir), Err(EngineError::NoManifests(_))));
+        assert!(matches!(
+            manifest_fingerprint(&dir),
+            Err(EngineError::NoManifests(_))
+        ));
         std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -39,7 +39,14 @@ pub fn iso8601_from_unix(secs: u64) -> String {
 pub fn unix_from_iso8601(s: &str) -> Result<u64, String> {
     let b = s.as_bytes();
     let malformed = || format!("malformed ISO-8601 timestamp (want YYYY-MM-DDTHH:MM:SSZ): {s}");
-    if b.len() != 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':' || b[19] != b'Z' {
+    if b.len() != 20
+        || b[4] != b'-'
+        || b[7] != b'-'
+        || b[10] != b'T'
+        || b[13] != b':'
+        || b[16] != b':'
+        || b[19] != b'Z'
+    {
         return Err(malformed());
     }
     let num = |lo: usize, hi: usize| -> Result<i64, String> {
@@ -114,7 +121,14 @@ mod tests {
     /// instants, including leap years and the year-2100 boundary.
     #[test]
     fn iso8601_parse_round_trips() {
-        for secs in [0u64, 86_399, 951_782_400, 1_709_164_800, 1_700_000_000, 4_102_444_800] {
+        for secs in [
+            0u64,
+            86_399,
+            951_782_400,
+            1_709_164_800,
+            1_700_000_000,
+            4_102_444_800,
+        ] {
             let text = iso8601_from_unix(secs);
             assert_eq!(unix_from_iso8601(&text), Ok(secs), "round-trip {text}");
         }
@@ -126,14 +140,14 @@ mod tests {
     fn iso8601_parse_rejects_garbage() {
         for bad in [
             "",
-            "2026-09-18 13:28:56",      // space instead of T, no Z
-            "2026-09-18T13:28:56",      // missing Z
-            "2026-9-18T13:28:56Z",      // unpadded month
-            "2026-09-18T13:28:56.5Z",   // fractional seconds unsupported (strict)
-            "2026-13-18T13:28:56Z",     // month 13
-            "2026-09-32T13:28:56Z",     // day 32
-            "1969-12-31T23:59:59Z",     // pre-epoch
-            "zzzz-09-18T13:28:56Z",     // non-numeric
+            "2026-09-18 13:28:56",    // space instead of T, no Z
+            "2026-09-18T13:28:56",    // missing Z
+            "2026-9-18T13:28:56Z",    // unpadded month
+            "2026-09-18T13:28:56.5Z", // fractional seconds unsupported (strict)
+            "2026-13-18T13:28:56Z",   // month 13
+            "2026-09-32T13:28:56Z",   // day 32
+            "1969-12-31T23:59:59Z",   // pre-epoch
+            "zzzz-09-18T13:28:56Z",   // non-numeric
         ] {
             assert!(unix_from_iso8601(bad).is_err(), "must reject {bad:?}");
         }

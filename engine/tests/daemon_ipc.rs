@@ -56,19 +56,21 @@ impl Drop for ChildGuard {
 fn full_ipc_lifecycle_with_measured_rss_budget() {
     let sock = std::env::temp_dir().join(format!("wanyrix-daemon-ipc-{}.sock", std::process::id()));
     let _ = std::fs::remove_file(&sock);
-    let mut child = ChildGuard(Command::new(env!("CARGO_BIN_EXE_wanyrix"))
-        .args([
-            "daemon",
-            "start",
-            "--socket",
-            sock.to_str().unwrap(),
-            "--max-requests",
-            "4",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn wanyrix daemon start"));
+    let mut child = ChildGuard(
+        Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+            .args([
+                "daemon",
+                "start",
+                "--socket",
+                sock.to_str().unwrap(),
+                "--max-requests",
+                "4",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn wanyrix daemon start"),
+    );
 
     let tiny = fixture("tiny-ws");
     let doctor_line = format!(
@@ -88,7 +90,10 @@ fn full_ipc_lifecycle_with_measured_rss_budget() {
     // Idle memory budget (issue #58): < 100 MB.
     #[cfg(target_os = "linux")]
     if let Some(kb) = rss_kb(pid) {
-        assert!(kb < 100_000, "idle daemon RSS {kb} kB exceeds the 100 MB budget");
+        assert!(
+            kb < 100_000,
+            "idle daemon RSS {kb} kB exceeds the 100 MB budget"
+        );
     }
 
     // 2 — doctor: cold measured scan.
@@ -97,7 +102,10 @@ fn full_ipc_lifecycle_with_measured_rss_budget() {
     assert_eq!(cold_v["ok"], true);
     assert_eq!(cold_v["cached"], false);
     assert_eq!(cold_v["data"]["schema"], "wanyrix.doctor/v1");
-    assert_eq!(cold_v["data"]["summary"]["total"], 4, "tiny-ws has exactly 4 findings");
+    assert_eq!(
+        cold_v["data"]["summary"]["total"], 4,
+        "tiny-ws has exactly 4 findings"
+    );
     assert!(cold.rfind("\"generatedAt\"").is_some());
 
     // 3 — doctor again: cache hit, zero manifests re-parsed.
@@ -109,12 +117,18 @@ fn full_ipc_lifecycle_with_measured_rss_budget() {
     // Post-scan memory budget.
     #[cfg(target_os = "linux")]
     if let Some(kb) = rss_kb(pid) {
-        assert!(kb < 100_000, "post-scan daemon RSS {kb} kB exceeds the 100 MB budget");
+        assert!(
+            kb < 100_000,
+            "post-scan daemon RSS {kb} kB exceeds the 100 MB budget"
+        );
     }
 
     // 4 — graceful shutdown; the process must exit on its own.
     let bye = daemon::call(&sock, r#"{"id":"t9","method":"shutdown"}"#).unwrap();
-    assert_eq!(serde_json::from_str::<Value>(&bye).unwrap()["data"]["shuttingDown"], true);
+    assert_eq!(
+        serde_json::from_str::<Value>(&bye).unwrap()["data"]["shuttingDown"],
+        true
+    );
 
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut exited = false;
@@ -131,23 +145,45 @@ fn full_ipc_lifecycle_with_measured_rss_budget() {
         panic!("daemon did not exit after a shutdown request");
     }
     let mut out = String::new();
-    child.0.stdout.take().unwrap().read_to_string(&mut out).unwrap();
-    assert!(out.contains("stopped (shutdown-request)"), "measured summary printed: {out}");
-    assert!(out.contains("requests served: 4"), "four requests were served: {out}");
+    child
+        .0
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut out)
+        .unwrap();
+    assert!(
+        out.contains("stopped (shutdown-request)"),
+        "measured summary printed: {out}"
+    );
+    assert!(
+        out.contains("requests served: 4"),
+        "four requests were served: {out}"
+    );
     assert!(out.contains("cache hits: 1"), "one warm hit: {out}");
     assert!(!sock.exists(), "socket file removed on exit");
 }
 
 #[test]
 fn daemon_refuses_a_second_bind_on_a_live_socket() {
-    let sock = std::env::temp_dir().join(format!("wanyrix-daemon-steal-{}.sock", std::process::id()));
+    let sock =
+        std::env::temp_dir().join(format!("wanyrix-daemon-steal-{}.sock", std::process::id()));
     let _ = std::fs::remove_file(&sock);
-    let mut child = ChildGuard(Command::new(env!("CARGO_BIN_EXE_wanyrix"))
-        .args(["daemon", "start", "--socket", sock.to_str().unwrap(), "--max-requests", "1"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn first daemon"));
+    let mut child = ChildGuard(
+        Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+            .args([
+                "daemon",
+                "start",
+                "--socket",
+                sock.to_str().unwrap(),
+                "--max-requests",
+                "1",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn first daemon"),
+    );
 
     assert!(wait_for_socket(&sock), "first daemon never listened");
 
@@ -158,7 +194,10 @@ fn daemon_refuses_a_second_bind_on_a_live_socket() {
         .expect("spawn second daemon");
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("already served"), "honest refusal: {stderr}");
+    assert!(
+        stderr.contains("already served"),
+        "honest refusal: {stderr}"
+    );
 
     let _ = daemon::call(&sock, r#"{"id":"bye","method":"shutdown"}"#).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -172,14 +211,26 @@ fn daemon_refuses_a_second_bind_on_a_live_socket() {
 
 #[test]
 fn daemon_call_surfaces_scan_failures_with_exit_code_2() {
-    let sock = std::env::temp_dir().join(format!("wanyrix-daemon-scanfail-{}.sock", std::process::id()));
+    let sock = std::env::temp_dir().join(format!(
+        "wanyrix-daemon-scanfail-{}.sock",
+        std::process::id()
+    ));
     let _ = std::fs::remove_file(&sock);
-    let _child = ChildGuard(Command::new(env!("CARGO_BIN_EXE_wanyrix"))
-        .args(["daemon", "start", "--socket", sock.to_str().unwrap(), "--max-requests", "1"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn daemon"));
+    let _child = ChildGuard(
+        Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+            .args([
+                "daemon",
+                "start",
+                "--socket",
+                sock.to_str().unwrap(),
+                "--max-requests",
+                "1",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn daemon"),
+    );
     assert!(wait_for_socket(&sock));
 
     // A `daemon call` against a missing workspace exits 2 with the
@@ -199,7 +250,10 @@ fn daemon_call_surfaces_scan_failures_with_exit_code_2() {
         .expect("run daemon call");
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("scan-failed"), "error code surfaced: {stderr}");
+    assert!(
+        stderr.contains("scan-failed"),
+        "error code surfaced: {stderr}"
+    );
 
     let _ = std::fs::remove_file(&sock);
 }

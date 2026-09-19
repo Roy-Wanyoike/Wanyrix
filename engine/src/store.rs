@@ -154,7 +154,9 @@ pub struct FsckReport {
 
 impl FsckReport {
     pub fn healthy(&self) -> bool {
-        self.incomplete_scans.is_empty() && self.count_mismatches.is_empty() && self.orphan_findings.is_empty()
+        self.incomplete_scans.is_empty()
+            && self.count_mismatches.is_empty()
+            && self.orphan_findings.is_empty()
     }
 
     /// Deterministic human summary (one line per problem class, plus the
@@ -174,13 +176,23 @@ impl FsckReport {
                 "    scan {id}: committed without its full findings row set (finding_count={stored}, findings rows={actual})\n"
             ));
         }
-        out.push_str(&format!("  count mismatches: {}\n", self.count_mismatches.len()));
+        out.push_str(&format!(
+            "  count mismatches: {}\n",
+            self.count_mismatches.len()
+        ));
         for (id, stored, actual) in &self.count_mismatches {
-            out.push_str(&format!("    scan {id}: finding_count={stored} but {actual} findings rows exist\n"));
+            out.push_str(&format!(
+                "    scan {id}: finding_count={stored} but {actual} findings rows exist\n"
+            ));
         }
-        out.push_str(&format!("  orphan findings rows: {}\n", self.orphan_findings.len()));
+        out.push_str(&format!(
+            "  orphan findings rows: {}\n",
+            self.orphan_findings.len()
+        ));
         for id in &self.orphan_findings {
-            out.push_str(&format!("    finding row {id}: references a scan that does not exist\n"));
+            out.push_str(&format!(
+                "    finding row {id}: references a scan that does not exist\n"
+            ));
         }
         if self.removed_scans > 0 || self.removed_findings > 0 {
             out.push_str(&format!(
@@ -262,13 +274,16 @@ fn open_wal(db_path: &Path) -> Result<Connection, EngineError> {
             "could not enable WAL journal mode (got \"{mode}\") — refusing to run without the crash-recovery guarantees"
         )));
     }
-    conn.pragma_update(None, "synchronous", "NORMAL").map_err(store_err)?;
+    conn.pragma_update(None, "synchronous", "NORMAL")
+        .map_err(store_err)?;
     // Referential integrity enforced: a findings row cannot reference a
     // scan that does not exist. fsck's orphan-findings check remains as
     // defense-in-depth for databases written by tools that did not
     // enforce the constraint (older writers, manual edits).
-    conn.pragma_update(None, "foreign_keys", "ON").map_err(store_err)?;
-    conn.busy_timeout(std::time::Duration::from_millis(5_000)).map_err(store_err)?;
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .map_err(store_err)?;
+    conn.busy_timeout(std::time::Duration::from_millis(5_000))
+        .map_err(store_err)?;
     Ok(conn)
 }
 
@@ -335,8 +350,7 @@ fn payload_fields(payload: &serde_json::Value) -> Result<PayloadScan, EngineErro
             .ok_or_else(|| EngineError::Store(format!("finding {id} has no string `title`")))?;
         // The evidence array is stored exactly as the payload carried it
         // (verbatim JSON, round-trippable — never re-typed).
-        let evidence_json = serde_json::to_string(&f["evidence"])
-            .map_err(store_err)?;
+        let evidence_json = serde_json::to_string(&f["evidence"]).map_err(store_err)?;
         rows.push(FindingRow {
             finding_id: id.to_owned(),
             severity: severity.to_owned(),
@@ -375,8 +389,8 @@ pub fn save(db_path: &Path, payload_text: &str) -> Result<SaveOutcome, EngineErr
 /// [`save_findings_rows`] to reproduce the kill-between-commits state
 /// that [`fsck`] must detect.
 pub fn parse_payload(payload_text: &str) -> Result<PayloadScan, EngineError> {
-    let payload: serde_json::Value =
-        serde_json::from_str(payload_text).map_err(|e| EngineError::Store(format!("payload is not valid JSON: {e}")))?;
+    let payload: serde_json::Value = serde_json::from_str(payload_text)
+        .map_err(|e| EngineError::Store(format!("payload is not valid JSON: {e}")))?;
     payload_fields(&payload)
 }
 
@@ -428,7 +442,11 @@ pub fn save_scan_row(db_path: &Path, scan: &PayloadScan) -> Result<i64, EngineEr
 
 /// Commit the findings rows for `scan_id`. Second half of [`save`].
 /// Returns the number of rows committed.
-pub fn save_findings_rows(db_path: &Path, scan_id: i64, findings: &[FindingRow]) -> Result<usize, EngineError> {
+pub fn save_findings_rows(
+    db_path: &Path,
+    scan_id: i64,
+    findings: &[FindingRow],
+) -> Result<usize, EngineError> {
     let mut conn = open_existing(db_path)?;
     let txn = conn.transaction().map_err(store_err)?;
     {
@@ -436,8 +454,14 @@ pub fn save_findings_rows(db_path: &Path, scan_id: i64, findings: &[FindingRow])
             .prepare("INSERT INTO findings (scan_id, finding_id, severity, title, evidence_json) VALUES (?1, ?2, ?3, ?4, ?5)")
             .map_err(store_err)?;
         for f in findings {
-            stmt.execute(rusqlite::params![scan_id, f.finding_id, f.severity, f.title, f.evidence_json])
-                .map_err(store_err)?;
+            stmt.execute(rusqlite::params![
+                scan_id,
+                f.finding_id,
+                f.severity,
+                f.title,
+                f.evidence_json
+            ])
+            .map_err(store_err)?;
         }
     }
     txn.commit().map_err(store_err)?;
@@ -506,7 +530,11 @@ pub fn fsck(db_path: &Path, repair: bool) -> Result<FsckReport, EngineError> {
             .map_err(store_err)?;
         let rows = stmt
             .query_map([], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
             })
             .map_err(store_err)?
             .collect::<Result<Vec<_>, _>>()
@@ -560,14 +588,20 @@ pub fn fsck(db_path: &Path, repair: bool) -> Result<FsckReport, EngineError> {
         }
         let txn = conn.transaction().map_err(store_err)?;
         for id in &doomed_scans {
-            txn.execute("DELETE FROM findings WHERE scan_id = ?1", rusqlite::params![id])
-                .map_err(store_err)?;
+            txn.execute(
+                "DELETE FROM findings WHERE scan_id = ?1",
+                rusqlite::params![id],
+            )
+            .map_err(store_err)?;
             txn.execute("DELETE FROM scans WHERE id = ?1", rusqlite::params![id])
                 .map_err(store_err)?;
         }
         for id in &report.orphan_findings {
-            txn.execute("DELETE FROM findings WHERE rowid = ?1", rusqlite::params![id])
-                .map_err(store_err)?;
+            txn.execute(
+                "DELETE FROM findings WHERE rowid = ?1",
+                rusqlite::params![id],
+            )
+            .map_err(store_err)?;
         }
         report.removed_scans = report.incomplete_scans.len() + report.count_mismatches.len();
         report.removed_findings = rows_of_removed_scans + report.orphan_findings.len();
@@ -617,8 +651,13 @@ mod tests {
             )
             .unwrap();
         assert_eq!(tables, 2, "both tables exist exactly once");
-        let user_version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(user_version, STORE_SCHEMA_VERSION, "layout version pinned in the header");
+        let user_version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            user_version, STORE_SCHEMA_VERSION,
+            "layout version pinned in the header"
+        );
         drop(conn);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -630,8 +669,13 @@ mod tests {
         init(&db).unwrap();
         // A fresh connection reads the mode from the DB header: WAL stuck.
         let conn = Connection::open(&db).unwrap();
-        let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
-        assert_eq!(mode, "wal", "journal_mode=wal persists in the database header");
+        let mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            mode, "wal",
+            "journal_mode=wal persists in the database header"
+        );
         drop(conn);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -646,20 +690,34 @@ mod tests {
         let outcome = save(&db, &payload).unwrap();
         assert_eq!(outcome.workspace, "tiny-ws");
         assert_eq!(outcome.findings, 4, "tiny-ws has exactly 4 findings");
-        assert_eq!(outcome.findings, v["summary"]["total"].as_u64().unwrap() as usize);
+        assert_eq!(
+            outcome.findings,
+            v["summary"]["total"].as_u64().unwrap() as usize
+        );
 
         let rows = list(&db, None).unwrap();
         assert_eq!(rows.len(), 1);
         let row = &rows[0];
         assert_eq!(row.workspace, "tiny-ws");
-        assert_eq!(row.finished_at, 1_789_738_136, "generatedAt parsed to the integer epoch");
+        assert_eq!(
+            row.finished_at, 1_789_738_136,
+            "generatedAt parsed to the integer epoch"
+        );
         assert_eq!(row.finding_count, 4);
         assert_eq!(row.severity_critical, 0);
         assert_eq!(row.severity_warning, 4);
         assert_eq!(row.severity_info, 0);
-        assert_eq!(row.schema_version, 1, "doctor payload schema wanyrix.doctor/v1 → 1");
+        assert_eq!(
+            row.schema_version, 1,
+            "doctor payload schema wanyrix.doctor/v1 → 1"
+        );
         let line = row.line();
-        assert!(line.contains("tiny-ws") && line.contains("2026-09-18T13:28:56Z") && line.contains("v1"), "list row renders the measured fields: {line}");
+        assert!(
+            line.contains("tiny-ws")
+                && line.contains("2026-09-18T13:28:56Z")
+                && line.contains("v1"),
+            "list row renders the measured fields: {line}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -689,7 +747,10 @@ mod tests {
                 .find(|f| f["id"] == finding_id.as_str())
                 .unwrap()["evidence"];
             let stored: serde_json::Value = serde_json::from_str(&evidence_json).unwrap();
-            assert_eq!(&stored, expected, "evidence stored verbatim for {finding_id}");
+            assert_eq!(
+                &stored, expected,
+                "evidence stored verbatim for {finding_id}"
+            );
         }
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -701,7 +762,8 @@ mod tests {
         init(&db).unwrap();
         save(&db, &tiny_ws_payload()).unwrap();
         // a second, differently-named workspace payload
-        let other = tiny_ws_payload().replace("\"workspace\":\"tiny-ws\"", "\"workspace\":\"other-ws\"");
+        let other =
+            tiny_ws_payload().replace("\"workspace\":\"tiny-ws\"", "\"workspace\":\"other-ws\"");
         save(&db, &other).unwrap();
         assert_eq!(list(&db, None).unwrap().len(), 2);
         let filtered = list(&db, Some("other-ws")).unwrap();

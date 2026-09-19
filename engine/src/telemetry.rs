@@ -223,12 +223,21 @@ pub fn ingest_text(text: &str, source: &str, opts: &IngestOptions) -> TelemetryR
             .into_iter()
             .map(|(file, count)| FileCount { file, count })
             .collect(),
-        diagnostics: if opts.summary_only { None } else { Some(diagnostics) },
+        diagnostics: if opts.summary_only {
+            None
+        } else {
+            Some(diagnostics)
+        },
         redaction: Redaction {
             applied: true,
             policy: REDACTION_POLICY,
             paths_reduced: !opts.keep_paths,
-            fields_stripped: &["rendered", "spans[].text", "suggested_replacement", "suggestion"],
+            fields_stripped: &[
+                "rendered",
+                "spans[].text",
+                "suggested_replacement",
+                "suggestion",
+            ],
             secrets_scrubbed,
         },
         measurement: MEASUREMENT_NOTE,
@@ -261,7 +270,9 @@ fn is_diagnostic(v: &Value) -> bool {
         Some(o) => o,
         None => return false,
     };
-    obj.contains_key("level") && obj.contains_key("message") && (obj.contains_key("spans") || obj.contains_key("rendered"))
+    obj.contains_key("level")
+        && obj.contains_key("message")
+        && (obj.contains_key("spans") || obj.contains_key("rendered"))
 }
 
 /// Redact one diagnostic (recursively for `children`), returning the output
@@ -295,7 +306,10 @@ fn redact_diagnostic(diag: &Value, opts: &IngestOptions) -> (Value, usize) {
     if let Some(spans) = diag.get("spans").and_then(Value::as_array) {
         for span in spans {
             let mut s = serde_json::Map::new();
-            let file = span.get("file_name").and_then(Value::as_str).unwrap_or_default();
+            let file = span
+                .get("file_name")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             let redacted_file = if opts.keep_paths {
                 file.to_owned()
             } else {
@@ -308,9 +322,15 @@ fn redact_diagnostic(diag: &Value, opts: &IngestOptions) -> (Value, usize) {
                 ("column_start", "columnStart"),
                 ("column_end", "columnEnd"),
             ] {
-                s.insert(out_key.into(), span.get(src_key).cloned().unwrap_or(Value::Null));
+                s.insert(
+                    out_key.into(),
+                    span.get(src_key).cloned().unwrap_or(Value::Null),
+                );
             }
-            s.insert("isPrimary".into(), span.get("is_primary").cloned().unwrap_or(Value::Null));
+            s.insert(
+                "isPrimary".into(),
+                span.get("is_primary").cloned().unwrap_or(Value::Null),
+            );
             match span.get("label").and_then(Value::as_str) {
                 Some(label) if !label.is_empty() => {
                     let (l, n) = scrub_secrets(label);
@@ -513,7 +533,17 @@ fn pass_bearer(s: &str) -> (String, usize) {
         let start = search_from + rel;
         let after = start + "bearer".len();
         // require the word boundary after "bearer"
-        let sep_len = s[after..].chars().next().map(|c| if c == ' ' || c == '\t' || c == ':' { c.len_utf8() } else { 0 }).unwrap_or(0);
+        let sep_len = s[after..]
+            .chars()
+            .next()
+            .map(|c| {
+                if c == ' ' || c == '\t' || c == ':' {
+                    c.len_utf8()
+                } else {
+                    0
+                }
+            })
+            .unwrap_or(0);
         if sep_len == 0 {
             search_from = after;
             continue;
@@ -521,7 +551,9 @@ fn pass_bearer(s: &str) -> (String, usize) {
         let value_start = after + sep_len;
         let n: usize = s[value_start..]
             .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '~' | '+' | '/' | '=' | '-'))
+            .take_while(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '~' | '+' | '/' | '=' | '-')
+            })
             .map(char::len_utf8)
             .sum();
         if n >= 16 {
@@ -552,7 +584,11 @@ fn pass_keyword_assignments(s: &str) -> (String, usize) {
                 // Credential FIELD names are underscore/hyphen-joined
                 // (auth_token, client_secret) — so only an alphanumeric
                 // prefix disqualifies the keyword, not `_`/`-`.
-                let boundary_before = i == 0 || !lower[..i].chars().next_back().is_some_and(|c| c.is_alphanumeric());
+                let boundary_before = i == 0
+                    || !lower[..i]
+                        .chars()
+                        .next_back()
+                        .is_some_and(|c| c.is_alphanumeric());
                 if !boundary_before {
                     continue;
                 }
@@ -578,7 +614,9 @@ fn pass_keyword_assignments(s: &str) -> (String, usize) {
                 // skip past the value in both strings
                 let skip = s[copy_from..]
                     .chars()
-                    .take_while(|c| c.is_ascii_graphic() && *c != '"' && *c != '\'' && *c != ',' && *c != ';')
+                    .take_while(|c| {
+                        c.is_ascii_graphic() && *c != '"' && *c != '\'' && *c != ',' && *c != ';'
+                    })
                     .map(char::len_utf8)
                     .sum::<usize>();
                 out.push_str(&s[copy_from..copy_from + skip]);
@@ -677,7 +715,10 @@ pub fn ingest_run(
                 }
             }
             std::fs::write(path, serialized).map_err(|e| {
-                EngineError::Telemetry(format!("cannot write telemetry report {}: {e}", path.display()))
+                EngineError::Telemetry(format!(
+                    "cannot write telemetry report {}: {e}",
+                    path.display()
+                ))
             })?;
             Ok(format!(
                 "wanyrix telemetry ingest — {} non-empty line(s) from {}\n  diagnostics: {} (other lines: {}, malformed: {})\n  errors: {} · warnings: {} · distinct codes: {}\n  redaction: policy {} applied — source snippets dropped, secrets scrubbed: {}\n  report: {}\n",
@@ -754,10 +795,22 @@ mod tests {
         let report = ingest_text(&wrapped("boom"), "test", &IngestOptions::default());
         let diag = &report.diagnostics.as_ref().unwrap()[0];
         let out = serde_json::to_string(diag).unwrap();
-        assert!(!out.contains("RENDERED-SNIPPET"), "rendered carries the annotated snippet");
-        assert!(!out.contains("secretvalue123"), "span text is the source line itself");
-        assert!(!out.contains("safevalue123"), "suggested_replacement is source text");
-        assert!(!out.contains("/home/z/proj"), "paths are reduced to basenames by default");
+        assert!(
+            !out.contains("RENDERED-SNIPPET"),
+            "rendered carries the annotated snippet"
+        );
+        assert!(
+            !out.contains("secretvalue123"),
+            "span text is the source line itself"
+        );
+        assert!(
+            !out.contains("safevalue123"),
+            "suggested_replacement is source text"
+        );
+        assert!(
+            !out.contains("/home/z/proj"),
+            "paths are reduced to basenames by default"
+        );
         assert!(report.redaction.paths_reduced);
         let span = &diag["spans"][0];
         assert_eq!(span["file"], "main.rs");
@@ -771,19 +824,39 @@ mod tests {
 
     #[test]
     fn keep_paths_widens_file_names_but_never_snippets() {
-        let report = ingest_text(&wrapped("boom"), "test", &IngestOptions { keep_paths: true, ..Default::default() });
+        let report = ingest_text(
+            &wrapped("boom"),
+            "test",
+            &IngestOptions {
+                keep_paths: true,
+                ..Default::default()
+            },
+        );
         let diag = &report.diagnostics.as_ref().unwrap()[0];
         let out = serde_json::to_string(diag).unwrap();
         assert!(out.contains("/home/z/proj/src/main.rs"));
-        assert!(!out.contains("secretvalue123"), "--keep-paths can never restore snippets");
+        assert!(
+            !out.contains("secretvalue123"),
+            "--keep-paths can never restore snippets"
+        );
         assert!(!report.redaction.paths_reduced);
     }
 
     #[test]
     fn summary_only_omits_the_diagnostics_array() {
-        let report = ingest_text(&wrapped("boom"), "test", &IngestOptions { summary_only: true, ..Default::default() });
+        let report = ingest_text(
+            &wrapped("boom"),
+            "test",
+            &IngestOptions {
+                summary_only: true,
+                ..Default::default()
+            },
+        );
         assert!(report.diagnostics.is_none());
-        assert_eq!(report.summary.diagnostic_lines, 1, "counts are still measured");
+        assert_eq!(
+            report.summary.diagnostic_lines, 1,
+            "counts are still measured"
+        );
         assert_eq!(report.by_code[0].code, "E0382");
     }
 
@@ -810,7 +883,10 @@ mod tests {
             let diag = &report.diagnostics.as_ref().unwrap()[0];
             let msg = diag["message"].as_str().unwrap();
             assert!(msg.contains("[redacted"), "scrubbed form is labeled: {msg}");
-            assert!(report.redaction.secrets_scrubbed >= 1, "count reflects reality for {shape}");
+            assert!(
+                report.redaction.secrets_scrubbed >= 1,
+                "count reflects reality for {shape}"
+            );
         }
     }
 
@@ -833,11 +909,16 @@ mod tests {
     fn scrub_secrets_is_exact_for_each_shape() {
         let (out, count) = scrub_secrets(&format!("id={GHP} id={AKIA} j={JWT}"));
         assert_eq!(count, 3);
-        assert_eq!(out, "id=[redacted:github-token] id=[redacted:aws-key] j=[redacted:jwt]");
-        let (out, count) = scrub_secrets("Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789");
+        assert_eq!(
+            out,
+            "id=[redacted:github-token] id=[redacted:aws-key] j=[redacted:jwt]"
+        );
+        let (out, count) =
+            scrub_secrets("Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789");
         assert_eq!(count, 1);
         assert_eq!(out, "Authorization: Bearer [redacted]");
-        let (out, count) = scrub_secrets("-----BEGIN OPENSSH PRIVATE KEY-----b3BlbnNzaC1rZXktdjEAAAAA");
+        let (out, count) =
+            scrub_secrets("-----BEGIN OPENSSH PRIVATE KEY-----b3BlbnNzaC1rZXktdjEAAAAA");
         assert_eq!(count, 1);
         assert_eq!(out, "[redacted:private-key]b3BlbnNzaC1rZXktdjEAAAAA");
     }
@@ -851,10 +932,16 @@ mod tests {
             r#"{"reason":"compiler-message","message":{"level":"warning","message":"warn","code":{"code":"E0308"},"spans":[],"children":[]}}"#
         );
         let report = ingest_text(&stream, "test", &IngestOptions::default());
-        assert!(report.by_code.windows(2).all(|w| w[0].code < w[1].code), "BTreeMap order ⇒ sorted codes");
+        assert!(
+            report.by_code.windows(2).all(|w| w[0].code < w[1].code),
+            "BTreeMap order ⇒ sorted codes"
+        );
         assert!(report.by_file.windows(2).all(|w| w[0].file <= w[1].file));
         let code_total: usize = report.by_code.iter().map(|c| c.count).sum();
-        assert_eq!(report.summary.diagnostic_lines - report.summary.no_code, code_total);
+        assert_eq!(
+            report.summary.diagnostic_lines - report.summary.no_code,
+            code_total
+        );
         assert_eq!(report.summary.errors, 2);
         assert_eq!(report.summary.warnings, 1);
         assert_eq!(report.summary.distinct_codes, 2);
@@ -863,8 +950,10 @@ mod tests {
     #[test]
     fn determinism_identical_input_identical_report_except_generated_at() {
         let stream = format!("{}\n{}\n", wrapped("boom"), "malformed line");
-        let a = serde_json::to_string(&ingest_text(&stream, "in", &IngestOptions::default())).unwrap();
-        let b = serde_json::to_string(&ingest_text(&stream, "in", &IngestOptions::default())).unwrap();
+        let a =
+            serde_json::to_string(&ingest_text(&stream, "in", &IngestOptions::default())).unwrap();
+        let b =
+            serde_json::to_string(&ingest_text(&stream, "in", &IngestOptions::default())).unwrap();
         let strip = |s: &str| s.split(r#","generatedAt":"#).next().unwrap().to_owned();
         assert_eq!(strip(&a), strip(&b), "only generatedAt may differ");
         assert!(a.ends_with("\"}"), "generatedAt is the last member");
@@ -887,7 +976,10 @@ mod tests {
         let report = ingest_text(&wrapped("x"), "t", &IngestOptions::default());
         assert_eq!(report.schema, TELEMETRY_SCHEMA);
         assert_eq!(report.redaction.policy, REDACTION_POLICY);
-        assert!(report.redaction.applied, "redaction is default-on, not optional");
+        assert!(
+            report.redaction.applied,
+            "redaction is default-on, not optional"
+        );
     }
 
     #[test]

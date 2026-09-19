@@ -226,7 +226,11 @@ fn honesty_notes_vec() -> Vec<String> {
 }
 
 /// Assemble the doctor envelope from a scan + its findings.
-pub fn doctor_report(scan: &WorkspaceScan, findings: &[Finding], generated_at: String) -> DoctorReport {
+pub fn doctor_report(
+    scan: &WorkspaceScan,
+    findings: &[Finding],
+    generated_at: String,
+) -> DoctorReport {
     let summary = DoctorSummary {
         critical: findings.iter().filter(|f| f.severity == "critical").count(),
         warning: findings.iter().filter(|f| f.severity == "warning").count(),
@@ -256,7 +260,10 @@ pub fn doctor_report(scan: &WorkspaceScan, findings: &[Finding], generated_at: S
         findings: findings.iter().map(FindingJson::from).collect(),
         summary,
         scan: ScanProvenance {
-            generated_by: format!("wanyrix-engine v{} — filesystem manifest analysis", env!("CARGO_PKG_VERSION")),
+            generated_by: format!(
+                "wanyrix-engine v{} — filesystem manifest analysis",
+                env!("CARGO_PKG_VERSION")
+            ),
             manifests_found: scan.manifests_found,
             parse_failures: scan.parse_failures,
             skipped_entries: scan.skipped,
@@ -320,7 +327,10 @@ pub fn health_report(
         activity: Vec::new(),
         finding_counts: counts
             .into_iter()
-            .map(|c| FindingCountJson { section: c.section, count: c.count })
+            .map(|c| FindingCountJson {
+                section: c.section,
+                count: c.count,
+            })
             .collect(),
         insight,
         measurement: MEASUREMENT_NOTE.to_owned(),

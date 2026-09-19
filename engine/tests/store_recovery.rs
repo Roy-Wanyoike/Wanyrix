@@ -72,7 +72,9 @@ fn recovery_a_uncommitted_txn_is_lost_committed_data_survives() {
              VALUES ('ghost-ws', 1, 1, 1, 0, 0, 1, 1);",
         )
         .unwrap();
-        let ghost_id: i64 = conn.query_row("SELECT last_insert_rowid()", [], |r| r.get(0)).unwrap();
+        let ghost_id: i64 = conn
+            .query_row("SELECT last_insert_rowid()", [], |r| r.get(0))
+            .unwrap();
         conn.execute(
             "INSERT INTO findings (scan_id, finding_id, severity, title, evidence_json) VALUES (?1, 'FER-ENG-000-ghost', 'info', 'uncommitted', '[]')",
             rusqlite::params![ghost_id],
@@ -83,19 +85,37 @@ fn recovery_a_uncommitted_txn_is_lost_committed_data_survives() {
     }
 
     // Reopen: WAL recovery discards the uncommitted transaction.
-    assert_eq!(count_rows(&db, "SELECT count(*) FROM scans"), 2, "uncommitted scan row is gone");
-    assert_eq!(count_rows(&db, "SELECT count(*) FROM findings"), 8, "uncommitted finding is gone");
-    assert!(count_rows(&db, "SELECT count(*) FROM scans WHERE workspace = 'ghost-ws'") == 0);
+    assert_eq!(
+        count_rows(&db, "SELECT count(*) FROM scans"),
+        2,
+        "uncommitted scan row is gone"
+    );
+    assert_eq!(
+        count_rows(&db, "SELECT count(*) FROM findings"),
+        8,
+        "uncommitted finding is gone"
+    );
+    assert!(
+        count_rows(
+            &db,
+            "SELECT count(*) FROM scans WHERE workspace = 'ghost-ws'"
+        ) == 0
+    );
 
     // The committed data is intact AND the store reports it correctly.
     let rows = store::list(&db, None).unwrap();
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].workspace, "tiny-ws");
     assert_eq!(rows[0].finding_count, 4);
-    assert!(store::fsck(&db, false).unwrap().healthy(), "store is consistent after WAL recovery");
+    assert!(
+        store::fsck(&db, false).unwrap().healthy(),
+        "store is consistent after WAL recovery"
+    );
 
     let conn = Connection::open(&db).unwrap();
-    let integrity: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).unwrap();
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(integrity, "ok");
     drop(conn);
     std::fs::remove_dir_all(&dir).ok();
@@ -123,7 +143,10 @@ fn recovery_b_kill_between_commits_is_detectable_and_repairable() {
     assert_eq!(count_rows(&db, "SELECT count(*) FROM findings"), 0);
     let rows = store::list(&db, None).unwrap();
     assert_eq!(rows.len(), 1, "the orphan scan is committed and listed");
-    assert_eq!(rows[0].finding_count, 4, "the orphan claims 4 findings it does not have");
+    assert_eq!(
+        rows[0].finding_count, 4,
+        "the orphan claims 4 findings it does not have"
+    );
 
     // fsck (report-only) flags it as incomplete.
     let report = store::fsck(&db, false).unwrap();
@@ -131,9 +154,9 @@ fn recovery_b_kill_between_commits_is_detectable_and_repairable() {
     assert_eq!(report.incomplete_scans, vec![(scan_id, 4, 0)]);
     assert!(report.count_mismatches.is_empty());
     assert!(report.orphan_findings.is_empty());
-    assert!(report
-        .summary()
-        .contains("scan 1: committed without its full findings row set (finding_count=4, findings rows=0)"));
+    assert!(report.summary().contains(
+        "scan 1: committed without its full findings row set (finding_count=4, findings rows=0)"
+    ));
     assert_eq!(report.removed_scans, 0, "report-only fsck deletes nothing");
 
     // Repair removes the orphan scan (0 findings rows existed).
@@ -141,8 +164,15 @@ fn recovery_b_kill_between_commits_is_detectable_and_repairable() {
     assert_eq!(repaired.incomplete_scans, vec![(scan_id, 4, 0)]);
     assert_eq!(repaired.removed_scans, 1);
     assert_eq!(repaired.removed_findings, 0);
-    assert_eq!(count_rows(&db, "SELECT count(*) FROM scans"), 0, "orphan scan removed");
-    assert!(store::fsck(&db, false).unwrap().healthy(), "store consistent after repair");
+    assert_eq!(
+        count_rows(&db, "SELECT count(*) FROM scans"),
+        0,
+        "orphan scan removed"
+    );
+    assert!(
+        store::fsck(&db, false).unwrap().healthy(),
+        "store consistent after repair"
+    );
 
     // ---- Same story for a PARTIAL findings set (kill mid-findings): ----
     let scan = store::parse_payload(&tiny_ws_payload("2026-09-18T13:29:56Z")).unwrap();
@@ -157,11 +187,16 @@ fn recovery_b_kill_between_commits_is_detectable_and_repairable() {
     let report = store::fsck(&db, false).unwrap();
     assert!(!report.healthy());
     assert_eq!(report.incomplete_scans, vec![(scan_id, 4, 2)]);
-    assert!(report.summary().contains("finding_count=4, findings rows=2"));
+    assert!(report
+        .summary()
+        .contains("finding_count=4, findings rows=2"));
 
     let repaired = store::fsck(&db, true).unwrap();
     assert_eq!(repaired.removed_scans, 1);
-    assert_eq!(repaired.removed_findings, 2, "partial findings rows removed with their scan");
+    assert_eq!(
+        repaired.removed_findings, 2,
+        "partial findings rows removed with their scan"
+    );
     assert_eq!(count_rows(&db, "SELECT count(*) FROM findings"), 0);
     assert!(store::fsck(&db, false).unwrap().healthy());
     std::fs::remove_dir_all(&dir).ok();
@@ -210,7 +245,11 @@ fn recovery_b2_orphan_findings_rows_are_detected_and_removed() {
     let repaired = store::fsck(&db, true).unwrap();
     assert_eq!(repaired.removed_findings, 1);
     assert_eq!(repaired.removed_scans, 0);
-    assert_eq!(count_rows(&db, "SELECT count(*) FROM findings"), 4, "healthy scan's rows kept");
+    assert_eq!(
+        count_rows(&db, "SELECT count(*) FROM findings"),
+        4,
+        "healthy scan's rows kept"
+    );
     let rows = store::list(&db, None).unwrap();
     assert_eq!(rows.len(), 1, "healthy scan survived the repair");
     assert!(store::fsck(&db, false).unwrap().healthy());
@@ -246,7 +285,10 @@ fn recovery_c_reopen_and_read_after_wal_checkpoint() {
     // Observable WAL behavior: after writes with a connection still open,
     // the -wal file exists and holds frames (WAL mode really is in use).
     let wal_len_before = std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
-    assert!(wal_len_before > 0, "WAL file holds frames after writes (len={wal_len_before})");
+    assert!(
+        wal_len_before > 0,
+        "WAL file holds frames after writes (len={wal_len_before})"
+    );
 
     // Checkpoint: flush the WAL into the main database and truncate it.
     // (The pragma's log/ckpt counters empirically report 0 for these tiny
@@ -267,7 +309,11 @@ fn recovery_c_reopen_and_read_after_wal_checkpoint() {
     // Full close (the -wal file is removed by SQLite on last close) and a
     // completely fresh reopen — read everything back.
     let rows = store::list(&db, None).unwrap();
-    assert_eq!(rows.len(), 3, "all three scans readable after checkpoint + reopen");
+    assert_eq!(
+        rows.len(),
+        3,
+        "all three scans readable after checkpoint + reopen"
+    );
     for (i, r) in rows.iter().enumerate() {
         assert_eq!(r.finding_count, 4);
         assert_eq!(r.severity_warning, 4);
@@ -279,7 +325,9 @@ fn recovery_c_reopen_and_read_after_wal_checkpoint() {
     assert_eq!(report.findings_rows, 12);
 
     let conn = Connection::open(&db).unwrap();
-    let integrity: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).unwrap();
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(integrity, "ok");
     drop(conn);
     std::fs::remove_dir_all(&dir).ok();
@@ -314,5 +362,8 @@ fn full_lifecycle_round_trip_on_tiny_ws_scan() {
 
 /// The list line is deterministic and carries id/workspace/date/counts.
 fn list_line_matches(line: &str) -> bool {
-    line.contains("1") && line.contains("tiny-ws") && line.contains("2026-09-18T13:28:56Z") && line.contains("v1")
+    line.contains("1")
+        && line.contains("tiny-ws")
+        && line.contains("2026-09-18T13:28:56Z")
+        && line.contains("v1")
 }

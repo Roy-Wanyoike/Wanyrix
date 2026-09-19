@@ -197,7 +197,11 @@ impl std::fmt::Display for EngineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EngineError::PathNotFound(p) => {
-                write!(f, "scan path does not exist or is not a directory: {}", p.display())
+                write!(
+                    f,
+                    "scan path does not exist or is not a directory: {}",
+                    p.display()
+                )
             }
             EngineError::NoManifests(p) => {
                 write!(f, "no Cargo.toml manifests found under: {}", p.display())

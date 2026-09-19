@@ -72,7 +72,12 @@ fn cli_ingest_redacts_and_counts_end_to_end() {
             ])
             .output()
             .expect("run telemetry ingest");
-        assert_eq!(status.status.code(), Some(0), "stderr: {}", String::from_utf8_lossy(&status.stderr));
+        assert_eq!(
+            status.status.code(),
+            Some(0),
+            "stderr: {}",
+            String::from_utf8_lossy(&status.stderr)
+        );
     }
 
     let report: Value = serde_json::from_str(&std::fs::read_to_string(&output).unwrap()).unwrap();
@@ -86,7 +91,10 @@ fn cli_ingest_redacts_and_counts_end_to_end() {
     assert_eq!(summary["malformedLines"], 1);
     assert_eq!(summary["errors"], 1);
     assert_eq!(summary["warnings"], 1);
-    assert_eq!(summary["distinctCodes"], 1, "the raw warning carries code: null — not a distinct code");
+    assert_eq!(
+        summary["distinctCodes"], 1,
+        "the raw warning carries code: null — not a distinct code"
+    );
     assert_eq!(summary["noCode"], 1);
 
     // Redaction contract: nothing sensitive survives anywhere in the file.
@@ -102,7 +110,10 @@ fn cli_ingest_redacts_and_counts_end_to_end() {
     ] {
         assert!(!raw.contains(secret), "LEAK in report: {secret}");
     }
-    assert_eq!(report["byFile"][0]["file"], "lib.rs", "sorted file counts (BTreeMap order)");
+    assert_eq!(
+        report["byFile"][0]["file"], "lib.rs",
+        "sorted file counts (BTreeMap order)"
+    );
     assert_eq!(report["byFile"][1]["file"], "main.rs");
     assert_eq!(report["byFile"].as_array().unwrap().len(), 2);
 
@@ -111,14 +122,26 @@ fn cli_ingest_redacts_and_counts_end_to_end() {
     assert!(diag0.get("rendered").is_none());
     assert!(diag0["spans"][0].get("text").is_none());
     assert!(diag0["spans"][0].get("suggested_replacement").is_none());
-    assert!(diag0["spans"][0]["file"].as_str().unwrap().ends_with("main.rs"), "basename by default");
-    assert!(!diag0["spans"][0]["file"].as_str().unwrap().contains('/'), "basename carries no directory");
+    assert!(
+        diag0["spans"][0]["file"]
+            .as_str()
+            .unwrap()
+            .ends_with("main.rs"),
+        "basename by default"
+    );
+    assert!(
+        !diag0["spans"][0]["file"].as_str().unwrap().contains('/'),
+        "basename carries no directory"
+    );
     assert!(diag0["children"][0]["message"]
         .as_str()
         .unwrap()
         .contains("Bearer [redacted"));
     assert!(report["redaction"]["secretsScrubbed"].as_u64().unwrap() >= 3);
-    assert_eq!(report["redaction"]["policy"], "wanyrix.telemetry-redaction/v1");
+    assert_eq!(
+        report["redaction"]["policy"],
+        "wanyrix.telemetry-redaction/v1"
+    );
 
     // Determinism: identical input ⇒ identical file except generatedAt.
     let raw_a = std::fs::read_to_string(&output).unwrap();
@@ -163,8 +186,14 @@ fn cli_flags_summary_only_and_keep_paths_and_stdin() {
         .unwrap();
     assert_eq!(status.status.code(), Some(0));
     let report: Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
-    assert!(report.get("diagnostics").is_none(), "summary-only omits the array");
-    assert_eq!(report["summary"]["diagnosticLines"], 2, "counts still measured");
+    assert!(
+        report.get("diagnostics").is_none(),
+        "summary-only omits the array"
+    );
+    assert_eq!(
+        report["summary"]["diagnosticLines"], 2,
+        "counts still measured"
+    );
 
     // --keep-paths: full paths survive, snippets still do not.
     let out = tmp("paths");
@@ -185,7 +214,10 @@ fn cli_flags_summary_only_and_keep_paths_and_stdin() {
     assert_eq!(report["redaction"]["pathsReduced"], false);
     let raw = std::fs::read_to_string(&out).unwrap();
     assert!(raw.contains("/home/z/workspaces/hidden-project/src/main.rs"));
-    assert!(!raw.contains("secretvalue"), "--keep-paths never restores snippets");
+    assert!(
+        !raw.contains("secretvalue"),
+        "--keep-paths never restores snippets"
+    );
 
     // stdin (`-`): report goes to stdout.
     use std::io::Write as _;
@@ -195,7 +227,12 @@ fn cli_flags_summary_only_and_keep_paths_and_stdin() {
         .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.as_mut().unwrap().write_all(stream().as_bytes()).unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(stream().as_bytes())
+        .unwrap();
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(0));
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
@@ -204,7 +241,12 @@ fn cli_flags_summary_only_and_keep_paths_and_stdin() {
 
     // A missing input file is an honest error (exit 2), never empty output.
     let status = Command::new(env!("CARGO_BIN_EXE_wanyrix"))
-        .args(["telemetry", "ingest", "--input", "/wanyrix/no/such/stream.jsonl"])
+        .args([
+            "telemetry",
+            "ingest",
+            "--input",
+            "/wanyrix/no/such/stream.jsonl",
+        ])
         .output()
         .unwrap();
     assert_eq!(status.status.code(), Some(2));

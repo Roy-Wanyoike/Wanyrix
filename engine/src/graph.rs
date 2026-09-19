@@ -31,8 +31,7 @@ pub fn strongly_connected_components(crates: &[CrateInfo], edges: &[Edge]) -> Ve
     names.sort_unstable();
     names.dedup();
 
-    let index_of: BTreeMap<&str, usize> =
-        names.iter().enumerate().map(|(i, n)| (*n, i)).collect();
+    let index_of: BTreeMap<&str, usize> = names.iter().enumerate().map(|(i, n)| (*n, i)).collect();
     let n = names.len();
 
     // adjacency: node index -> sorted target indexes
@@ -112,8 +111,7 @@ pub fn strongly_connected_components(crates: &[CrateInfo], edges: &[Edge]) -> Ve
 
     let mut out = Vec::new();
     for comp in sccs {
-        let is_cycle = comp.len() > 1
-            || comp.len() == 1 && adj[comp[0]].contains(&comp[0]);
+        let is_cycle = comp.len() > 1 || comp.len() == 1 && adj[comp[0]].contains(&comp[0]);
         if !is_cycle {
             continue;
         }
@@ -216,7 +214,10 @@ pub fn build_graph(scan: &WorkspaceScan) -> Graph {
     // edge list. fanIn/fanOut are degrees over exactly this list.
     let mut served: Vec<GraphEdge> = Vec::new();
     for e in scan.edges.iter() {
-        let candidate = GraphEdge { from: e.from.clone(), to: e.to.clone() };
+        let candidate = GraphEdge {
+            from: e.from.clone(),
+            to: e.to.clone(),
+        };
         if !served.contains(&candidate) {
             served.push(candidate);
         }
@@ -266,7 +267,10 @@ pub fn build_graph(scan: &WorkspaceScan) -> Graph {
     }
     nodes.sort_by(|a, b| a.id.cmp(&b.id));
 
-    Graph { nodes, edges: served }
+    Graph {
+        nodes,
+        edges: served,
+    }
 }
 
 /// Reverse-reachability closure over `dependents` (who transitively depends
@@ -371,7 +375,11 @@ mod tests {
             std::fs::write(d.join("Cargo.toml"), manifest).unwrap();
             std::fs::write(d.join("src").join("lib.rs"), "//\n").unwrap();
         }
-        std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"alpha\", \"beta\", \"delta\"]\n").unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"alpha\", \"beta\", \"delta\"]\n",
+        )
+        .unwrap();
         let scan = scan_workspace(&dir).unwrap();
         let g = build_graph(&scan);
         let alpha = g.nodes.iter().find(|n| n.id == "alpha").unwrap();
@@ -394,7 +402,11 @@ mod tests {
             .unwrap();
             std::fs::write(d.join("src").join("lib.rs"), "//\n").unwrap();
         }
-        std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"x\", \"y\"]\n").unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"x\", \"y\"]\n",
+        )
+        .unwrap();
         let scan = scan_workspace(&dir).unwrap();
         let g = build_graph(&scan);
         assert_eq!(g.nodes.len(), 1);
