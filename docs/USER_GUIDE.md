@@ -91,14 +91,22 @@ with explicit approval semantics (Gate 19: new-proposal, no fabricated removals)
 - Offline: the entire deterministic core works; status pill shows *offline* (browser
   connectivity only). AI explain falls back to deterministic answers.
 - Online: AI explanations become available; nothing else changes.
-- **Synchronization / Cloud history: Roadmap** (disabled today).
+- **Synchronization**: scan runs also sync to the optional durable server log
+  (below). Everything else stays local-first.
 
 ## History & runtime
 
 - **History**: scan run log persisted locally (`wanyrix.scan-history/v1` exports — in-app
   download, and `GET /api/wanyrix/report?flavor=scan-history&ws=…` over HTTP; the
-  server-side log there is honestly empty because runs live in *your* browser's
+  report-flavor server log there is honestly empty because runs live in *your* browser's
   localStorage, and durations are never fabricated).
+- **Durable server sync**: every completed run is also fire-and-forget POSTed to
+  `POST /api/wanyrix/scan-runs` (`wanyrix.scan-runs/v1`) — an idempotent, durable
+  SQLite log that survives browser wipes. The History view's *Durable server sync*
+  panel shows both sides (browser log with per-run `synced / syncing / failed /
+  not synced` badges ↔ server log verbatim) and offers a **Sync unsynced** backfill
+  action. The server stores exactly what your browser measured and POSTed — it never
+  fabricates runs (Gate 21), and a sync failure never blocks or loses a local run.
 - **Runtime**: captured async request profile + local engine signals. If a signal is not
   instrumented, the view says so honestly (tracked AUDIT-I8) — no fabricated telemetry.
 

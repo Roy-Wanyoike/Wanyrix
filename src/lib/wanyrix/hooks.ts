@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient, UseMutationResult } from '@tanstack/react-query'
 import type {
   DiagnosticsPayload,
@@ -20,6 +20,7 @@ import type {
 } from './types'
 import { useWorkspaceStore } from './workspace-store'
 import { useScanStore, type ScanRunInput, type ScanRunRecord } from './scan-store'
+import { useSyncStatusStore } from './sync-status-store'
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -215,6 +216,164 @@ export function useReportExport(format: ReportFormat = 'markdown') {
   })
 }
 
+/* ----------------------------------------------------- durable server log */
+
+/** One persisted run in the server-side durable log (`wanyrix.scan-runs/v1`). */
+export interface ServerScanRun {
+  id: string
+  workspaceId: string
+  startedAt: number
+  finishedAt: number
+  durationMs: number
+  findingCount: number
+  severityCounts: { critical: number; warning: number; info: number }
+  trigger: string
+  syncedAt: string // ISO — when the server received the POST
+}
+
+/** GET /api/wanyrix/scan-runs envelope. */
+export interface ServerScanRunsPayload {
+  schema: string
+  workspace: string
+  count: number
+  note: string
+  runs: ServerScanRun[]
+}
+
+/**
+ * The durable server-side scan-run log for the ACTIVE workspace — SQLite
+ * rows synced from real browser sessions (POST /api/wanyrix/scan-runs).
+ * The server NEVER fabricates runs (Gate 21): empty `runs` means nothing
+ * has been synced, not a failure.
+ */
+export function useServerScanRuns() {
+  const ws = useActiveWorkspace()
+  return useQuery<ServerScanRunsPayload>({
+    queryKey: ['scan-runs-server', ws],
+    queryFn: () => getJson(`/api/wanyrix/scan-runs?ws=${encodeURIComponent(ws)}`),
+  })
+}
+
+/** Joined per-run sync state — combines session POSTs with the server log. */
+export type RunSyncState = 'synced' | 'pending' | 'failed' | 'unsynced'
+
+export interface ScanRunSync {
+  /** local runs for the active workspace (newest first) */
+  runs: ScanRunRecord[]
+  /** joined sync state of one local run id */
+  stateOf: (id: string) => RunSyncState
+  /** how many local runs are confirmed on the server */
+  syncedCount: number
+  /** durable server log query (rows, count, loading/error state) */
+  server: ReturnType<typeof useServerScanRuns>
+}
+
+/**
+ * Joins the browser-local run log with the durable server log into per-run
+ * sync states:
+ *   - `synced`   — this session's POST confirmed it, OR the server log lists it
+ *   - `pending`  — this session's POST is in flight
+ *   - `failed`   — this session's POST failed (run stays safe locally)
+ *   - `unsynced` — recorded before sync existed / POST never succeeded; NOT
+ *                  derivable as failure — offer the backfill action instead
+ */
+export function useScanRunSync(): ScanRunSync {
+  const ws = useActiveWorkspace()
+  // Select the stable map reference and derive the per-ws list in useMemo —
+  // selecting `runs[ws] ?? []` directly would allocate a new array per
+  // snapshot call (missing key) and trip React's getSnapshot cache check.
+  const runsMap = useScanStore((s) => s.runs)
+  const runs = useMemo(() => runsMap[ws] ?? [], [runsMap, ws])
+  const sessionStatus = useSyncStatusStore((s) => s.status)
+  const server = useServerScanRuns()
+
+  const serverIds = useMemo(
+    () => new Set(server.data?.runs.map((r) => r.id) ?? []),
+    [server.data],
+  )
+
+  const stateOf = useCallback(
+    (id: string): RunSyncState => {
+      const s = sessionStatus[id]
+      if (s === 'pending') return 'pending'
+      if (s === 'failed') return 'failed'
+      if (s === 'synced' || serverIds.has(id)) return 'synced'
+      return 'unsynced'
+    },
+    [sessionStatus, serverIds],
+  )
+
+  const syncedCount = useMemo(
+    () => runs.filter((r) => stateOf(r.id) === 'synced').length,
+    [runs, stateOf],
+  )
+
+  return { runs, stateOf, syncedCount, server }
+}
+
+export interface SyncRunsResponse {
+  schema: string
+  run: ServerScanRun
+}
+
+/** POST one local run to the durable server log (idempotent upsert by id). */
+async function postScanRun(run: ScanRunRecord): Promise<SyncRunsResponse> {
+  const res = await fetch('/api/wanyrix/scan-runs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(run),
+  })
+  if (!res.ok) throw new Error(`scan-runs sync → ${res.status}`)
+  return res.json() as Promise<SyncRunsResponse>
+}
+
+export interface BackfillResult {
+  synced: number
+  failed: number
+}
+
+/**
+ * Backfills every `unsynced` local run into the durable server log — the
+ * manual recovery path for runs recorded before sync existed or whose
+ * fire-and-forget POST failed. Only runs still missing from the server log
+ * are POSTed (idempotent upsert makes retries safe). Session status is
+ * updated per run; the server-log query is invalidated once at the end.
+ */
+export function useBackfillScanRuns(): UseMutationResult<BackfillResult, Error, void> {
+  const ws = useActiveWorkspace()
+  const queryClient = useQueryClient()
+  return useMutation<BackfillResult, Error, void>({
+    mutationFn: async () => {
+      const runs = useScanStore.getState().runs[ws] ?? []
+      const serverIds = new Set(
+        (queryClient.getQueryData<ServerScanRunsPayload>(['scan-runs-server', ws])?.runs ?? []).map(
+          (r) => r.id,
+        ),
+      )
+      const sync = useSyncStatusStore.getState()
+      let synced = 0
+      let failed = 0
+      for (const run of runs) {
+        const s = sync.status[run.id]
+        if (s === 'synced' || s === 'pending' || serverIds.has(run.id)) continue
+        sync.markPending(run.id)
+        try {
+          await postScanRun(run)
+          useSyncStatusStore.getState().markSynced(run.id)
+          synced += 1
+        } catch {
+          useSyncStatusStore.getState().markFailed(run.id)
+          failed += 1
+        }
+      }
+      return { synced, failed }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['scan-runs-server', ws] })
+    },
+  })
+}
+
 /* ------------------------------------------------------ scan-run recording */
 
 /** Input of {@link useRecordScanRun} — run figures only, workspace folded in. */
@@ -230,7 +389,10 @@ export type RecordScanRunInput = Omit<ScanRunInput, 'workspaceId'>
  * — the optional durable server log. This NEVER blocks or fails the UI: the
  * browser-local log stays the source of truth, and a sync failure is silent
  * (the run remains recorded locally). The server persists exactly what was
- * measured and sent — it never fabricates runs (Gate 21).
+ * measured and sent — it never fabricates runs (Gate 21). The POST outcome is
+ * mirrored into the ephemeral sync-status store (`sync-status-store.ts`) so
+ * the History view can badge runs synced/pending/failed; cross-session truth
+ * is always re-derived from the server log itself (`useServerScanRuns`).
  *
  * STORE-API-ONLY contract: this hook deliberately does no UI wiring — the
  * "Run scan" action lives in the app shell / doctor view (component-layer
@@ -242,19 +404,24 @@ export type RecordScanRunInput = Omit<ScanRunInput, 'workspaceId'>
 export function useRecordScanRun(): (input: RecordScanRunInput) => ScanRunRecord {
   const recordScanRun = useScanStore((s) => s.recordScanRun)
   const activeWs = useWorkspaceStore((s) => s.active)
+  const queryClient = useQueryClient()
   return useCallback(
     (input) => {
       const record = recordScanRun({ trigger: 'manual', ...input, workspaceId: activeWs })
       if (typeof window !== 'undefined') {
-        void fetch('/api/wanyrix/scan-runs', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(record),
-        }).catch(() => {}) // fire-and-forget: local log is the source of truth
+        useSyncStatusStore.getState().markPending(record.id)
+        void postScanRun(record)
+          .then(() => {
+            useSyncStatusStore.getState().markSynced(record.id)
+            void queryClient.invalidateQueries({ queryKey: ['scan-runs-server', activeWs] })
+          })
+          .catch(() => {
+            useSyncStatusStore.getState().markFailed(record.id)
+          })
       }
       return record
     },
-    [recordScanRun, activeWs],
+    [recordScanRun, activeWs, queryClient],
   )
 }
 
