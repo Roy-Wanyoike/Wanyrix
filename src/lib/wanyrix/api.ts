@@ -54,7 +54,7 @@ export function resolveWorkspace(req: NextRequest): { ws: string; error: NextRes
  * header, so consumers can discover the supported methods. Routes export this
  * for every method they do not implement.
  */
-export function methodNotAllowed(allow: 'GET' | 'POST'): NextResponse {
+export function methodNotAllowed(allow: string): NextResponse {
   return NextResponse.json(
     { error: `method not allowed — allowed: ${allow}` },
     { status: 405, headers: { Allow: allow } },

@@ -1,8 +1,11 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Wanyrix application schema.
+//
+// The web platform is local-first: the UI's source of truth for scan history
+// is per-browser localStorage (src/lib/wanyrix/scan-store.ts). This database
+// is the OPTIONAL durable sync target — completed scan runs are fire-and-
+// forget POSTed to /api/wanyrix/scan-runs and served back verbatim. The
+// server never invents runs, durations, or figures (Gate 21): every row here
+// was measured in a real browser session and POSTed by it.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +16,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+/// One completed doctor-scan run, synced from the web client.
+/// Shape mirrors `ScanRunRecord` (src/lib/wanyrix/scan-store.ts) key-for-key;
+/// `id` is the client's deterministic `run-<seq>-<startedAt>` so retries are
+/// idempotent (upsert).
+model ScanRun {
+  id           String   @id
+  workspaceId  String
+  startedAt    DateTime // epoch ms from the client, stored as DateTime
+  finishedAt   DateTime
+  durationMs   Int // measured wall clock (finishedAt − startedAt), client-side
+  findingCount Int
+  critical     Int
+  warning      Int
+  info         Int
+  trigger      String   @default("manual") // manual | topbar | palette
+  syncedAt     DateTime @default(now()) // when the server received it
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@index([workspaceId, startedAt])
 }

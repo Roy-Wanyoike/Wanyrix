@@ -118,8 +118,11 @@ describe('client scan-history export — single source with the HTTP flavor (Tas
   test('server honesty note is byte-for-byte unchanged by the consolidation', () => {
     // Golden string — proves the envelope-helper refactor did not touch the
     // served flavor (the API contract test also asserts its "empty" wording).
+    // Updated when the durable server log (wanyrix.scan-runs/v1) shipped: the
+    // export log stays empty by contract, and the note now says where synced
+    // runs actually live instead of claiming no server log exists at all.
     expect(SERVER_SCAN_HISTORY_NOTE).toBe(
-      'Server-side scan log. Run entries mirror the client exporter exactly (id, at, trigger, findings, critical, warning, info, buildTimeSeconds, estimatedFromSeconds, estimatedToSeconds, wallClockMs). Scan runs are recorded client-side per browser (localStorage) in this demo, so the server log is empty — no runs are fabricated; figures mirror the doctor payload when present (Gate 21: measured vs estimated labeled per run).',
+      'Server-side scan log. Run entries mirror the client exporter exactly (id, at, trigger, findings, critical, warning, info, buildTimeSeconds, estimatedFromSeconds, estimatedToSeconds, wallClockMs). Scan runs are recorded client-side per browser (localStorage) in this demo, so THIS export log stays empty — runs synced to the durable server log are served by GET /api/wanyrix/scan-runs (wanyrix.scan-runs/v1) and are never merged or fabricated here (Gate 21: measured vs estimated labeled per run).',
     )
     expect(buildScanHistoryFlavor(WS, FROZEN_NOW).note).toBe(SERVER_SCAN_HISTORY_NOTE)
   })

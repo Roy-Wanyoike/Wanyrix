@@ -22,10 +22,13 @@ import { createMigratingStorage } from './legacy-migration'
  * `wanyrix.scan-store` key, capped at 50 runs (oldest evicted) with
  * deterministic ids (`run-<count>-<startedAt>`). The UI trigger wiring is
  * owned by the component layer; this module only exposes the store API
- * (`recordScanRun`) + the `useRecordScanRun()` hook in hooks.ts. Server-side,
- * the `wanyrix.scan-history/v1` flavor stays honestly EMPTY — these local
- * runs are per-browser data and are never fabricated into the HTTP response
- * (see flavors.ts).
+ * (`recordScanRun`) + the `useRecordScanRun()` hook in hooks.ts (which also
+ * fire-and-forget syncs each run to the durable server log,
+ * `GET/POST /api/wanyrix/scan-runs` → `wanyrix.scan-runs/v1` — see hooks.ts).
+ * Server-side, the `wanyrix.scan-history/v1` EXPORT flavor stays honestly
+ * EMPTY — these local runs are per-browser data and are never fabricated into
+ * that HTTP response (see flavors.ts); the durable server log only ever
+ * contains runs the client explicitly POSTed.
  */
 
 export type ScanTrigger = 'manual' | 'topbar' | 'palette'

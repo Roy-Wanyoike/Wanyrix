@@ -225,6 +225,13 @@ export type RecordScanRunInput = Omit<ScanRunInput, 'workspaceId'>
  * persisted scan-run log (Task 3-b: zustand persist, `wanyrix.scan-store`
  * key, capped at 50 runs, deterministic `run-<count>-<startedAt>` ids).
  *
+ * SERVER SYNC (additive): after the local record lands, the run is also
+ * fire-and-forget POSTed to `/api/wanyrix/scan-runs` (`wanyrix.scan-runs/v1`)
+ * — the optional durable server log. This NEVER blocks or fails the UI: the
+ * browser-local log stays the source of truth, and a sync failure is silent
+ * (the run remains recorded locally). The server persists exactly what was
+ * measured and sent — it never fabricates runs (Gate 21).
+ *
  * STORE-API-ONLY contract: this hook deliberately does no UI wiring — the
  * "Run scan" action lives in the app shell / doctor view (component-layer
  * ownership). Call it once at scan completion with the measured figures;
@@ -236,7 +243,17 @@ export function useRecordScanRun(): (input: RecordScanRunInput) => ScanRunRecord
   const recordScanRun = useScanStore((s) => s.recordScanRun)
   const activeWs = useWorkspaceStore((s) => s.active)
   return useCallback(
-    (input) => recordScanRun({ trigger: 'manual', ...input, workspaceId: activeWs }),
+    (input) => {
+      const record = recordScanRun({ trigger: 'manual', ...input, workspaceId: activeWs })
+      if (typeof window !== 'undefined') {
+        void fetch('/api/wanyrix/scan-runs', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(record),
+        }).catch(() => {}) // fire-and-forget: local log is the source of truth
+      }
+      return record
+    },
     [recordScanRun, activeWs],
   )
 }
