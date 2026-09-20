@@ -234,13 +234,23 @@ pub fn git_facts(scan: &WorkspaceScan) -> Result<GitReport, EngineError> {
 
     // Map changed files onto scanned crate roots (crate_root is a relative
     // forward-slash path; a file belongs to the crate when it IS the root
-    // or lives under it).
+    // or lives under it). A crate rooted AT the scan root (`rel_forward`
+    // yields "" for it; "." is the same case spelled defensively) owns
+    // every changed file inside the scan root — paths beginning with `../`
+    // live outside the analyzed set and map to no crate.
     let mut crate_changes = Vec::new();
     for c in &scan.crates {
-        let prefix = format!("{}/", c.crate_root);
+        let at_scan_root = c.crate_root.is_empty() || c.crate_root == ".";
+        let is_rooted_here = |f: &str| -> bool {
+            if at_scan_root {
+                !f.starts_with("../")
+            } else {
+                f == c.crate_root || f.starts_with(&format!("{}/", c.crate_root))
+            }
+        };
         let n = changed_files_count_all(&entries)
             .into_iter()
-            .filter(|f| *f == c.crate_root || f.starts_with(&prefix))
+            .filter(|f| is_rooted_here(f))
             .count();
         if n > 0 {
             crate_changes.push(CrateChange {
@@ -476,6 +486,34 @@ mod tests {
             rest.starts_with('"') && rest.ends_with("\"}"),
             "generatedAt must be the last field, got: {rest}"
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn crate_rooted_at_scan_root_maps_changed_files() {
+        // A repo whose ROOT manifest is itself the package (crate_root "."):
+        // `git status` paths relative to the scan root must map onto it.
+        let dir =
+            std::env::temp_dir().join(format!("wanyrix-git-rootcrate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        run_git(&dir, &["init", "-q", "-b", "main"]);
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"rootcrate\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("src/lib.rs"), "pub fn a() {}\n").unwrap();
+        run_git(&dir, &["add", "."]);
+        run_git(&dir, &["commit", "-q", "-m", "root crate"]);
+        std::fs::write(dir.join("src/lib.rs"), "pub fn a() {}\npub fn b() {}\n").unwrap();
+
+        let scan = scan_workspace(&dir).unwrap();
+        let r = git_facts(&scan).unwrap();
+        assert_eq!(r.changed_files_count, 1);
+        assert_eq!(r.changed_crates.len(), 1);
+        assert_eq!(r.changed_crates[0].crate_name, "rootcrate");
+        assert_eq!(r.changed_crates[0].changed_files, 1);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
