@@ -2,7 +2,18 @@
 
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Download, FileJson, FileText, History, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  Copy,
+  Check,
+  Download,
+  FileJson,
+  FileText,
+  GitCompare,
+  History,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -21,6 +32,7 @@ import {
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { cn } from '@/lib/utils'
 import { MeasurementBadge, Panel } from './shared'
+import { ScanComparePanel } from './scan-compare'
 
 const TRIGGER_LABEL: Record<ScanHistoryEntry['trigger'], string> = {
   manual: 'doctor view',
@@ -35,6 +47,14 @@ const TIME_FMT = new Intl.DateTimeFormat('en-GB', {
 })
 
 type TrendMetric = 'findings' | 'duration'
+type TriggerFilter = 'all' | ScanHistoryEntry['trigger']
+
+const TRIGGER_FILTERS: { key: TriggerFilter; label: string }[] = [
+  { key: 'all', label: 'all' },
+  { key: 'manual', label: 'doctor view' },
+  { key: 'topbar', label: 'topbar' },
+  { key: 'palette', label: '⌘K' },
+]
 
 function downloadBlob(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime })
@@ -86,17 +106,65 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
   const clearHistory = useScanStore((s) => s.clearHistory)
   const { toast } = useToast()
   const [metric, setMetric] = useState<TrendMetric>('findings')
+  const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>('all')
+  const [compareMode, setCompareMode] = useState(false)
+  const [baseId, setBaseId] = useState<string | null>(null)
+  const [targetId, setTargetId] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const history = useMemo(() => historyMap[activeWs] ?? [], [historyMap, activeWs])
 
+  const filtered = useMemo(
+    () => (triggerFilter === 'all' ? history : history.filter((h) => h.trigger === triggerFilter)),
+    [history, triggerFilter],
+  )
+  const base = useMemo(() => history.find((h) => h.id === baseId) ?? null, [history, baseId])
+  const target = useMemo(() => history.find((h) => h.id === targetId) ?? null, [history, targetId])
+
   const TREND_RUNS = 14
-  const trend = useMemo(() => history.slice(0, TREND_RUNS).reverse(), [history]) // oldest → newest for the bars
-  const maxFindings = Math.max(1, ...history.map((h) => h.findings))
-  const maxDuration = Math.max(1, ...history.map((h) => h.durationMs))
-  const avgDuration = history.length
-    ? history.reduce((acc, h) => acc + h.durationMs, 0) / history.length
+  const trend = useMemo(() => filtered.slice(0, TREND_RUNS).reverse(), [filtered]) // oldest → newest for the bars
+  const maxFindings = Math.max(1, ...filtered.map((h) => h.findings))
+  const maxDuration = Math.max(1, ...filtered.map((h) => h.durationMs))
+  const avgDuration = filtered.length
+    ? filtered.reduce((acc, h) => acc + h.durationMs, 0) / filtered.length
     : 0
   const barValue = (h: ScanHistoryEntry) => (metric === 'findings' ? h.findings : h.durationMs)
   const barMax = metric === 'findings' ? maxFindings : maxDuration
+
+  const copyRunId = (id: string) => {
+    if (!navigator.clipboard) {
+      toast({ title: 'Copy failed', description: 'Clipboard is not available in this context.' })
+      return
+    }
+    navigator.clipboard.writeText(id).then(() => {
+      setCopiedId(id)
+      window.setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1400)
+      toast({ title: 'Run id copied', description: id })
+    })
+  }
+
+  /* A/B selection: first pick = A, second = B; further picks slide the
+     window (old B becomes A). Clicking a selected row removes it. */
+  const toggleSelect = (id: string) => {
+    if (baseId === id) {
+      setBaseId(targetId)
+      setTargetId(null)
+    } else if (targetId === id) {
+      setTargetId(null)
+    } else if (!baseId) {
+      setBaseId(id)
+    } else if (!targetId) {
+      setTargetId(id)
+    } else {
+      setBaseId(targetId)
+      setTargetId(id)
+    }
+  }
+
+  const toggleCompare = () => {
+    setCompareMode((v) => !v)
+    setBaseId(null)
+    setTargetId(null)
+  }
 
   const doExport = (fmt: 'json' | 'md') => {
     const now = new Date()
@@ -131,6 +199,23 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
       actions={
         history.length > 0 ? (
           <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 px-2 text-[10.5px] text-muted-foreground"
+              onClick={toggleCompare}
+              disabled={history.length < 2}
+              aria-pressed={compareMode}
+              title={
+                history.length < 2
+                  ? 'record at least two runs to compare'
+                  : 'compare two runs side by side (measured deltas)'
+              }
+              aria-label="Compare two runs"
+            >
+              <GitCompare className="size-3" />
+              Compare
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -179,19 +264,114 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
           </p>
         </div>
       ) : (
+        <>
+          {compareMode && (
+            <p className="mb-2.5 flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground" aria-live="polite">
+              <GitCompare className="size-3 shrink-0 text-primary" aria-hidden />
+              {base
+                ? target
+                  ? 'pair selected — measured deltas below; click another run to slide the window'
+                  : 'run A picked — now click run B'
+                : 'pick run A, then run B — deltas are computed from what each run recorded'}
+            </p>
+          )}
+          {base && target && (
+            <div className="mb-3">
+              <ScanComparePanel
+                base={base}
+                target={target}
+                onClear={() => {
+                  setBaseId(null)
+                  setTargetId(null)
+                }}
+              />
+            </div>
+          )}
+          <div
+            className="mb-2.5 flex flex-wrap items-center gap-1.5"
+            role="group"
+            aria-label="Filter runs by trigger"
+          >
+            {TRIGGER_FILTERS.map(({ key, label }) => {
+              const count =
+                key === 'all' ? history.length : history.filter((h) => h.trigger === key).length
+              if (key !== 'all' && count === 0) return null
+              const active = triggerFilter === key
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setTriggerFilter(key)}
+                  className={cn(
+                    'rounded border px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-wide transition-colors',
+                    active
+                      ? 'border-primary/40 bg-primary/15 text-primary'
+                      : 'border-border/60 bg-card text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {label} <span className="tabular-nums opacity-70">{count}</span>
+                </button>
+              )
+            })}
+            {triggerFilter !== 'all' && (
+              <span className="ml-auto font-mono text-[9.5px] text-muted-foreground/70">
+                {filtered.length} of {history.length} shown
+              </span>
+            )}
+          </div>
+          {filtered.length === 0 ? (
+            <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-border text-center">
+              <p className="text-xs text-muted-foreground">No runs match this filter.</p>
+            </div>
+          ) : (
         <div className="grid gap-5 lg:grid-cols-[1fr_240px]">
           {/* run rows */}
           <ul className="max-h-[264px] space-y-1.5 overflow-y-auto pr-1">
-            {history.map((h, i) => {
+            {filtered.map((h, i) => {
               const delta = h.buildTime - currentBuildTime
+              const slot = baseId === h.id ? 'A' : targetId === h.id ? 'B' : null
               return (
                 <motion.li
                   key={h.id}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: Math.min(i * 0.03, 0.15), duration: 0.2 }}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-muted/10 px-3 py-2 transition-colors hover:border-border hover:bg-muted/25"
+                  onClick={compareMode ? () => toggleSelect(h.id) : undefined}
+                  role={compareMode ? 'button' : undefined}
+                  tabIndex={compareMode ? 0 : undefined}
+                  aria-pressed={compareMode ? slot !== null : undefined}
+                  onKeyDown={
+                    compareMode
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleSelect(h.id)
+                          }
+                        }
+                      : undefined
+                  }
+                  className={cn(
+                    'group flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-muted/10 px-3 py-2 transition-colors hover:border-border hover:bg-muted/25',
+                    compareMode && 'cursor-pointer focus-visible:outline focus-visible:outline-primary/60',
+                    slot === 'A' &&
+                      'border-primary/50 bg-primary/10 hover:border-primary/60 hover:bg-primary/15',
+                    slot === 'B' &&
+                      'border-teal-400/50 bg-teal-400/10 hover:border-teal-400/60 hover:bg-teal-400/15',
+                  )}
                 >
+                  {slot && (
+                    <span
+                      className={cn(
+                        'inline-flex size-4 shrink-0 items-center justify-center rounded border font-mono text-[8.5px] font-bold',
+                        slot === 'A'
+                          ? 'border-primary/40 bg-primary/15 text-primary'
+                          : 'border-teal-400/40 bg-teal-400/15 text-teal-300',
+                      )}
+                    >
+                      {slot}
+                    </span>
+                  )}
                   <span className="font-mono text-[11px] tabular-nums text-foreground/80">
                     {TIME_FMT.format(h.at)}
                   </span>
@@ -218,6 +398,22 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
                   <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground/70">
                     {(h.durationMs / 1000).toFixed(1)}s wall clock
                   </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      copyRunId(h.id)
+                    }}
+                    className="rounded p-1 text-muted-foreground/50 opacity-0 transition-all hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    aria-label={`Copy run id ${h.id}`}
+                    title={h.id}
+                  >
+                    {copiedId === h.id ? (
+                      <Check className="size-3 text-teal-300" aria-hidden />
+                    ) : (
+                      <Copy className="size-3" aria-hidden />
+                    )}
+                  </button>
                   {Math.abs(delta) > 0.05 && (
                     <MeasurementBadge status={delta < 0 ? 'measured' : 'estimated'} />
                   )}
@@ -286,12 +482,14 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
               <span>last {trend.length} runs</span>
               <span className="tabular-nums">
                 {metric === 'findings'
-                  ? `${history[0]?.findings ?? 0} latest · peak ${maxFindings}`
+                  ? `${filtered[0]?.findings ?? 0} latest · peak ${maxFindings}`
                   : `${(avgDuration / 1000).toFixed(1)}s avg · ${(maxDuration / 1000).toFixed(1)}s peak`}
               </span>
             </div>
           </div>
         </div>
+          )}
+        </>
       )}
       {history.length > 0 && (
         <p className="mt-3 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">

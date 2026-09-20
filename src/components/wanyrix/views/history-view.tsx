@@ -24,7 +24,7 @@ export default function HistoryView(_: ViewProps) {
       <SectionHeading
         eyebrow="Run Log"
         title="History"
-        description="Per-workspace `wanyrix doctor` run log — persisted locally in your browser (capped at 20 runs per workspace, exportable as JSON or Markdown) and optionally synced to the durable server log."
+        description="Per-workspace `wanyrix doctor` run log — persisted locally in your browser (capped at 20 runs per workspace, filterable by trigger, run-to-run comparable, exportable as JSON or Markdown) and optionally synced to the durable server log."
       />
       <HistoryBody />
     </div>
