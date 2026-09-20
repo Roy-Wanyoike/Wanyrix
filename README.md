@@ -212,7 +212,7 @@ This repository is built the way it asks you to build software — with verifiab
 | [CLI contract](docs/CLI.md) | [Engine README](engine/README.md) | [Engine benchmarks](engine/BENCHMARKS.md) |
 | [Performance](docs/PERFORMANCE.md) | [Security](docs/SECURITY.md) | [Privacy](docs/PRIVACY.md) |
 | [Development](docs/DEVELOPMENT.md) | [Contributing](docs/CONTRIBUTING.md) | [Issue tracker](https://github.com/Roy-Wanyoike/wanyrix/issues) |
-| [Cloud design (issue #61)](docs/CLOUD_DESIGN.md) | | |
+| [Cloud design (issue #61)](docs/CLOUD_DESIGN.md) | [Plugins & events (issue #63)](docs/PLUGIN_AND_EVENTS.md) | |
 
 ## Roadmap
 

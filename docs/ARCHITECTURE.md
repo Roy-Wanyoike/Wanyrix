@@ -39,10 +39,11 @@ Next.js 16 (App Router) · TypeScript · Tailwind 4 · shadcn/ui · TanStack Que
   AUDIT-I1's P0 bug: the storage *thunk* must be passed, not invoked).
 - Server data is fetched with TanStack Query (`hooks.ts`); no duplicate fetch caches.
 
-## API routes (13, under `src/app/api/wanyrix/`)
+## API routes (18, under `src/app/api/wanyrix/`)
 
-`diagnostics` · `doctor` · `experiments` · `explain` · `gates` · `graph` · `health` ·
-`impact` · `issues` · `pr` · `report` · `storage` · `workspaces`
+`diagnostics` · `doctor` · `engine/build` · `engine/doctor` · `experiments` · `explain` · `gates` ·
+`graph` · `health` · `impact` · `issues` · `pr` · `report` · `scan-runs` · `storage` ·
+`storage/rebuild` · `storage/reclaim` · `workspaces`
 
 ### Error semantics
 
