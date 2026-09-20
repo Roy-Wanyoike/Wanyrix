@@ -240,8 +240,8 @@ This repository is built the way it asks you to build software — with verifiab
 | [User Guide](docs/USER_GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [W-EIR schema](docs/W-EIR.md) |
 | [CLI contract](docs/CLI.md) | [Engine README](engine/README.md) | [Engine benchmarks](engine/BENCHMARKS.md) |
 | [Performance](docs/PERFORMANCE.md) | [Security](docs/SECURITY.md) | [Privacy](docs/PRIVACY.md) |
-| [Development](docs/DEVELOPMENT.md) | [Contributing](docs/CONTRIBUTING.md) | [Issue tracker](https://github.com/Roy-Wanyoike/wanyrix/issues) |
-| [Cloud design (issue #61)](docs/CLOUD_DESIGN.md) | [Plugins & events (issue #63)](docs/PLUGIN_AND_EVENTS.md) | |
+| [Development](docs/DEVELOPMENT.md) | [Contributing](docs/CONTRIBUTING.md) | [Commercial model](docs/COMMERCIAL.md) |
+| [Cloud design (issue #61)](docs/CLOUD_DESIGN.md) | [Plugins & events (issue #63)](docs/PLUGIN_AND_EVENTS.md) | [Issue tracker](https://github.com/Roy-Wanyoike/wanyrix/issues) |
 
 ## Roadmap
 
@@ -255,7 +255,9 @@ Roadmap features never destabilize the shipped core. Release decision: **CONDITI
 
 ## Commercial model
 
-**Open core**: the local engine and dashboard are dual-licensed `MIT OR Apache-2.0` — free forever, inspectable, forkable. The planned hosted/cloud offering (Local / Cloud / Team / Enterprise packaging) may be distributed under separate proprietary terms; billing is strictly separated from the local deterministic core. Nothing is billed today.
+**Local-first, cloud-enhanced — never a crippled trial.** The local deterministic product is genuinely excellent and permanently free (`docs/COMMERCIAL.md` is the ratified strategy): unlimited local repositories, the full CLI, the dashboard, experiments, verification, local history, offline operation. Accounts never gate the local product — when the cloud ships, accounts exist only for sync, teams, and governance (90-day Team trial; expiry and cancellation never touch local functionality or data).
+
+Paid tiers (Cloud / Team / Enterprise / API-CI) monetize **collaboration, persistence, scale, governance, and hosted intelligence** — never the analysis of your own source on your own machine. Price points are deliberately unpublished pending customer discovery; the tier structure and value splits are the commitment.
 
 ## Governance & brand history
 

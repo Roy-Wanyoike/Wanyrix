@@ -1,0 +1,105 @@
+# The Wanyrix commercial model — local-first, cloud-enhanced
+
+Status: **maintainer-ratified strategy (2026-09)** — the resolution direction of
+issue #62. Product rule first, tiers second:
+
+> **Install locally. Understand your systems privately. Use it offline.
+> Connect when you want. Pay when you need collaboration, scale, governance,
+> and organizational intelligence.**
+
+## Product rule #1 — local is never a crippled trial
+
+The local deterministic product is **genuinely excellent and permanently
+free** — never a gated demo for the paid tier. A developer who never pays
+loses exactly one thing: cloud sync and team features. Nobody's local
+engineering data is ever withheld, expired, or held hostage. Trust is the
+adoption engine; adoption is the business.
+
+```text
+FREE LOCAL TOOL → developer adoption → repositories analyzed →
+engineering history accumulated → developer sees value →
+cloud synchronization → team adoption → shared intelligence →
+organization policies → fleet intelligence → enterprise
+```
+
+## What is free locally (and always will be)
+
+| Capability | Status |
+| --- | --- |
+| Unlimited local repositories (point the CLI at any Rust workspace) | **shipped** — `wanyrix init/doctor/graph/health/analyze/dependencies` |
+| Cargo & dependency intelligence (edge list, fan-in/out, duplicates, SCC cycles) | **shipped** — `wanyrix.graph/v1`, `wanyrix.dependencies/v1` |
+| W-EIR evidence snapshot + versioned contracts | **shipped** — every `wanyrix.*/v1` envelope |
+| Build analysis — instrumented real `cargo build` (wall clock, cache-hit rate) | **shipped** — `wanyrix build` |
+| Critical-path analysis & blast radius | **shipped** — engine graph + dashboard |
+| Incremental analysis (fingerprint-invalidated daemon cache) | **shipped** — `wanyrix daemon` |
+| Findings with evidence, calibrated confidence | **shipped** — `wanyrix doctor/v1` |
+| Local experiments → measurement → verification (the honesty gate) | **shipped** — `wanyrix experiment` |
+| Durable event receipts + local history | **shipped** — `wanyrix events`, SQLite store (WAL + fsck) |
+| Full offline operation, CLI, local storage | **shipped** — zero network by design |
+| Grounded AI (provider-side, with deterministic fallback) | **shipped** — web `/explain` |
+| **Local** AI models (e.g. Ollama-class — "your repo stays local, your model runs locally") | designed — provider abstraction already isolates the AI layer |
+| Git intelligence (evidence sourcing from history) | designed — findings evidence schema already names git sources |
+
+## The tiers
+
+| Product | Price direction | Main value |
+| --- | --- | --- |
+| **Wanyrix Local** | **Free forever** | Individual/offline engineering intelligence |
+| **Wanyrix Cloud** | Low monthly (to be validated) | Sync, cross-machine history, hosted dashboards, hosted AI, backup |
+| **Wanyrix Team** | Per engineer/month (to be validated) | Shared repositories/findings/dashboards, dependency governance, architecture policies, org management, audit logs |
+| **Wanyrix Enterprise** | Custom annual (to be validated) | SSO/SAML/OIDC/SCIM, private deployment, private AI models, fleet intelligence, compliance, SLA |
+| **Wanyrix API / CI** | Usage/contract | Engineering-intelligence infrastructure: `POST /repositories/analyze`, findings/builds/dependencies/architecture/experiments endpoints, PR analysis in CI |
+
+**Price points are deliberately not published in this document.** They will be
+set only after customer discovery validates willingness to pay — the tier
+*structure* and *value splits* are the commitment; numbers come later.
+
+## The 90-day trial — applied where it belongs
+
+```text
+Developer installs Wanyrix → local forever ($0)
+    └─▶ creates a Cloud account → 90-day full Team trial
+            ├─▶ trial ends → return to Local (everything still works)
+            ├─▶ Individual Cloud
+            └─▶ Team / Enterprise
+```
+
+The trial applies **only to the cloud/team experience**. Expiry never touches
+local functionality or local data. The local product continues working if the
+user cancels — cancellation is a downgrade, not a punishment.
+
+## What we will never charge for
+
+Basic CLI installation · repository discovery · core Cargo analysis ·
+dependency graph · `wanyrix doctor` · local findings · offline operation.
+These are the adoption engine — charging for them would amputate it.
+
+## Future paid surfaces (designed, not built)
+
+- **Team dashboards & governance** — shared findings, dependency governance,
+  architecture policies as data, audit logs. Foundation: the versioned
+  envelope contracts and the scan-run sync semantics already shipped.
+- **Engineering Intelligence API** — the same `wanyrix.*/v1` envelopes served
+  as a hosted API for GitHub/GitLab/CI/portals/Slack integrations. The
+  contract-first architecture is the head start.
+- **CI/CD PR intelligence** — per-PR build/dependency/architecture/performance
+  impact with policy checks. The web's PR regression-guard surface is the
+  local prototype.
+- **Fleet intelligence** — org-wide view across hundreds of repositories:
+  which repos are getting slower, where dependency risk is spreading, which
+  experiments actually worked. Requires the cloud milestone.
+- **Local AI** — first-class local model support so organizations that can
+  never send source to an external provider get full AI grounding offline.
+
+Technical foundations for all of the above: [`docs/CLOUD_DESIGN.md`](CLOUD_DESIGN.md)
+(sync semantics, device auth, tenant isolation, decision points) and
+[`docs/PLUGIN_AND_EVENTS.md`](PLUGIN_AND_EVENTS.md) (the event surface plugins
+and integrations will consume).
+
+## Access model
+
+- **Local**: no accounts, no auth, no telemetry — access *is* having the
+  binary; identity is the measured workspace state in `.wanyrix/`.
+- **Cloud (when built)**: accounts exist only for sync/sharing — device
+  auth (OAuth device flow, no passwords at rest), organization tenancy,
+  opt-in off-by-default sync. Accounts gate sharing, never the product.
