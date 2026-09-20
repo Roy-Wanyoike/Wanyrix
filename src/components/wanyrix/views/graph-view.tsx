@@ -28,6 +28,7 @@ import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useSimulatorIntentStore } from '@/lib/wanyrix/simulator-intent'
 import type { BlastEntry, DuplicateResolution, GraphEdge, GraphNode, GraphPayload } from '@/lib/wanyrix/types'
 import { cn } from '@/lib/utils'
+import { ChangeIntelligencePanel } from '../change-intelligence-panel'
 import { ExplainDialog } from '../explain-dialog'
 import { CountUp, MeasurementBadge, Panel, SectionHeading } from '../shared'
 import type { ViewProps } from '../view-types'
@@ -839,6 +840,10 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
         />
         <BlastPanel blast={data.blast} onNavigate={onNavigate} />
       </div>
+
+      {/* engine v0.8.0 change intelligence (issue #69) — REAL binary surfaces:
+          wanyrix git / impact / what-changed via the engine-exec routes. */}
+      <ChangeIntelligencePanel />
     </div>
   )
 }

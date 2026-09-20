@@ -589,6 +589,84 @@ export interface ExplainResponse {
   error?: string
 }
 
+/* ---------------------------------------------------------------------------
+ * Engine v0.8.0 change-intelligence envelopes (issue #69) — verbatim serde
+ * camelCase output of the real binary (`wanyrix git|impact|what-changed`),
+ * served inside the `wanyrix.engine-exec/v1` wrapper by the new routes.
+ * Loosely-typed unknowns stay open on purpose: the engine owns the full
+ * shape; the web layer validates the `schema` marker and renders the rest.
+ * -------------------------------------------------------------------------- */
+
+/** `wanyrix.git/v1` — measured repository state (`wanyrix git --json`). */
+export interface EngineGitReport {
+  schema?: string
+  root?: string
+  branch?: string
+  head?: string
+  dirty?: boolean
+  changedFiles?: string[]
+  changedFilesTruncated?: boolean
+  changedFilesCount?: number
+  untrackedFiles?: string[]
+  untrackedTruncated?: boolean
+  changedCrates?: { crateName?: string; changedFiles?: number }[]
+  commitCount?: number
+  recentCommits?: { sha?: string; subject?: string; committedAt?: string }[]
+  generatedAt?: string
+  [k: string]: unknown
+}
+
+/** `wanyrix.impact/v1` — measured rebuild blast radius (`wanyrix impact --crate <name> --json`). */
+export interface EngineImpactReport {
+  schema?: string
+  root?: string
+  crateName?: string
+  directDependentsByKind?: { normal?: string[]; build?: string[]; dev?: string[] }
+  directDependents?: string[]
+  transitiveDependents?: string[]
+  transitiveCount?: number
+  workspaceCrateCount?: number
+  blastRadiusPerMille?: number
+  note?: string
+  generatedAt?: string
+  [k: string]: unknown
+}
+
+/** One added/resolved finding row of `wanyrix.what-changed/v1`. */
+export interface EngineWhatChangedFinding {
+  id?: string
+  severity?: string
+  title?: string
+}
+
+/** One severity-changed finding row of `wanyrix.what-changed/v1`. */
+export interface EngineWhatChangedDeltaFinding {
+  id?: string
+  title?: string
+  previousSeverity?: string
+  severity?: string
+}
+
+/** `wanyrix.what-changed/v1` — findings delta vs the stored baseline (`wanyrix what-changed --json`). */
+export interface EngineWhatChangedReport {
+  schema?: string
+  root?: string
+  workspace?: string
+  db?: string
+  /** baseline reference — the field is OMITTED (not null) when no baseline exists */
+  against?: { scanId?: number; finishedAt?: string } | null
+  /** engine's own empty-store note — present only when `against` is absent */
+  baselineNote?: string
+  findings?: {
+    added?: EngineWhatChangedFinding[]
+    resolved?: EngineWhatChangedFinding[]
+    changed?: EngineWhatChangedDeltaFinding[]
+  }
+  severityDelta?: { critical?: number; warning?: number; info?: number }
+  generatedAt?: string
+  [k: string]: unknown
+}
+
 /**
  * First-class navigation ids (AUDIT-I3 — 14 required surfaces).
  * The 14 required items are: overview, repositories, doctor (Builds),

@@ -567,7 +567,9 @@ describeServer('Wanyrix API — REST hygiene (ENG-TCA-6)', () => {
   test('405 responses carry an Allow header naming the allowed method (ENG-TCA-6a)', async () => {
     // NOTE: `workspaces` implements GET+POST+DELETE since the registration
     // bridge (Task 2-b) — its 405 contract is pinned in the bridge block below.
-    for (const route of ['doctor', 'graph', 'health', 'gates', 'issues', 'storage', 'diagnostics', 'pr', 'experiments', 'impact', 'report']) {
+    // `git` / `what-changed` / `engine/impact` joined as GET-only real-exec
+    // routes with the issue #69 change-intelligence wiring.
+    for (const route of ['doctor', 'graph', 'health', 'gates', 'issues', 'storage', 'diagnostics', 'pr', 'experiments', 'impact', 'report', 'git', 'what-changed', 'engine/impact']) {
       const res = await fetch(`${BASE_URL}/api/wanyrix/${route}`, {
         method: 'POST',
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -895,5 +897,250 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
         (r) => r.id === body.workspace.id,
       ),
     ).toBe(false)
+  })
+})
+
+/* ============================================================================
+   Issue #69 — engine v0.8.0 change intelligence over HTTP (git / impact /
+   what-changed). Same real-exec contract family as engine/doctor: verbatim
+   `wanyrix.engine-exec/v1` wrappers around the engine's own envelopes
+   (`wanyrix.git/v1`, `wanyrix.impact/v1`, `wanyrix.what-changed/v1`),
+   registered-workspace resolution identical (`?workspace=<id>` / `?ws=`
+   alias, dogfood engine dir by default), named engine errors quoted
+   verbatim. The what-changed store path is server-derived
+   (`<target>/.wanyrix/store.db`) — request params never reach a fs path.
+   ========================================================================== */
+
+// One real-exec probe decides whether the binary-exec paths can run at all.
+const engineProbe69 = serverUp ? await fetchJson('/api/wanyrix/engine/doctor') : null
+const ENGINE_UP_69 = engineProbe69?.status === 200
+
+describeServer('Wanyrix API — engine change intelligence (issue #69)', () => {
+  // The dogfood target is the repo's own engine crate — its measured package
+  // name (what-changed reports it as `workspace`) is the one guaranteed
+  // workspace crate.
+  const DOGFOOD_CRATE = 'wanyrix-engine'
+
+  test('GET /api/wanyrix/git → 200 engine-exec wrapper around a verbatim wanyrix.git/v1', async () => {
+    const res = await fetchJson('/api/wanyrix/git')
+    expectJson(res)
+    if (!ENGINE_UP_69) {
+      // No binary on this machine → the honest 503 with the checked list.
+      expect(res.status).toBe(503)
+      const body = res.body as { error: string; checked: string[]; hint: string }
+      expect(body.error).toContain('engine binary not found')
+      expect(Array.isArray(body.checked)).toBe(true)
+      expect(body.hint).toContain('cargo build --locked')
+      return
+    }
+    expect(res.status).toBe(200)
+    const body = res.body as {
+      schema: string
+      surface: string
+      executedAt: string
+      durationMs: number
+      binary: { version: string; profile: string }
+      scanTarget: string
+      note: string
+      report: {
+        schema?: string
+        root?: string
+        branch?: string
+        head?: string
+        dirty?: boolean
+        changedFilesCount?: number
+        changedFilesTruncated?: boolean
+        commitCount?: number
+        recentCommits?: { sha?: string; subject?: string; committedAt?: string }[]
+      }
+    }
+    expect(body.schema).toBe('wanyrix.engine-exec/v1')
+    expect(body.surface).toBe('git')
+    expect(body.binary.version.length).toBeGreaterThan(0)
+    expect(['debug', 'release']).toContain(body.binary.profile)
+    expect(body.note).toContain('Verbatim stdout of the real wanyrix binary')
+    // the engine's own envelope, byte-preserved
+    expect(body.report.schema).toBe('wanyrix.git/v1')
+    expect(typeof body.report.branch).toBe('string')
+    expect((body.report.head ?? '').length).toBe(40)
+    expect(typeof body.report.dirty).toBe('boolean')
+    expect(typeof body.report.changedFilesCount).toBe('number')
+    expect(typeof body.report.changedFilesTruncated).toBe('boolean')
+    expect(body.report.commitCount ?? 0).toBeGreaterThan(0)
+    expect(Array.isArray(body.report.recentCommits)).toBe(true)
+    expect((body.report.recentCommits ?? []).length).toBeGreaterThan(0)
+    for (const c of body.report.recentCommits ?? []) {
+      expect(typeof c.sha).toBe('string')
+      expect(typeof c.subject).toBe('string')
+      expect(typeof c.committedAt).toBe('string')
+    }
+  })
+
+  test('GET /api/wanyrix/engine/impact without crate → 400 (ENG-TCA-6b: missing required param)', async () => {
+    const res = await fetchJson('/api/wanyrix/engine/impact')
+    expect(res.status).toBe(400)
+    expectJson(res)
+    expect((res.body as { error: string }).error).toContain("missing required param 'crate'")
+  })
+
+  test(`GET /api/wanyrix/engine/impact?crate=${DOGFOOD_CRATE} → 200 verbatim wanyrix.impact/v1 with measured blast radius`, async () => {
+    if (!ENGINE_UP_69) return // binary-missing contract already pinned by the git test above
+    const res = await fetchJson(
+      `/api/wanyrix/engine/impact?crate=${encodeURIComponent(DOGFOOD_CRATE)}`,
+    )
+    expect(res.status).toBe(200)
+    expectJson(res)
+    const body = res.body as {
+      schema: string
+      surface: string
+      report: {
+        schema?: string
+        crateName?: string
+        directDependentsByKind?: { normal?: string[]; build?: string[]; dev?: string[] }
+        transitiveCount?: number
+        workspaceCrateCount?: number
+        blastRadiusPerMille?: number
+        note?: string
+      }
+    }
+    expect(body.schema).toBe('wanyrix.engine-exec/v1')
+    expect(body.surface).toBe('impact')
+    expect(body.report.schema).toBe('wanyrix.impact/v1')
+    expect(body.report.crateName).toBe(DOGFOOD_CRATE)
+    expect(body.report.workspaceCrateCount ?? 0).toBeGreaterThanOrEqual(1)
+    expect(typeof body.report.blastRadiusPerMille).toBe('number')
+    expect(body.report.blastRadiusPerMille ?? -1).toBeGreaterThanOrEqual(0)
+    for (const kind of ['normal', 'build', 'dev'] as const) {
+      expect(Array.isArray(body.report.directDependentsByKind?.[kind])).toBe(true)
+    }
+    expect((body.report.note ?? '').length).toBeGreaterThan(0)
+  })
+
+  test('GET /api/wanyrix/engine/impact?crate=<unknown> → 502 quoting the engine error verbatim', async () => {
+    if (!ENGINE_UP_69) return
+    const res = await fetchJson(
+      `/api/wanyrix/engine/impact?crate=${encodeURIComponent('definitely-not-a-crate-69')}`,
+    )
+    expect(res.status).toBe(502)
+    expectJson(res)
+    const body = res.body as { error: string; detail: string }
+    expect(body.error).toContain('engine exited with 2')
+    // the engine's named error, verbatim (exit 2 wording from the binary)
+    expect(body.detail).toContain(
+      "crate 'definitely-not-a-crate-69' is not a workspace crate under",
+    )
+  })
+
+  test('GET /api/wanyrix/what-changed → honest store contract (503 verbatim until a store exists, else 200 envelope)', async () => {
+    const res = await fetchJson('/api/wanyrix/what-changed')
+    expectJson(res)
+    if (!ENGINE_UP_69) {
+      expect(res.status).toBe(503)
+      return
+    }
+    if (res.status === 200) {
+      // A store exists at engine/.wanyrix/store.db on this machine — the
+      // envelope (baseline or baselineNote) is the valid contract, not an error.
+      const body = res.body as {
+        schema: string
+        surface: string
+        report: { schema?: string; root?: string; workspace?: string; findings?: unknown; severityDelta?: unknown }
+      }
+      expect(body.schema).toBe('wanyrix.engine-exec/v1')
+      expect(body.surface).toBe('what-changed')
+      expect(body.report.schema).toBe('wanyrix.what-changed/v1')
+      expect(typeof body.report.workspace).toBe('string')
+      expect(typeof body.report.findings).toBe('object')
+      expect(typeof body.report.severityDelta).toBe('object')
+      return
+    }
+    // Default measured reality: the dogfood target has NO initialized store —
+    // the engine exits 2 and the route serves the named error VERBATIM as a
+    // client-fixable 503.
+    expect(res.status).toBe(503)
+    const body = res.body as { error: string; detail: string; hint?: string }
+    expect(body.error).toContain('what-changed store unavailable')
+    expect(body.detail).toContain('wanyrix: error:')
+    expect(body.detail).toContain('store not found at')
+    expect(body.hint).toContain('wanyrix store init --db')
+  })
+
+  test('registered-workspace targets: git/impact/what-changed honor ?workspace= (and the ?ws= alias), unknown id → 404', async () => {
+    if (!ENGINE_UP_69) return
+    // REGISTER the real engine crate (dogfood target, guaranteed Rust project)
+    const res = await fetchJson('/api/wanyrix/workspaces', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: path.resolve(process.cwd(), 'engine') }),
+    })
+    expect(res.status).toBe(200)
+    expectJson(res)
+    const wsId = (res.body as { workspace: { id: string; path: string } }).workspace.id
+    const wsPath = (res.body as { workspace: { path: string } }).workspace.path
+
+    try {
+      // git against the registered row — same report, registered envelope
+      const git = await fetchJson(`/api/wanyrix/git?workspace=${encodeURIComponent(wsId)}`)
+      expect(git.status).toBe(200)
+      const gitBody = git.body as {
+        workspaceId?: string
+        scanTarget: string
+        report: { schema?: string }
+      }
+      expect(gitBody.workspaceId).toBe(wsId)
+      expect(gitBody.scanTarget).toBe(wsPath)
+      expect(gitBody.report.schema).toBe('wanyrix.git/v1')
+
+      // the ?ws= alias resolves the same registered row
+      const gitAlias = await fetchJson(`/api/wanyrix/git?ws=${encodeURIComponent(wsId)}`)
+      expect(gitAlias.status).toBe(200)
+      expect((gitAlias.body as { workspaceId?: string }).workspaceId).toBe(wsId)
+
+      // impact against the registered row
+      const impact = await fetchJson(
+        `/api/wanyrix/engine/impact?crate=${encodeURIComponent(DOGFOOD_CRATE)}&workspace=${encodeURIComponent(wsId)}`,
+      )
+      expect(impact.status).toBe(200)
+      expect(((impact.body as { report: { crateName?: string } }).report.crateName ?? '')).toBe(
+        DOGFOOD_CRATE,
+      )
+
+      // what-changed against the registered row — the store lives under the
+      // REGISTERED path's own .wanyrix dir (server-derived), so the same
+      // store contract applies; on this machine it is the 503 verbatim case.
+      const wc = await fetchJson(`/api/wanyrix/what-changed?workspace=${encodeURIComponent(wsId)}`)
+      expectJson(wc)
+      if (wc.status === 503) {
+        expect((wc.body as { detail: string }).detail).toContain('store not found at')
+        expect((wc.body as { detail: string }).detail).toContain(`${wsPath}/.wanyrix/store.db`)
+      } else {
+        expect(wc.status).toBe(200)
+        expect((wc.body as { report: { schema?: string } }).report.schema).toBe(
+          'wanyrix.what-changed/v1',
+        )
+      }
+    } finally {
+      // cleanup — the suite never leaves a registered row behind
+      await fetchJson(`/api/wanyrix/workspaces?id=${encodeURIComponent(wsId)}`, { method: 'DELETE' })
+    }
+
+    // unknown id on the new surfaces → the doctor route's named 404, never an exec
+    for (const route of ['git', 'what-changed']) {
+      const unknown = await fetchJson(
+        `/api/wanyrix/${route}?workspace=${encodeURIComponent('ws-local-not-a-real-row-69')}`,
+      )
+      expect(unknown.status).toBe(404)
+      expectJson(unknown)
+      expect((unknown.body as { error: string }).error).toContain(
+        'no registered workspace with id ws-local-not-a-real-row-69',
+      )
+    }
+    const unknownImpact = await fetchJson(
+      `/api/wanyrix/engine/impact?crate=${DOGFOOD_CRATE}&workspace=${encodeURIComponent('ws-local-not-a-real-row-69')}`,
+    )
+    expect(unknownImpact.status).toBe(404)
+    expect((unknownImpact.body as { error: string }).error).toContain(
+      'no registered workspace with id ws-local-not-a-real-row-69',
+    )
   })
 })
