@@ -8,8 +8,8 @@
 ![Rust](https://img.shields.io/badge/Rust-1.98-DEA584?logo=rust&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![Engine](https://img.shields.io/badge/engine-v0.6.0-DEA584)
-![Tests](https://img.shields.io/badge/tests-390_passing-2EA043)
+![Engine](https://img.shields.io/badge/engine-v0.7.0-DEA584)
+![Tests](https://img.shields.io/badge/tests-429_passing-2EA043)
 ![License](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2EA043)
 
 <img src="public/brand/banner.png" alt="Wanyrix — engineering intelligence. The Beacon-W brand mark over a dark amber energy burst." width="100%" />
@@ -30,12 +30,13 @@ That honesty rule is the product. Dashboards that make numbers look good are com
 
 | | |
 | --- | --- |
-| 🧪 **390 automated tests** | 262 web (bun) + 128 engine (cargo) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, instrumented-build IPC |
+| 🧪 **429 automated tests** | 290 web (bun) + 139 engine (cargo) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
 | 🔍 **18 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
-| 🦀 **Real Rust engine** | `wanyrix-engine` v0.6.0, 14 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
+| 🦀 **Real Rust engine** | `wanyrix-engine` v0.7.0, 15 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · **local AI** · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
 | 🖥️ **18-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui — dark & light themes, mobile-clean (0 px overflow @ 390 px) |
-| 🤖 **Grounded AI, non-authoritative** | facts server-rendered; model output validated against evidence, violations redacted |
+| 🤖 **Grounded AI, non-authoritative** | facts server-rendered; model output validated against evidence, violations redacted; `wanyrix ai` grounds a LOCAL model on the measured evidence digest only — never source code |
 | 🔒 **Local-first, zero telemetry** | state in your browser; nothing transmits unless you explicitly configure it |
+| 🔌 **Connect a real project** | the dashboard's registration bridge runs the REAL engine (doctor + graph) against any local Rust project you point it at — measured counts only, failures register nothing |
 
 ---
 
@@ -77,6 +78,7 @@ Pick a workspace in the sidebar, toggle **dark/light** from the topbar (or press
 3. **Findings** — severity/section filters; drill into any `FER-*` for its evidence table.
 4. **Experiments** — baseline → candidate → measured delta. This is how *estimated* becomes *verified*.
 5. **AI** — ask *why does this finding matter?* — grounded in the same evidence.
+6. **Connect a project** — topbar folder-plus: point the dashboard at any local Rust project and the REAL engine (doctor + graph) scans it on the spot. Measured counts only; failures register nothing.
 
 Full task-oriented guide: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 
@@ -119,6 +121,10 @@ wanyrix store init --db scans.db
 wanyrix doctor --json | wanyrix store save --db scans.db --scan -
 wanyrix store list --db scans.db && wanyrix store fsck --db scans.db
 wanyrix daemon start          # cached measured scans over a local Unix socket
+
+# Explain — optional LOCAL AI (Ollama-class; digest-only, never source code)
+wanyrix ai --question "which findings matter most and why?" --json
+# → no local model running? A NAMED refusal, never a fabricated answer.
 ```
 
 No Rust workspace handy? Generate one deterministically:
@@ -198,7 +204,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 │   ├── app/api/wanyrix/     #   18 versioned API routes
 │   ├── components/wanyrix/  #   18-surface information architecture
 │   └── lib/wanyrix/         #   stores, contracts, fixtures (17 domain modules), exporters
-├── engine/                  # wanyrix-engine v0.6.0 (Rust 2021, zero-dep core + rusqlite)
+├── engine/                  # wanyrix-engine v0.7.0 (Rust 2021, zero-dep core + rusqlite)
 │   └── tests/               #   conformance, WAL crash-recovery, chaos fault-injection
 ├── tests/                   # bun test suite (unit + live API contracts)
 ├── scripts/                 # brand gate, fixture generator, soak + flake-budget harnesses
@@ -212,7 +218,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 This repository is built the way it asks you to build software — with verifiable claims:
 
-- **390 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers).
+- **429 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers) + wire-level local-AI mock tests.
 - **CI on every push/PR** — ESLint, `tsc --noEmit`, full test suite, legacy-token brand gate, `cargo build --locked` + `clippy -D warnings` + `cargo test --locked`. Release workflow ships binaries + CycloneDX SBOM + cargo-audit; perf workflow scales the soak/flake harnesses.
 - **Contract-first** — all machine payloads are versioned (`wanyrix.*​/v1`); determinism is pinned by tests (same input ⇒ byte-identical output, timestamp last). The web pins the engine version in one constant, tested against `engine/Cargo.toml`.
 - **Honesty is load-bearing** — the `estimated/verified` separation, workspace guards, grounding redaction, and the event log's *refusals-mint-no-events* rule are **tested behaviors**, not documentation.
@@ -245,7 +251,7 @@ This repository is built the way it asks you to build software — with verifiab
 
 ## Roadmap
 
-Shipped: the full offline product contract (14 command surfaces), the durable event log, chaos-tested resilience, release engineering with SBOM, and the design directions for cloud and plugins. Next, in order:
+Shipped: the full offline product contract (15 command surfaces), the durable event log, local-AI grounding, the connect-a-project bridge, chaos-tested resilience, release engineering with SBOM, and the design directions for cloud and plugins. Next, in order:
 
 - **crates.io publish** of `wanyrix-engine` once the release checklist (MSRV, feature flags, signing secrets) is exercised on a real tag.
 - **Plugin API v1** — the event log is the first shipped extension surface; the out-of-process plugin contract follows the decision points in [`docs/PLUGIN_AND_EVENTS.md`](docs/PLUGIN_AND_EVENTS.md).

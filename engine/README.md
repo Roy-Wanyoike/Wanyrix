@@ -6,12 +6,13 @@ the web dashboard's honesty-first product identity (AUDIT-I8): every number
 it reports is **measured**, and anything it cannot measure is labeled, never
 simulated.
 
-## Status — engine v0.6.0
+## Status — engine v0.7.0
 
 **Built:** filesystem manifest analysis, local persistence, an incremental
 analysis daemon, redacted rustc-telemetry ingestion, an INSTRUMENTED BUILD
-runner (the engine now executes and measures a real `cargo build`), and a
-synthetic fixture generator. The engine walks a Rust workspace, parses every
+runner (the engine now executes and measures a real `cargo build`), a
+synthetic fixture generator, and a LOCAL-AI explanation surface grounded on
+measured evidence only. The engine walks a Rust workspace, parses every
 `Cargo.toml`, resolves intra-workspace path dependencies into ONE canonical
 edge list, and serves versioned JSON flavors computed from measured inputs:
 
@@ -173,7 +174,7 @@ field-for-field to the shapes in `src/lib/wanyrix/types.ts` (pinned by
 
 ```sh
 cargo build            # clean, zero warnings
-cargo test             # 128 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
+cargo test             # 139 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
 cargo clippy --all-targets -- -D warnings   # zero warnings
 ./target/debug/wanyrix doctor --path tests/fixtures/tiny-ws --json | python3 -m json.tool
 ```
@@ -223,10 +224,18 @@ silent `{}`.
   `.wanyrix/events.jsonl`; ids are monotonic, corrupt lines are skipped and
   named, refusals mint no events, and `wanyrix events` reads the trail
   (`wanyrix.events/v1`). The first shipped extension surface (issue #63).
+- **Local AI (v0.7.0)** — `wanyrix ai` asks a LOCAL model (Ollama-class,
+  default `127.0.0.1:11434`) a question about the workspace, grounded on the
+  MEASURED evidence digest only — never source code, never file contents.
+  Unreachable/broken servers fail with named errors; the reply rides in
+  `wanyrix.ai/v1` labeled as inference, never a measurement, and the
+  deterministic core never calls a model.
 
 **Explicitly NOT built yet:**
 - **Full build-time attribution** — per-crate build seconds that survive
   cargo's parallel jobs (requires the experimental `cargo` parallelism
   model or `--timings` parsing; `wanyrix build` measures the exact wall
   clock and honest per-artifact stream activity, and says so).
-- **PR regression analysis, runtime telemetry, AI explain integration.**
+- **PR regression analysis, runtime telemetry.** AI explain exists as the
+  additive local-model surface (`wanyrix ai`, v0.7.0) and the web grounded-
+  explanation dialog — it is never a required runtime dependency.

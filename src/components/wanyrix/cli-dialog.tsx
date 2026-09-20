@@ -33,6 +33,7 @@ const COMMANDS: { cmd: string; maps: string }[] = [
   { cmd: 'wanyrix status --db scans.db --socket daemon.sock', maps: 'fresh measured snapshot + drift vs init + newest stored scan + daemon liveness (wanyrix.status/v1)' },
   { cmd: 'wanyrix experiment record --name fix --claim "halve build"', maps: 'Experiments view — hypothesis ledger; record → measure (2 real builds) → verify (measured improvement only) (wanyrix.experiment/v1)' },
   { cmd: 'wanyrix events --json', maps: 'durable event log — one append-only mirror of every real ledger transition; corrupt lines skipped and named (wanyrix.events/v1)' },
+  { cmd: 'wanyrix ai --question "…"', maps: 'local AI (Ollama-class) — grounded on the measured evidence digest only; never source code, never a measurement (wanyrix.ai/v1)' },
   { cmd: 'wanyrix store list', maps: 'History view — persisted scan runs (SQLite + WAL)' },
   { cmd: 'wanyrix daemon start', maps: 'Runtime view — cached measured scan over a local Unix socket' },
   { cmd: 'wanyrix telemetry ingest -', maps: 'Diagnostics view — redacted rustc JSON diagnostics (wanyrix.telemetry/v1)' },
@@ -81,13 +82,13 @@ export function CliContractDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <span onClick={() => onOpenChange(true)}>{trigger}</span>}
-      <DialogContent className="max-w-lg sm:max-w-2xl" aria-describedby="cli-dialog-desc">
+      <DialogContent className="max-w-lg sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TerminalSquare className="size-4 text-primary" aria-hidden />
             wanyrix CLI contract
           </DialogTitle>
-          <DialogDescription id="cli-dialog-desc">
+          <DialogDescription>
             The engine-backed surfaces mirror the real binary (engine v{ENGINE_VERSION}) —
             same payloads, same exit codes (0 / 2), and{' '}
             <span className="font-mono text-foreground/85">--json</span> with a

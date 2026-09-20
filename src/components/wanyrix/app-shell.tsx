@@ -22,6 +22,7 @@ import { WanyrixLogo, WanyrixLockup } from './logo'
 import { CommandPalette } from './command-palette'
 import { DiffQueueSheet } from './diff-queue-sheet'
 import { StorageDialog } from './storage-dialog'
+import { ConnectProjectDialog } from './connect-project-dialog'
 import { NotificationsPopover } from './notifications-popover'
 import { CliContractDialog } from './cli-dialog'
 import { SystemStatusPill } from './system-status-pill'
@@ -336,6 +337,9 @@ export function AppShell({
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* workspace registration bridge — connects a REAL local project */}
+              <ConnectProjectDialog />
 
               <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={runScan}>
                 <RefreshCw className="size-3.5" />

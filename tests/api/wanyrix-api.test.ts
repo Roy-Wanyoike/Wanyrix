@@ -19,6 +19,7 @@
  * (the runner itself has no hard dependency on the server).
  */
 import { describe, expect, test } from 'bun:test'
+import path from 'node:path'
 
 const BASE_URL = process.env.WANYRIX_TEST_BASE_URL ?? 'http://localhost:3000'
 const FETCH_TIMEOUT_MS = 10_000
@@ -564,7 +565,9 @@ describeServer('Wanyrix API — unknown workspace → 404 on every ws-scoped rou
 
 describeServer('Wanyrix API — REST hygiene (ENG-TCA-6)', () => {
   test('405 responses carry an Allow header naming the allowed method (ENG-TCA-6a)', async () => {
-    for (const route of ['workspaces', 'doctor', 'graph', 'health', 'gates', 'issues', 'storage', 'diagnostics', 'pr', 'experiments', 'impact', 'report']) {
+    // NOTE: `workspaces` implements GET+POST+DELETE since the registration
+    // bridge (Task 2-b) — its 405 contract is pinned in the bridge block below.
+    for (const route of ['doctor', 'graph', 'health', 'gates', 'issues', 'storage', 'diagnostics', 'pr', 'experiments', 'impact', 'report']) {
       const res = await fetch(`${BASE_URL}/api/wanyrix/${route}`, {
         method: 'POST',
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -655,5 +658,242 @@ describeServer('Wanyrix API — remaining read surfaces respond 200 JSON', () =>
     const body = res.body as { number: number; regressionPct: number }
     expect(Number.isFinite(body.regressionPct)).toBe(true)
     expect(body.number).toBeGreaterThan(0)
+  })
+})
+
+/* ============================================================================
+   Task 2-b — workspace registration bridge ("Connect a project").
+   The demo registry gains a REAL registration surface: POST runs the actual
+   wanyrix binary (doctor + graph) against a validated absolute path and
+   persists the measured counts; DELETE removes the row. Measured data only —
+   nothing is invented, and a failed registration stores NOTHING.
+   ========================================================================== */
+
+describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () => {
+  test('GET /api/wanyrix/workspaces → 200, `registered` array present, demo registry unchanged', async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces')
+    expect(res.status).toBe(200)
+    expectJson(res)
+    const body = res.body as {
+      workspaces: { id: string; crates: number }[]
+      default: string
+      registered: unknown[]
+    }
+    // pre-existing demo registry contract is untouched
+    expect(body.workspaces.length).toBeGreaterThan(0)
+    expect(typeof body.default).toBe('string')
+    // the bridge list is ALWAYS present (empty = nothing connected, never fabricated)
+    expect(Array.isArray(body.registered)).toBe(true)
+    for (const row of body.registered as Record<string, unknown>[]) {
+      expect(typeof row.id).toBe('string')
+      expect(String(row.id)).toMatch(/^ws-local-/)
+      expect(typeof row.name).toBe('string')
+      expect(typeof row.path).toBe('string')
+      expect(String(row.path)).toMatch(/^\//) // canonical absolute path
+      expect(typeof row.crates).toBe('number')
+      expect(typeof row.edges).toBe('number')
+      expect(typeof row.findings).toBe('number')
+      expect(['ok', 'failed']).toContain(String(row.lastStatus))
+      expect(String(row.registeredAt)).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(String(row.lastCheckedAt)).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    }
+  })
+
+  test('POST with no body → 400 named error (malformed JSON)', async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces', { method: 'POST' })
+    expect(res.status).toBe(400)
+    expectJson(res)
+    expect(typeof (res.body as { error: string }).error).toBe('string')
+    expect((res.body as { error: string }).error.length).toBeGreaterThan(0)
+  })
+
+  test('POST without path → 400 named error (path is required)', async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(400)
+    expectJson(res)
+    expect((res.body as { error: string }).error).toContain('path is required')
+  })
+
+  test("POST { path: 'engine' } (relative) → 400 with 'absolute' named in the error", async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: 'engine' }),
+    })
+    expect(res.status).toBe(400)
+    expectJson(res)
+    expect((res.body as { error: string }).error).toContain('absolute')
+  })
+
+  test('POST nonexistent path → 400 mentioning existence', async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: '/nonexistent/definitely-missing-xyz-2b' }),
+    })
+    expect(res.status).toBe(400)
+    expectJson(res)
+    expect((res.body as { error: string }).error).toContain('does not exist')
+  })
+
+  test('POST /tmp (exists, no Cargo.toml/.wanyrix) → 404 "does not look like a Rust project"', async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: '/tmp' }),
+    })
+    expect(res.status).toBe(404)
+    expectJson(res)
+    const body = res.body as { error: string; path: string }
+    expect(body.error).toContain('does not look like a Rust project')
+    expect(body.error).toContain('no Cargo.toml or .wanyrix at /tmp')
+    expect(body.path).toBe('/tmp')
+    // nothing may be stored for a rejected path
+    const after = await fetchJson('/api/wanyrix/workspaces')
+    expect(
+      ((after.body as { registered: { path: string }[] }).registered ?? []).some(
+        (r) => r.path === '/tmp',
+      ),
+    ).toBe(false)
+  })
+
+  test('DELETE without id → 400 named error', async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces', { method: 'DELETE' })
+    expect(res.status).toBe(400)
+    expectJson(res)
+    expect((res.body as { error: string }).error).toContain('id')
+  })
+
+  test('PUT / PATCH → 405 carrying Allow: GET, POST, DELETE', async () => {
+    for (const method of ['PUT', 'PATCH']) {
+      const res = await fetch(`${BASE_URL}/api/wanyrix/workspaces`, {
+        method,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
+      expect(res.status).toBe(405)
+      expect(res.headers.get('allow')).toContain('GET')
+      expect(res.headers.get('allow')).toContain('POST')
+      expect(res.headers.get('allow')).toContain('DELETE')
+    }
+  })
+
+  test('conditional happy path: real engine present → register engine/, rescan, unregister', async () => {
+    // Probe: does the real binary exist on the server host?
+    const probe = await fetchJson('/api/wanyrix/engine/doctor')
+    if (probe.status === 503) {
+      // Engine missing ⇒ registration honestly fails with the build hint.
+      const res = await fetchJson('/api/wanyrix/workspaces', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path: path.resolve(process.cwd(), 'engine') }),
+      })
+      expect(res.status).toBe(503)
+      expectJson(res)
+      const body = res.body as { error: string; hint?: string }
+      expect(body.error).toContain('engine binary not found')
+      expect(body.hint).toContain('cargo build --locked')
+      return
+    }
+    expect(probe.status).toBe(200)
+
+    // REGISTER the real engine crate (dogfood target, guaranteed Rust project)
+    const res = await fetchJson('/api/wanyrix/workspaces', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: path.resolve(process.cwd(), 'engine') }),
+    })
+    expect(res.status).toBe(200)
+    expectJson(res)
+    const body = res.body as {
+      registered: boolean
+      workspace: {
+        id: string
+        name: string
+        path: string
+        crates: number
+        edges: number
+        findings: number
+        critical: number
+        warning: number
+        info: number
+        toolchain: string
+      }
+      verdict: { crates: number; edges: number; findings: number; engineVersion: string }
+    }
+    expect(body.registered).toBe(true)
+    expect(body.workspace.id.startsWith('ws-local-')).toBe(true)
+    // MEASURED numbers: the engine really scanned the directory
+    expect(body.verdict.crates).toBeGreaterThanOrEqual(1)
+    expect(body.verdict.findings).toBe(
+      body.workspace.critical + body.workspace.warning + body.workspace.info,
+    )
+    expect(body.workspace.crates).toBe(body.verdict.crates)
+    expect(body.workspace.edges).toBe(body.verdict.edges)
+    expect(body.workspace.path.endsWith('/engine')).toBe(true)
+    expect(typeof body.verdict.engineVersion).toBe('string')
+    expect(body.verdict.engineVersion.length).toBeGreaterThan(0)
+
+    // The row is served back through GET
+    const listed = await fetchJson('/api/wanyrix/workspaces')
+    const rows = (listed.body as { registered: { id: string }[] }).registered ?? []
+    expect(rows.some((r) => r.id === body.workspace.id)).toBe(true)
+
+    // RE-SCAN through the guarded exec surface (only DB-stored paths are scanned)
+    const rescan = await fetchJson(
+      `/api/wanyrix/engine/doctor?workspace=${encodeURIComponent(body.workspace.id)}`,
+    )
+    expect(rescan.status).toBe(200)
+    expectJson(rescan)
+    const rescanBody = rescan.body as {
+      schema: string
+      workspaceId?: string
+      scanTarget: string
+      report: { schema?: string; summary?: { total?: number; critical?: number; warning?: number; info?: number } }
+    }
+    expect(rescanBody.schema).toBe('wanyrix.engine-exec/v1')
+    expect(rescanBody.workspaceId).toBe(body.workspace.id)
+    expect(rescanBody.scanTarget).toBe(body.workspace.path)
+    expect(rescanBody.report.schema).toBe('wanyrix.doctor/v1')
+
+    // Unknown id on the exec surface → 404 (never scans arbitrary request paths)
+    const unknown = await fetchJson(
+      `/api/wanyrix/engine/doctor?workspace=${encodeURIComponent('ws-local-not-a-real-row')}`,
+    )
+    expect(unknown.status).toBe(404)
+    expectJson(unknown)
+    expect((unknown.body as { error: string }).error).toContain(
+      'no registered workspace with id ws-local-not-a-real-row',
+    )
+
+    // UNREGISTER → 200; repeat → 404 (the row is gone)
+    const del = await fetchJson(`/api/wanyrix/workspaces?id=${encodeURIComponent(body.workspace.id)}`, {
+      method: 'DELETE',
+    })
+    expect(del.status).toBe(200)
+    expectJson(del)
+    expect((del.body as { unregistered: boolean; id: string }).unregistered).toBe(true)
+    expect((del.body as { id: string }).id).toBe(body.workspace.id)
+
+    const delAgain = await fetchJson(
+      `/api/wanyrix/workspaces?id=${encodeURIComponent(body.workspace.id)}`,
+      { method: 'DELETE' },
+    )
+    expect(delAgain.status).toBe(404)
+    expectJson(delAgain)
+    expect((delAgain.body as { error: string }).error).toContain(
+      `no registered workspace with id ${body.workspace.id}`,
+    )
+
+    // the registry no longer lists it
+    const after = await fetchJson('/api/wanyrix/workspaces')
+    expect(
+      ((after.body as { registered: { id: string }[] }).registered ?? []).some(
+        (r) => r.id === body.workspace.id,
+      ),
+    ).toBe(false)
   })
 })

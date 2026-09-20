@@ -89,5 +89,22 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
         }
         Command::Experiment { cmd } => cli::product_experiment_run(cmd),
         Command::Events { path, json, pretty } => cli::events_run(&path, json, pretty),
+        Command::Ai {
+            path,
+            question,
+            endpoint,
+            model,
+            timeout_secs,
+            json,
+            pretty,
+        } => cli::ai_run(
+            &path,
+            &question,
+            endpoint,
+            model,
+            timeout_secs,
+            json,
+            pretty,
+        ),
     }
 }

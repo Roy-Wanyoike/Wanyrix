@@ -200,6 +200,10 @@ pub enum EngineError {
     /// unknown name, an incomplete/unsuccessful measurement, or a verify
     /// attempt without a real measured improvement (the honesty gate).
     Experiment(String),
+    /// The local-AI surface failed: endpoint unreachable/timeout, HTTP error
+    /// status, malformed model reply, or endpoint address could not be parsed.
+    /// The transport detail is preserved verbatim — never swallowed.
+    Ai(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -223,6 +227,7 @@ impl std::fmt::Display for EngineError {
             EngineError::Telemetry(e) => write!(f, "telemetry error: {e}"),
             EngineError::Build(e) => write!(f, "build telemetry error: {e}"),
             EngineError::Experiment(e) => write!(f, "experiment ledger error: {e}"),
+            EngineError::Ai(e) => write!(f, "local AI error: {e}"),
         }
     }
 }

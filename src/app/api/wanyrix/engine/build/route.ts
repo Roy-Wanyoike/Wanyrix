@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
-import { execFile } from 'node:child_process'
-import { access } from 'node:fs/promises'
-import { constants } from 'node:fs'
 import path from 'node:path'
-import { promisify } from 'node:util'
+import {
+  ENGINE_DIR,
+  checkedBinaryPaths,
+  execEngine,
+  resolveEngineBinary,
+} from '@/lib/wanyrix/engine-exec'
 
 /**
  * REAL instrumented build — `wanyrix.engine-build/v1` (R8).
@@ -26,35 +28,16 @@ import { promisify } from 'node:util'
  * build may actually recompile crates; a warm build returns in ~100ms.
  * A cargo build that RAN but failed is DATA — the engine exits 0 with
  * `buildSuccess: false` inside the envelope, so it is served as a 200.
+ *
+ * Shared plumbing (Task 2-b): binary resolution + spawn discipline live in
+ * engine-exec.ts; this route keeps its own 120s timeout and 16 MB buffer —
+ * a cold build streams many more events than a doctor scan.
  */
 
 const SCHEMA = 'wanyrix.engine-build/v1'
 
 const EXEC_TIMEOUT_MS = 120_000
 const MAX_BUFFER = 16 * 1024 * 1024
-
-const execFileAsync = promisify(execFile)
-
-/** Repo-root-relative engine crate dir — also the build target (dogfood). */
-const ENGINE_DIR = path.join(process.cwd(), 'engine')
-
-/** Binary candidates in preference order (profile label → path). */
-const BINARY_CANDIDATES: { profile: 'debug' | 'release'; file: string }[] = [
-  { profile: 'release', file: path.join(ENGINE_DIR, 'target', 'release', 'wanyrix') },
-  { profile: 'debug', file: path.join(ENGINE_DIR, 'target', 'debug', 'wanyrix') },
-]
-
-async function firstExistingBinary(): Promise<{ profile: 'debug' | 'release'; file: string } | null> {
-  for (const candidate of BINARY_CANDIDATES) {
-    try {
-      await access(candidate.file, constants.X_OK)
-      return candidate
-    } catch {
-      // try the next profile
-    }
-  }
-  return null
-}
 
 /** Light structural check — the full shape is owned by the engine + tests. */
 function isBuildEnvelope(v: unknown): v is { schema?: unknown; [k: string]: unknown } {
@@ -64,12 +47,12 @@ function isBuildEnvelope(v: unknown): v is { schema?: unknown; [k: string]: unkn
 export async function GET() {
   const startedAt = Date.now()
 
-  const binary = await firstExistingBinary()
+  const binary = await resolveEngineBinary()
   if (!binary) {
     return NextResponse.json(
       {
         error: 'engine binary not found on this machine — the real execution surface is unavailable',
-        checked: BINARY_CANDIDATES.map((c) => path.relative(process.cwd(), c.file)),
+        checked: checkedBinaryPaths(),
         hint: 'build it: cd engine && cargo build --locked (see docs/DEVELOPMENT.md)',
       },
       { status: 503 },
@@ -77,39 +60,27 @@ export async function GET() {
   }
 
   let versionOut: string
-  try {
-    const v = await execFileAsync(binary.file, ['--version'], {
-      timeout: 20_000,
-      maxBuffer: MAX_BUFFER,
-    })
-    versionOut = v.stdout.trim()
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+  const versionRun = await execEngine(['--version'], 20_000, MAX_BUFFER)
+  if (versionRun.killed || versionRun.code !== undefined) {
     return NextResponse.json(
-      { error: 'engine binary could not be executed', detail: message.slice(0, 400) },
+      { error: 'engine binary could not be executed', detail: versionRun.stderr.slice(0, 400) },
       { status: 502 },
     )
   }
+  versionOut = versionRun.stdout.trim()
 
-  let stdout: string
-  try {
-    const run = await execFileAsync(binary.file, ['build', '--path', ENGINE_DIR, '--json'], {
-      timeout: EXEC_TIMEOUT_MS,
-      maxBuffer: MAX_BUFFER,
-    })
-    stdout = run.stdout
-  } catch (err) {
-    const e = err as { code?: number | string; killed?: boolean; message?: string; stderr?: string }
-    if (e.killed) {
-      return NextResponse.json(
-        { error: `engine build did not finish within ${EXEC_TIMEOUT_MS / 1000}s — killed` },
-        { status: 504 },
-      )
-    }
+  const run = await execEngine(['build', '--path', ENGINE_DIR, '--json'], EXEC_TIMEOUT_MS, MAX_BUFFER)
+  if (run.killed) {
+    return NextResponse.json(
+      { error: `engine build did not finish within ${EXEC_TIMEOUT_MS / 1000}s — killed` },
+      { status: 504 },
+    )
+  }
+  if (run.code !== undefined) {
     return NextResponse.json(
       {
-        error: `engine exited with ${e.code ?? 'non-zero'} — the build could not be started (missing cargo?)`,
-        detail: (e.stderr ?? e.message ?? '').slice(0, 400),
+        error: `engine exited with ${run.code ?? 'non-zero'} — the build could not be started (missing cargo?)`,
+        detail: run.stderr.slice(0, 400),
       },
       { status: 502 },
     )
@@ -117,7 +88,7 @@ export async function GET() {
 
   let report: unknown
   try {
-    report = JSON.parse(stdout)
+    report = JSON.parse(run.stdout)
   } catch (parseError) {
     return NextResponse.json(
       {

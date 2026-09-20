@@ -29,6 +29,9 @@
 //!    simulated, no defaults are invented, no network is contacted (the
 //!    [`daemon`] speaks only over a local Unix socket; [`telemetry`] reads
 //!    local rustc/cargo JSON streams and redacts them before emission).
+//!    Sole deliberate exception (v0.7.0): [`ai`] sends ONE loopback HTTP
+//!    request to the LOCAL model server the user pointed it at — the payload
+//!    is the evidence digest only, never source code.
 //! 2. Findings are `measurementStatus: "measured"`,
 //!    `confidenceClass: "deterministic"`. The engine never emits
 //!    `verified` (nothing here was benchmark-verified) and never claims a
@@ -44,6 +47,9 @@
 //!
 //! # Layout
 //!
+//! - [`ai`] — local-model explanation surface over a user-invoked LOCAL
+//!   model server (`wanyrix.ai/v1`; digest-only transmission, Ollama-class
+//!   HTTP client hand-rolled on `TcpStream`)
 //! - [`scan`] — directory walk + manifest parsing (measured inputs) + the
 //!   manifest fingerprint used for incremental re-analysis
 //! - [`analysis`] — doctor rules (`FER-ENG-*` finding registry)
@@ -60,6 +66,7 @@
 //! - [`synth`] — deterministic synthetic workspace generator (fixtures)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
+pub mod ai;
 pub mod analysis;
 pub mod build;
 pub mod cli;

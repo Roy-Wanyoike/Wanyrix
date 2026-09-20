@@ -41,3 +41,22 @@ model ScanRun {
 
   @@index([workspaceId, startedAt])
 }
+
+/// A user-registered LOCAL project (the workspace registration bridge).
+/// Registration runs the REAL engine (doctor + graph) against the path; the
+/// stored counts are what the engine measured — never invented (Gate 21).
+model RegisteredWorkspace {
+  id            String   @id // deterministic: ws-local-<slug>-<fnv1a8(abs path)>
+  name          String   // directory basename
+  path          String   // canonical absolute path
+  registeredAt  DateTime @default(now())
+  lastCheckedAt DateTime // last real engine scan (registration = first check)
+  lastStatus    String   // ok | failed
+  crates        Int      // measured by the engine
+  edges         Int      // measured by the engine (graph aggregates)
+  findings      Int
+  critical      Int
+  warning       Int
+  info          Int
+  toolchain     String   @default("unknown")
+}

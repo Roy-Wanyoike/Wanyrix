@@ -1,13 +1,13 @@
 # Wanyrix CLI — contract reference
 
-Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.6.0
+Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.7.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
 store · synth · daemon · telemetry · build · init · status · analyze · dependencies ·
-experiment · events`. Every engine command emits a versioned JSON
+experiment · events · ai`. Every engine command emits a versioned JSON
 envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
 `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`, `wanyrix.init/v1`,
 `wanyrix.status/v1`, `wanyrix.analyze/v1`, `wanyrix.dependencies/v1`,
-`wanyrix.experiment/v1`, `wanyrix.events/v1`) behind a `--json` switch, plus
+`wanyrix.experiment/v1`, `wanyrix.events/v1`, `wanyrix.ai/v1`) behind a `--json` switch, plus
 human-readable output by default. The web platform mirrors the same payloads over
 HTTP; the in-app **CLI contract** dialog
 (`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)
@@ -18,8 +18,11 @@ pins the command set, the flags, and the exit codes shown here.
 1. **Every read command has a `--json` switch.** Human output is the default; `--json`
    emits the machine-readable, versioned payload (Gate 18).
 2. **Deterministic core, no AI in the path.** Copying a command in the dialog toasts:
-   *"deterministic surface, no AI in the path."* The AI layer (`wanyrix explain`
-   equivalent in the web UI) is additive and never required.
+   *"deterministic surface, no AI in the path."* The deterministic layer never calls a
+   model. AI is strictly additive and clearly labeled: the web explain dialog grounds
+   on served evidence, and the v0.7.0 `wanyrix ai` subcommand talks ONLY to a local
+   model server the user pointed at — over a digest of measured evidence, never source
+   code, and its output is never a measurement.
 3. **Same payloads as the web.** An engine JSON payload is the versioned envelope the
    mirrored web surface renders (see the mapping table below).
 4. **No silent modification.** AI never edits code silently; patches stay reviewable
@@ -45,6 +48,7 @@ pins the command set, the flags, and the exit codes shown here.
 | 11 | `wanyrix dependencies [--path <dir>] [--json]` | `wanyrix.dependencies/v1` — per-crate direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies, measured cycles | Dependencies view (`GET /api/wanyrix/graph?ws=…`) |
 | 12 | `wanyrix experiment record|measure|verify|list` | `wanyrix.experiment/v1` ledger (`.wanyrix/experiments.jsonl`) — estimated → measured (2 REAL builds) → verified (measured improvement ONLY) | Experiments view (honesty gates 19/21) |
 | 13 | `wanyrix events [--path <dir>] [--json]` | `wanyrix.events/v1` — the durable event log (`.wanyrix/events.jsonl`): one append-only `wanyrix.event/v1` mirror of every real ledger transition; corrupt lines are skipped and named, never a silent drop | event receipt trail (issue #63 first slice) |
+| 14 | `wanyrix ai [--path <dir>] -q "<question>" [--endpoint <host:port>] [--model <name>] [--timeout-secs <n>] [--json]` | `wanyrix.ai/v1` — a LOCAL model (Ollama-class, default `127.0.0.1:11434`) answering over the measured evidence digest ONLY (never source code); named errors when no local server is reachable; AI output is labeled inference, never a measurement | local AI surface (commercial queue #66 item 8) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
 (pretty has no effect without `--json`), and per-subcommand options documented by
@@ -65,7 +69,8 @@ These surfaces are served by the Next.js API routes directly. They are labeled
 | Release scorecard download | `GET /api/wanyrix/report?flavor=scorecard&ws=…` | `wanyrix.release-scorecard/v1` |
 | Scan history export | `GET /api/wanyrix/report?flavor=scan-history&ws=…` | `wanyrix.scan-history/v1` (server-side `runs` honestly empty — runs are per-browser localStorage; the `note` field says so) |
 | Scan-run sync log (durable server log) | `GET`/`POST /api/wanyrix/scan-runs?ws=…` | `wanyrix.scan-runs/v1` — the web client fire-and-forget POSTs each completed run (optionally with its findings fingerprint `findingIds` + `findingIdsTruncated`, validated: ≤96 chars/id, ≤400 entries); GET serves the persisted rows verbatim (SQLite/Prisma), never fabricated |
-| Real engine execution (Build Doctor view) | `GET /api/wanyrix/engine/doctor` | `wanyrix.engine-exec/v1` — spawns the actual `wanyrix` binary built from `engine/` and returns its verbatim `wanyrix.doctor/v1` stdout (scan target: the engine crate itself); 503 when the binary is not built on the host |
+| Real engine execution (Build Doctor view) | `GET /api/wanyrix/engine/doctor` | `wanyrix.engine-exec/v1` — spawns the actual `wanyrix` binary built from `engine/` and returns its verbatim `wanyrix.doctor/v1` stdout (scan target: the engine crate itself, or a registered local project via `?workspace=<id>`); 503 when the binary is not built on the host |
+| Workspace registration bridge (Connect a project) | `GET`/`POST`/`DELETE /api/wanyrix/workspaces` | GET serves the demo registry + `registered` rows; POST validates the absolute path, runs the REAL engine (doctor + graph) against it and upserts the measured counts (Prisma `RegisteredWorkspace`); DELETE unregisters — failures register nothing |
 | Experiments board | `GET /api/wanyrix/experiments?ws=…` | `EXP-*` records |
 
 ## Exit codes (as implemented by the binary)
@@ -103,6 +108,7 @@ severity ladder lives inside the payload (`critical` / `warning` / `info`).
 
 - ~~`wanyrix init`, repository discovery~~ — shipped in v0.5.0 (`init`, `status`, `analyze`, `dependencies`, `experiment` ledger + `verify` gate).
 - ~~durable event log~~ — shipped in v0.6.0 (`events`, `wanyrix.event/v1`); the out-of-process plugin contract follows [`docs/PLUGIN_AND_EVENTS.md`](PLUGIN_AND_EVENTS.md)'s decision points.
+- ~~local AI~~ — shipped in v0.7.0 (`ai`, `wanyrix.ai/v1`): local-model (Ollama-class) grounding over the measured evidence digest only; named refusals when no local server is reachable.
 - An `impact`/`report` engine subcommand to absorb the web-only surfaces above is
   intentionally not faked in the binary; the web platform serves them today.
 - Anything that would fake engine evidence in this repo is forbidden by the honesty

@@ -37,7 +37,7 @@ organization policies → fleet intelligence → enterprise
 | Durable event receipts + local history | **shipped** — `wanyrix events`, SQLite store (WAL + fsck) |
 | Full offline operation, CLI, local storage | **shipped** — zero network by design |
 | Grounded AI (provider-side, with deterministic fallback) | **shipped** — web `/explain` |
-| **Local** AI models (e.g. Ollama-class — "your repo stays local, your model runs locally") | designed — provider abstraction already isolates the AI layer |
+| **Local** AI models (e.g. Ollama-class — "your repo stays local, your model runs locally") | **shipped** — `wanyrix ai` (v0.7.0): local-model grounding over the measured evidence digest; deterministic fallback is a named refusal, never a fabrication |
 | Git intelligence (evidence sourcing from history) | designed — findings evidence schema already names git sources |
 
 ## The tiers
@@ -88,8 +88,11 @@ These are the adoption engine — charging for them would amputate it.
 - **Fleet intelligence** — org-wide view across hundreds of repositories:
   which repos are getting slower, where dependency risk is spreading, which
   experiments actually worked. Requires the cloud milestone.
-- **Local AI** — first-class local model support so organizations that can
-  never send source to an external provider get full AI grounding offline.
+- **Local AI** — the local-model surface shipped in v0.7.0 (`wanyrix ai`,
+  `wanyrix.ai/v1`): offline/private AI grounding with zero external
+  providers, honest named refusals when no local model is running. The
+  remaining evolution is broader model/backend coverage behind the same
+  grounded abstraction.
 
 Technical foundations for all of the above: [`docs/CLOUD_DESIGN.md`](CLOUD_DESIGN.md)
 (sync semantics, device auth, tenant isolation, decision points) and

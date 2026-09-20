@@ -544,6 +544,34 @@ export interface WorkspaceSummary {
 export interface WorkspacesPayload {
   workspaces: WorkspaceSummary[]
   default: string
+  /**
+   * User-registered LOCAL projects (workspace registration bridge, Task 2-b)
+   * — measured by the real engine at registration/scan time, never invented.
+   * Optional so pre-bridge consumers stay type-safe; the API always includes
+   * it now (empty array = nothing connected).
+   */
+  registered?: RegisteredWorkspaceSummary[]
+}
+
+/**
+ * One registered LOCAL project (the registration bridge). Ids are
+ * deterministic (`ws-local-<slug>-<fnv1a8(abs path)>`), so re-connecting a
+ * path refreshes the same row. Counts are engine measurements (Gate 21).
+ */
+export interface RegisteredWorkspaceSummary {
+  id: string
+  name: string
+  path: string
+  registeredAt: string
+  lastCheckedAt: string
+  lastStatus: 'ok' | 'failed'
+  crates: number
+  edges: number
+  findings: number
+  critical: number
+  warning: number
+  info: number
+  toolchain: string
 }
 
 /** POST /api/wanyrix/explain */

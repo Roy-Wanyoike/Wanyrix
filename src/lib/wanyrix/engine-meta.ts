@@ -6,4 +6,4 @@
  * v0.5.0. One constant, one place; `tests/unit/engine-meta.test.ts` pins it
  * to `engine/Cargo.toml` so the two can never drift again.
  */
-export const ENGINE_VERSION = '0.6.0'
+export const ENGINE_VERSION = '0.7.0'

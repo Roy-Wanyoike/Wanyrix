@@ -2,6 +2,7 @@
 //! library so tests can drive the exact CLI code path).
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
@@ -168,6 +169,35 @@ pub enum Command {
     Events {
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Ask a LOCAL model (Ollama-class) a question about this workspace,
+    /// grounded on the measured evidence digest (wanyrix.ai/v1). Only the
+    /// digest is transmitted — never source code. AI output is labeled
+    /// inference; it is never a measurement and never verification.
+    Ai {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Question to ask about the workspace.
+        #[arg(
+            long,
+            short = 'q',
+            default_value = "Summarize the health of this workspace and which findings matter most."
+        )]
+        question: String,
+        /// Local model server address (host:port or http://host:port).
+        /// Falls back to $WANYRIX_AI_ENDPOINT, then the Ollama default.
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// Model name (falls back to $WANYRIX_AI_MODEL, then the default).
+        #[arg(long)]
+        model: Option<String>,
+        /// Network timeout in seconds.
+        #[arg(long, default_value_t = 120)]
+        timeout_secs: u64,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -717,6 +747,32 @@ pub fn events_run(path: &Path, json: bool, pretty: bool) -> Result<String, Engin
         );
         out.push_str(&crate::events::events_human(&log));
         Ok(out)
+    }
+}
+
+/// Run `wanyrix ai` — the local-AI explanation surface. The scan is real
+/// and local; the ONLY network traffic is one loopback HTTP request carrying
+/// the measured evidence digest to the user-chosen model server.
+pub fn ai_run(
+    path: &Path,
+    question: &str,
+    endpoint: Option<String>,
+    model: Option<String>,
+    timeout_secs: u64,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let report = crate::ai::ai_explain(
+        path,
+        question,
+        endpoint,
+        model,
+        Duration::from_secs(timeout_secs),
+    )?;
+    if json {
+        serialize_json(&report, pretty)
+    } else {
+        Ok(crate::ai::ai_human(&report))
     }
 }
 

@@ -14,6 +14,7 @@ import type {
   IssuesPayload,
   ExperimentsPayload,
   PRAnalysis,
+  RegisteredWorkspaceSummary,
   StoragePayload,
   WorkspaceSummary,
   WorkspacesPayload,
@@ -38,6 +39,147 @@ export function useWorkspaces() {
     queryKey: ['workspaces'],
     queryFn: () => getJson('/api/wanyrix/workspaces'),
     staleTime: Infinity,
+  })
+}
+
+/* -------------------------------------------- workspace registration bridge */
+
+/** Envelope of the POST /api/wanyrix/workspaces connect flow (Task 2-b). */
+export interface RegisterWorkspaceResponse {
+  registered: true
+  workspace: RegisteredWorkspaceSummary
+  /** measured by the real engine during registration — never invented */
+  verdict: {
+    crates: number
+    edges: number
+    critical: number
+    warning: number
+    info: number
+    findings: number
+    toolchain: string
+    engineVersion: string
+  }
+}
+
+/**
+ * The user-registered LOCAL projects (the "Connect a project" bridge).
+ * Reads the shared /api/wanyrix/workspaces payload and selects `.registered`
+ * — empty array = nothing connected yet (the server never fabricates rows,
+ * Gate 21). Invalidated together with the demo registry because both live on
+ * the same endpoint.
+ */
+export function useRegisteredWorkspaces() {
+  return useQuery<RegisteredWorkspaceSummary[]>({
+    queryKey: ['workspaces', 'registered'],
+    queryFn: async () => {
+      const payload = await getJson<WorkspacesPayload>('/api/wanyrix/workspaces')
+      return payload.registered ?? []
+    },
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * Connects a local Rust project: POST { path } → the route runs the REAL
+ * engine (doctor + graph) against the path and upserts a measured row.
+ * Failures throw {@link EngineExecError} carrying the route's named reason
+ * (400 validation / 404 not a Rust project / 502 engine failure / 503 binary
+ * missing + build hint). Invalidates every ['workspaces'] query on success.
+ */
+export function useRegisterWorkspace(): UseMutationResult<
+  RegisterWorkspaceResponse,
+  EngineExecError,
+  string
+> {
+  const queryClient = useQueryClient()
+  return useMutation<RegisterWorkspaceResponse, EngineExecError, string>({
+    mutationFn: async (path: string) => {
+      const res = await fetch('/api/wanyrix/workspaces', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+      const body: unknown = await res.json().catch(() => null)
+      const rec = (body ?? {}) as Record<string, unknown>
+      if (!res.ok || typeof rec.error === 'string') {
+        throw new EngineExecError(
+          typeof rec.error === 'string' ? rec.error : `connect → ${res.status}`,
+          res.status,
+          typeof rec.detail === 'string' ? rec.detail : undefined,
+          typeof rec.hint === 'string' ? rec.hint : undefined,
+        )
+      }
+      return body as RegisterWorkspaceResponse
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workspaces'] })
+    },
+  })
+}
+
+/** Envelope of DELETE /api/wanyrix/workspaces?id=… (Task 2-b). */
+export interface UnregisterWorkspaceResponse {
+  unregistered: true
+  id: string
+}
+
+/**
+ * Removes one registered local project by id. Invalidates every
+ * ['workspaces'] query on success (registry + registered list).
+ */
+export function useUnregisterWorkspace(): UseMutationResult<
+  UnregisterWorkspaceResponse,
+  EngineExecError,
+  string
+> {
+  const queryClient = useQueryClient()
+  return useMutation<UnregisterWorkspaceResponse, EngineExecError, string>({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/wanyrix/workspaces?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+      const body: unknown = await res.json().catch(() => null)
+      const rec = (body ?? {}) as Record<string, unknown>
+      if (!res.ok || typeof rec.error === 'string') {
+        throw new EngineExecError(
+          typeof rec.error === 'string' ? rec.error : `unregister → ${res.status}`,
+          res.status,
+          typeof rec.detail === 'string' ? rec.detail : undefined,
+          typeof rec.hint === 'string' ? rec.hint : undefined,
+        )
+      }
+      return body as UnregisterWorkspaceResponse
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workspaces'] })
+    },
+  })
+}
+
+/**
+ * Re-scans a REGISTERED local project through the REAL engine
+ * (`GET /api/wanyrix/engine/doctor?workspace=<id>` — only DB-stored paths
+ * are ever scanned). On success the route refreshed the stored measured
+ * counts; invalidating ['workspaces'] pulls the fresh row into every
+ * consumer. Failures keep the honest per-status contract (503 not built /
+ * 502 failed / 504 timeout / 404 unknown id) via {@link EngineExecError}.
+ */
+export function useScanRegisteredWorkspace(): UseMutationResult<
+  EngineExecPayload,
+  EngineExecError,
+  RegisteredWorkspaceSummary
+> {
+  const queryClient = useQueryClient()
+  return useMutation<EngineExecPayload, EngineExecError, RegisteredWorkspaceSummary>({
+    mutationFn: async (ws) => {
+      const res = await fetch(
+        `/api/wanyrix/engine/doctor?workspace=${encodeURIComponent(ws.id)}`,
+      )
+      return parseEngineExecResponse<EngineExecPayload>(res)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workspaces'] })
+    },
   })
 }
 
@@ -386,6 +528,8 @@ export interface EngineExecPayload {
   durationMs: number
   binary: { version: string; profile: 'debug' | 'release' }
   scanTarget: string
+  /** present only when the scan targeted a REGISTERED local project (`?workspace=<id>`) */
+  workspaceId?: string
   note: string
   /** verbatim `wanyrix.doctor/v1` stdout of the real binary (loosely typed) */
   report: {
