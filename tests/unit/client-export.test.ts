@@ -122,7 +122,7 @@ describe('client scan-history export — single source with the HTTP flavor (Tas
     // export log stays empty by contract, and the note now says where synced
     // runs actually live instead of claiming no server log exists at all.
     expect(SERVER_SCAN_HISTORY_NOTE).toBe(
-      'Server-side scan log. Run entries mirror the client exporter exactly (id, at, trigger, findings, critical, warning, info, buildTimeSeconds, estimatedFromSeconds, estimatedToSeconds, wallClockMs). Scan runs are recorded client-side per browser (localStorage) in this demo, so THIS export log stays empty — runs synced to the durable server log are served by GET /api/wanyrix/scan-runs (wanyrix.scan-runs/v1) and are never merged or fabricated here (Gate 21: measured vs estimated labeled per run).',
+      'Server-side scan log. Run entries mirror the client exporter exactly (id, at, trigger, findings, critical, warning, info, buildTimeSeconds, estimatedFromSeconds, estimatedToSeconds, wallClockMs, plus the optional R7 findings fingerprint findingIds/findingIdsTruncated when the run carried one). Scan runs are recorded client-side per browser (localStorage) in this demo, so THIS export log stays empty — runs synced to the durable server log are served by GET /api/wanyrix/scan-runs (wanyrix.scan-runs/v1) and are never merged or fabricated here (Gate 21: measured vs estimated labeled per run).',
     )
     expect(buildScanHistoryFlavor(WS, FROZEN_NOW).note).toBe(SERVER_SCAN_HISTORY_NOTE)
   })
@@ -149,6 +149,23 @@ describe('client scan-history export — single source with the HTTP flavor (Tas
       estimatedToSeconds: 44, // entry.estimatedTo → estimatedToSeconds
       wallClockMs: 4123, // entry.durationMs → wallClockMs
     })
+  })
+
+  test('R7: an entry WITH a fingerprint gains exactly the fingerprint keys (additive)', () => {
+    const run = toScanHistoryRunFlavor(
+      logEntry({ findingIds: ['WAN-BLD-001', 'WAN-DEP-006'] }),
+    )
+    expect(Object.keys(run).sort()).toEqual([...RUN_KEYS, 'findingIds'].sort())
+    expect(run.findingIds).toEqual(['WAN-BLD-001', 'WAN-DEP-006'])
+    expect(run).not.toHaveProperty('findingIdsTruncated')
+
+    const truncated = toScanHistoryRunFlavor(
+      logEntry({ findingIds: ['WAN-BLD-001'], findingIdsTruncated: true }),
+    )
+    expect(Object.keys(truncated).sort()).toEqual(
+      [...RUN_KEYS, 'findingIds', 'findingIdsTruncated'].sort(),
+    )
+    expect(truncated.findingIdsTruncated).toBe(true)
   })
 
   test('runs are exported in log order (newest first) through the same mapper', () => {

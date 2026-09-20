@@ -229,6 +229,9 @@ export interface ServerScanRun {
   severityCounts: { critical: number; warning: number; info: number }
   trigger: string
   syncedAt: string // ISO — when the server received the POST
+  /** R7 findings fingerprint — present only on runs POSTed with one. */
+  findingIds?: string[]
+  findingIdsTruncated?: boolean
 }
 
 /** GET /api/wanyrix/scan-runs envelope. */

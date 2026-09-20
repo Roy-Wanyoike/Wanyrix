@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CloudOff,
   Database,
+  Fingerprint,
   HardDrive,
   Loader2,
   RefreshCw,
@@ -89,6 +90,28 @@ function SyncBadge({ state }: { state: RunSyncState }) {
   )
 }
 
+/** R7: tiny fingerprint indicator — shown only when the run carries one. */
+function FingerprintTag({ ids, truncated }: { ids?: string[]; truncated?: boolean }) {
+  if (!ids) return null
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-0.5 rounded border border-border/50 bg-card px-1 py-0.5 font-mono text-[8.5px] tabular-nums',
+        truncated ? 'text-amber-300/90' : 'text-muted-foreground/80',
+      )}
+      title={
+        truncated
+          ? `findings fingerprint (partial, > ${ids.length} ids kept)`
+          : `findings fingerprint — ${ids.length} finding ids`
+      }
+    >
+      <Fingerprint className="size-2.5" aria-hidden />
+      {ids.length}
+      {truncated && '+'}
+    </span>
+  )
+}
+
 function LocalRunRow({ run, state, index }: { run: ScanRunRecord; state: RunSyncState; index: number }) {
   return (
     <motion.li
@@ -116,6 +139,7 @@ function LocalRunRow({ run, state, index }: { run: ScanRunRecord; state: RunSync
       <span className="ml-auto font-mono text-[9.5px] tabular-nums text-muted-foreground/70">
         {(run.durationMs / 1000).toFixed(1)}s
       </span>
+      <FingerprintTag ids={run.findingIds} truncated={run.findingIdsTruncated} />
       <SyncBadge state={state} />
     </motion.li>
   )
@@ -142,6 +166,7 @@ function ServerRunRow({ run, index }: { run: ServerScanRun; index: number }) {
       <span className="ml-auto font-mono text-[9.5px] tabular-nums text-muted-foreground/70">
         {(run.durationMs / 1000).toFixed(1)}s
       </span>
+      <FingerprintTag ids={run.findingIds} truncated={run.findingIdsTruncated} />
     </motion.li>
   )
 }

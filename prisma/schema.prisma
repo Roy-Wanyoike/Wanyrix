@@ -33,5 +33,11 @@ model ScanRun {
   trigger      String   @default("manual") // manual | topbar | palette
   syncedAt     DateTime @default(now()) // when the server received it
 
+  // Findings fingerprint (R7): the sorted unique finding ids the run's
+  // payload contained, JSON-encoded. Optional — legacy synced runs predate
+  // it. Persisted verbatim (Gate 21); diffs are computed client-side.
+  findingIds          String? // JSON string[] — sorted, unique, capped at 400
+  findingIdsTruncated Boolean @default(false) // true when the source list exceeded the 400 cap
+
   @@index([workspaceId, startedAt])
 }

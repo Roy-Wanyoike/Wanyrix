@@ -46,6 +46,15 @@ export interface ScanHistoryEntry {
   estimatedFrom: number // s, estimated (payload)
   estimatedTo: number // s, estimated (payload)
   trigger: ScanTrigger
+  /**
+   * Findings fingerprint (R7): the sorted unique finding ids this run's
+   * payload contained — OPTIONAL. The key is only present when a payload
+   * supplied one (legacy persisted entries predate it), and it is capped at
+   * `FINDING_IDS_CAP` (see finding-diff.ts) with `findingIdsTruncated` set
+   * when the source list overflowed.
+   */
+  findingIds?: string[]
+  findingIdsTruncated?: boolean
 }
 
 const CAP = 20
@@ -73,6 +82,14 @@ export interface ScanRunRecord {
   findingCount: number
   severityCounts: ScanSeverityCounts
   trigger: ScanTrigger
+  /**
+   * Findings fingerprint (R7) — OPTIONAL, key omitted when absent so the
+   * pinned legacy record shape stays byte-compatible. Same cap/truncation
+   * contract as `ScanHistoryEntry.findingIds`; synced verbatim to the
+   * durable server log (`wanyrix.scan-runs/v1`).
+   */
+  findingIds?: string[]
+  findingIdsTruncated?: boolean
 }
 
 /**
@@ -81,8 +98,10 @@ export interface ScanRunRecord {
  * run); `durationMs` defaults to `finishedAt − startedAt`; `trigger`
  * defaults to `'manual'`.
  */
-export type ScanRunInput = Partial<Pick<ScanRunRecord, 'id' | 'durationMs' | 'trigger'>> &
-  Omit<ScanRunRecord, 'id' | 'durationMs' | 'trigger'>
+export type ScanRunInput = Partial<
+    Pick<ScanRunRecord, 'id' | 'durationMs' | 'trigger' | 'findingIds' | 'findingIdsTruncated'>
+  > &
+  Omit<ScanRunRecord, 'id' | 'durationMs' | 'trigger' | 'findingIds' | 'findingIdsTruncated'>
 
 /** Max persisted scan runs per workspace (oldest evicted). */
 export const SCAN_RUNS_CAP = 50
@@ -141,6 +160,12 @@ export const useScanStore = create<ScanState>()(
           findingCount: run.findingCount,
           severityCounts: run.severityCounts,
           trigger: run.trigger ?? 'manual',
+        }
+        // R7: fingerprint keys are included ONLY when provided — legacy
+        // replays/migrations without one keep the exact pinned 8-key shape.
+        if (run.findingIds !== undefined) {
+          record.findingIds = run.findingIds
+          if (run.findingIdsTruncated) record.findingIdsTruncated = true
         }
         set((s) => ({
           runs: {

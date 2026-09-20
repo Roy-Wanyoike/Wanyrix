@@ -107,6 +107,22 @@ with explicit approval semantics (Gate 19: new-proposal, no fabricated removals)
   not synced` badges ↔ server log verbatim) and offers a **Sync unsynced** backfill
   action. The server stores exactly what your browser measured and POSTed — it never
   fabricates runs (Gate 21), and a sync failure never blocks or loses a local run.
+  Runs newer than R7 also carry their **findings fingerprint** (the sorted unique
+  finding ids the payload contained, capped at 400 with an explicit truncated flag),
+  so finding-level diffs survive browser wipes too.
+- **Compare two runs**: toggle **Compare** in the Scan history panel, then pick any
+  two runs (A then B — a third click slides the window, clicking a selected run
+  removes it). You get measured A→B deltas (findings, severities, build, wall clock,
+  with direction coloring and % vs A), plus — when both runs carry a fingerprint — a
+  **finding-id granularity diff**: `N stable · +M new in B · −K resolved`. Every new
+  or resolved finding id is listed; clicking a chip opens its detail drawer **only
+  if that finding exists in the current payload** — otherwise an honest toast says
+  so. Trigger filter chips (all / doctor view / topbar / ⌘K) narrow both the run list
+  and the trend bars; hovering a row reveals a copy-run-id button.
+- **Exports**: the Export dropdown offers the machine envelope
+  (`wanyrix.scan-history/v1` JSON), a Markdown run table, and a CSV run table
+  (includes `fingerprint_count` / `fingerprint_truncated` columns) — all built
+  client-side, nothing leaves the browser (Gate 28).
 - **Runtime**: captured async request profile + local engine signals. If a signal is not
   instrumented, the view says so honestly (tracked AUDIT-I8) — no fabricated telemetry.
 

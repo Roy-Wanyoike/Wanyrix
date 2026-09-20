@@ -154,7 +154,7 @@ Full task-oriented guide: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 | `experiments`, `gates`, `issues`, `pr` | verification loop, release scorecard, traceability, PR regression guard |
 | `report` | workspace report — `?format=markdown\|json` and machine flavors `?flavor=scorecard\|scan-history` |
 | `explain` | grounded AI — `context`+`question` ⇒ 400 if missing; GET ⇒ `405` (`Allow: POST`); >256 KB ⇒ `413` |
-| `scan-runs` | durable scan-run log (`wanyrix.scan-runs/v1`) — browser runs POST here (idempotent upsert); GET serves exactly what was synced, never fabricated (Gate 21) |
+| `scan-runs` | durable scan-run log (`wanyrix.scan-runs/v1`) — browser runs POST here (idempotent upsert, optional findings-fingerprint `findingIds` per run); GET serves exactly what was synced, never fabricated (Gate 21) |
 | `engine/doctor` | the ONE route that executes — spawns the real `wanyrix` binary from `engine/` and returns verbatim `wanyrix.doctor/v1` stdout (`wanyrix.engine-exec/v1`); 503 when not built on the host |
 
 Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{error, knownWorkspaces}` — data is never silently served for the wrong workspace. Error semantics: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · machine contract: [`docs/CLI.md`](docs/CLI.md).

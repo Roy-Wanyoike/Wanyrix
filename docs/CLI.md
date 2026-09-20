@@ -55,7 +55,7 @@ These surfaces are served by the Next.js API routes directly. They are labeled
 | Topbar Report (Markdown / JSON snapshot) | `GET /api/wanyrix/report?format=json\|markdown&ws=…` | `wanyrix.report/v1` · `wanyrix.markdown/v1` |
 | Release scorecard download | `GET /api/wanyrix/report?flavor=scorecard&ws=…` | `wanyrix.release-scorecard/v1` |
 | Scan history export | `GET /api/wanyrix/report?flavor=scan-history&ws=…` | `wanyrix.scan-history/v1` (server-side `runs` honestly empty — runs are per-browser localStorage; the `note` field says so) |
-| Scan-run sync log (durable server log) | `GET`/`POST /api/wanyrix/scan-runs?ws=…` | `wanyrix.scan-runs/v1` — the web client fire-and-forget POSTs each completed run; GET serves the persisted rows verbatim (SQLite/Prisma), never fabricated |
+| Scan-run sync log (durable server log) | `GET`/`POST /api/wanyrix/scan-runs?ws=…` | `wanyrix.scan-runs/v1` — the web client fire-and-forget POSTs each completed run (optionally with its findings fingerprint `findingIds` + `findingIdsTruncated`, validated: ≤96 chars/id, ≤400 entries); GET serves the persisted rows verbatim (SQLite/Prisma), never fabricated |
 | Real engine execution (Build Doctor view) | `GET /api/wanyrix/engine/doctor` | `wanyrix.engine-exec/v1` — spawns the actual `wanyrix` binary built from `engine/` and returns its verbatim `wanyrix.doctor/v1` stdout (scan target: the engine crate itself); 503 when the binary is not built on the host |
 | Experiments board | `GET /api/wanyrix/experiments?ws=…` | `EXP-*` records |
 

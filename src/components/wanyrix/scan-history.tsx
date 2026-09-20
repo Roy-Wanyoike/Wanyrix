@@ -7,6 +7,7 @@ import {
   Check,
   Download,
   FileJson,
+  FileSpreadsheet,
   FileText,
   GitCompare,
   History,
@@ -95,12 +96,66 @@ function exportMarkdown(workspace: string, runs: ScanHistoryEntry[]): string {
   ].join('\n')
 }
 
+/** Minimal CSV field escaping — quote when the value contains , " or \n. */
+function csvField(v: string | number): string {
+  const s = String(v)
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+/** R7: spreadsheet-friendly run table (fingerprint count column included). */
+function exportCsv(runs: ScanHistoryEntry[]): string {
+  const header = [
+    'run_id',
+    'time',
+    'trigger',
+    'critical',
+    'warning',
+    'info',
+    'findings',
+    'fingerprint_count',
+    'fingerprint_truncated',
+    'build_seconds',
+    'estimated_from_seconds',
+    'estimated_to_seconds',
+    'wall_clock_seconds',
+  ].join(',')
+  const rows = runs.map((h) =>
+    [
+      h.id,
+      h.at,
+      h.trigger,
+      h.critical,
+      h.warning,
+      h.info,
+      h.findings,
+      h.findingIds?.length ?? '',
+      h.findingIdsTruncated === true ? 'true' : 'false',
+      h.buildTime.toFixed(1),
+      h.estimatedFrom,
+      h.estimatedTo,
+      (h.durationMs / 1000).toFixed(1),
+    ]
+      .map(csvField)
+      .join(','),
+  )
+  return [header, ...rows, ''].join('\n')
+}
+
 /**
  * Per-workspace run log for `wanyrix doctor` (issue #37, extended by #44).
  * Findings counts and build figures come from the doctor payload at scan
  * completion; duration is the client-measured wall clock of the terminal run.
+ * R7: `onInspectFinding` enables explain drill-through from the Compare
+ * panel's fingerprint diff (resolvable only against the CURRENT payload —
+ * the parent owns that honesty).
  */
-export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: number }) {
+export function ScanHistoryPanel({
+  currentBuildTime,
+  onInspectFinding,
+}: {
+  currentBuildTime: number
+  onInspectFinding?: (id: string) => void
+}) {
   const activeWs = useWorkspaceStore((s) => s.active)
   const historyMap = useScanStore((s) => s.history)
   const clearHistory = useScanStore((s) => s.clearHistory)
@@ -166,7 +221,7 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
     setTargetId(null)
   }
 
-  const doExport = (fmt: 'json' | 'md') => {
+  const doExport = (fmt: 'json' | 'md' | 'csv') => {
     const now = new Date()
     if (fmt === 'json') {
       // Consolidated exporter (ENG-TCA-2): filename + envelope both come from
@@ -175,6 +230,13 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
         clientScanHistoryFilename(activeWs, now),
         exportJson(activeWs, history),
         'application/json',
+      )
+    } else if (fmt === 'csv') {
+      const stamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      downloadBlob(
+        `${activeWs}-scan-history-${stamp}.csv`,
+        exportCsv(history),
+        'text/csv',
       )
     } else {
       // Same stamp rule as the exporter: ISO → '-', 19 chars.
@@ -241,6 +303,10 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
                   <FileText className="size-3.5 text-primary" aria-hidden />
                   Markdown run table
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => doExport('csv')} className="gap-2 text-xs">
+                  <FileSpreadsheet className="size-3.5 text-primary" aria-hidden />
+                  CSV · spreadsheet run table
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button
@@ -284,6 +350,7 @@ export function ScanHistoryPanel({ currentBuildTime }: { currentBuildTime: numbe
                   setBaseId(null)
                   setTargetId(null)
                 }}
+                onInspectFinding={onInspectFinding}
               />
             </div>
           )}

@@ -78,6 +78,9 @@ export interface ScanHistoryRunFlavor {
   estimatedFromSeconds: number
   estimatedToSeconds: number
   wallClockMs: number
+  /** R7: optional findings fingerprint — included only when the entry has one. */
+  findingIds?: string[]
+  findingIdsTruncated?: boolean
 }
 
 export interface ScanHistoryFlavor {
@@ -98,7 +101,7 @@ export interface ScanHistoryFlavor {
  * note that says so. Do not "populate" this from the client log.
  */
 export const SERVER_SCAN_HISTORY_NOTE =
-  'Server-side scan log. Run entries mirror the client exporter exactly (id, at, trigger, findings, critical, warning, info, buildTimeSeconds, estimatedFromSeconds, estimatedToSeconds, wallClockMs). Scan runs are recorded client-side per browser (localStorage) in this demo, so THIS export log stays empty — runs synced to the durable server log are served by GET /api/wanyrix/scan-runs (wanyrix.scan-runs/v1) and are never merged or fabricated here (Gate 21: measured vs estimated labeled per run).'
+  'Server-side scan log. Run entries mirror the client exporter exactly (id, at, trigger, findings, critical, warning, info, buildTimeSeconds, estimatedFromSeconds, estimatedToSeconds, wallClockMs, plus the optional R7 findings fingerprint findingIds/findingIdsTruncated when the run carried one). Scan runs are recorded client-side per browser (localStorage) in this demo, so THIS export log stays empty — runs synced to the durable server log are served by GET /api/wanyrix/scan-runs (wanyrix.scan-runs/v1) and are never merged or fabricated here (Gate 21: measured vs estimated labeled per run).'
 
 /** Shared envelope constructor — one shape, two honest notes (server/client). */
 function scanHistoryEnvelope(
@@ -188,6 +191,14 @@ export function toScanHistoryRunFlavor(entry: ScanHistoryEntry): ScanHistoryRunF
     estimatedFromSeconds: entry.estimatedFrom,
     estimatedToSeconds: entry.estimatedTo,
     wallClockMs: entry.durationMs,
+    // R7: fingerprint keys are included ONLY when the entry carries one, so
+    // legacy entries keep the exact pinned key set.
+    ...(entry.findingIds !== undefined
+      ? {
+          findingIds: entry.findingIds,
+          ...(entry.findingIdsTruncated ? { findingIdsTruncated: true } : {}),
+        }
+      : {}),
   }
 }
 

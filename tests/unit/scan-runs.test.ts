@@ -70,6 +70,25 @@ describe('recordScanRun — recording + deterministic ids', () => {
     expect(record.severityCounts).toEqual({ critical: 2, warning: 5, info: 10 })
   })
 
+  test('R7: a run WITH a fingerprint gains exactly findingIds (+truncated only when true)', () => {
+    const withIds = useScanStore.getState().recordScanRun(
+      runInput({ findingIds: ['WAN-BLD-002', 'WAN-BLD-001'] }),
+    )
+    expect(Object.keys(withIds).sort()).toEqual(
+      [
+        'durationMs', 'findingCount', 'finishedAt', 'id', 'severityCounts',
+        'startedAt', 'trigger', 'workspaceId', 'findingIds',
+      ].sort(),
+    )
+    expect(withIds.findingIds).toEqual(['WAN-BLD-002', 'WAN-BLD-001']) // verbatim — caller normalizes
+    expect(withIds).not.toHaveProperty('findingIdsTruncated') // false stays OFF the record
+
+    const truncated = useScanStore.getState().recordScanRun(
+      runInput({ findingIds: ['WAN-BLD-001'], findingIdsTruncated: true }),
+    )
+    expect(truncated.findingIdsTruncated).toBe(true)
+  })
+
   test('trigger defaults to manual; an explicit origin is preserved', () => {
     const manual = useScanStore.getState().recordScanRun(runInput())
     expect(manual.trigger).toBe('manual')

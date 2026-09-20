@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useDoctor, useRecordScanRun } from '@/lib/wanyrix/hooks'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
+import { capFindingIds } from '@/lib/wanyrix/finding-diff'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useToast } from '@/hooks/use-toast'
 import { FindingSheet } from '../finding-sheet'
@@ -404,12 +405,15 @@ export default function DoctorView({ onNavigate }: ViewProps) {
   /* scan completion → record a history entry (issue #37) + a structured scan
      run (Task 3-b); figures come from the payload. Trigger label: 'manual' for
      the auto-run on view mount, otherwise whatever control bumped the scan
-     event that produced this run. */
+     event that produced this run. R7: the run also persists its findings
+     fingerprint (sorted unique payload finding ids, capped) so History can
+     diff runs at finding-id granularity. */
   const handleScanDone = (done: boolean, durationMs: number) => {
     if (!done) return
     setDoneRun(runId)
     if (report) {
       const trigger = scanTick === mountedAtTick.current ? 'manual' : lastTrigger
+      const fingerprint = capFindingIds(report.findings.map((f) => f.id))
       addScanEntry(activeWs, {
         id: `scan-${Date.now()}`,
         workspace: activeWs,
@@ -423,6 +427,8 @@ export default function DoctorView({ onNavigate }: ViewProps) {
         estimatedFrom: report.estimatedRange[0],
         estimatedTo: report.estimatedRange[1],
         trigger,
+        findingIds: fingerprint.ids,
+        ...(fingerprint.truncated ? { findingIdsTruncated: true } : {}),
       })
       recordScanRun({
         startedAt: runStartedAtRef.current,
@@ -435,6 +441,8 @@ export default function DoctorView({ onNavigate }: ViewProps) {
           info: report.findings.filter((f) => f.severity === 'info').length,
         },
         trigger,
+        findingIds: fingerprint.ids,
+        findingIdsTruncated: fingerprint.truncated,
       })
     }
   }
@@ -636,7 +644,23 @@ export default function DoctorView({ onNavigate }: ViewProps) {
       </div>
 
       {/* ------------------------------------------------ 4) critical path */}
-      <ScanHistoryPanel currentBuildTime={report.buildTime} />
+      <ScanHistoryPanel
+        currentBuildTime={report.buildTime}
+        onInspectFinding={(id) => {
+          // R7 fingerprint-diff drill-through: a diff chip is inspectable only
+          // when the finding exists in the CURRENT payload — anything else is
+          // reported honestly instead of silently doing nothing.
+          const finding = report.findings.find((f) => f.id === id)
+          if (finding) {
+            setSelected(finding)
+          } else {
+            toast({
+              title: 'Finding not in the current payload',
+              description: `${id} was recorded in run A/B but is not part of the report on screen — run the scan that contains it to inspect it.`,
+            })
+          }
+        }}
+      />
 
       {/* ------------------------------------------------ 5) critical path chart */}
       <Panel title="Critical path" subtitle={`what the ${report.buildTime}s is made of`}>
