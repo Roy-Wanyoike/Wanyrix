@@ -551,7 +551,10 @@ export default function DiagnosticsView({ onNavigate }: ViewProps) {
 
       {data && (
         <Tabs defaultValue="borrow">
-          <TabsList>
+          {/* TabsList wraps (flex-wrap) instead of forcing a 411px row past
+              the mobile viewport (issue #70); h-auto restores padding lost
+              when wrapping to a second line. */}
+          <TabsList className="h-auto max-w-full flex-wrap">
             <TabsTrigger value="borrow">
               <Braces className="size-3.5" />
               Borrow Checker Explainer

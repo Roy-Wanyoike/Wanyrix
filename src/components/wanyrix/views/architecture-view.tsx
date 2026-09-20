@@ -289,15 +289,15 @@ export default function ArchitectureView({ onNavigate }: ViewProps) {
 
       {/* honesty legend */}
       <Panel title="How to read these numbers" subtitle="measurement honesty (Gate 21)">
-        <ul className="space-y-2 text-[12.5px] leading-relaxed text-muted-foreground">
-          <li className="flex items-start gap-2">
+        <ul className="space-y-2 text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+          <li className="flex min-w-0 items-start gap-2">
             <MeasurementBadge status="measured" />
             <span>
               build times — <span className="font-mono text-foreground/85">cargo build --timings</span>; change
               frequency — git log over the last 90 days.
             </span>
           </li>
-          <li className="flex items-start gap-2">
+          <li className="flex min-w-0 items-start gap-2">
             <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 font-mono text-[10px] uppercase text-emerald-300">
               deterministic
             </Badge>
@@ -305,7 +305,7 @@ export default function ArchitectureView({ onNavigate }: ViewProps) {
               fan-in, fan-out, downstream and direction — structural facts derived from the cargo metadata graph.
             </span>
           </li>
-          <li className="flex items-start gap-2">
+          <li className="flex min-w-0 items-start gap-2">
             <MeasurementBadge status="estimated" />
             <span>
               <strong className="text-foreground/85">hotspot score = fan-in × change frequency</strong> — a

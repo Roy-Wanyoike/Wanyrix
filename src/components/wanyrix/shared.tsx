@@ -146,7 +146,11 @@ export function Panel({
   return (
     <section
       className={cn(
-        'rounded-xl border border-border/80 bg-card shadow-[0_1px_0_0_oklch(1_0_0/4%)_inset]',
+        // min-w-0: grid/flex items default to min-width:auto, so a wide
+        // inner table would otherwise force the panel (and the page) past
+        // the viewport — the inner overflow-x-auto wrapper must be allowed
+        // to scroll instead (UI audit, issue #70).
+        'min-w-0 rounded-xl border border-border/80 bg-card shadow-[0_1px_0_0_oklch(1_0_0/4%)_inset]',
         className,
       )}
     >

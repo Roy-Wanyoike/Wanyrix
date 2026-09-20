@@ -297,8 +297,9 @@ export default function ScorecardView(_: ViewProps) {
 
       {/* ------------------------------------------------ body grid */}
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* gates table */}
-        <div className="lg:col-span-2">
+        {/* gates table — min-w-0 keeps the grid item from being forced wider
+            than the viewport by intrinsic content on mobile (issue #70) */}
+        <div className="min-w-0 lg:col-span-2">
           <Panel
             title="MVP acceptance gates"
             subtitle="consolidated 20-gate scorecard — no vanity aggregate score"

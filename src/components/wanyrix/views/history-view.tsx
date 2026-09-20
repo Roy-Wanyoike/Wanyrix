@@ -74,24 +74,24 @@ function HistoryBody() {
       <ServerSyncPanel />
 
       <Panel title="How entries are recorded" subtitle="the same event feeds the topbar, the palette and Build Doctor">
-        <ul className="space-y-2 text-[12.5px] leading-relaxed text-muted-foreground">
-          <li className="flex items-start gap-2">
+        <ul className="space-y-2 text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+          <li className="flex min-w-0 items-start gap-2">
             <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
             Every completed doctor run appends an entry — triggered from this view&apos;s doctor button, the topbar
             <span className="font-mono text-foreground/85"> Run scan </span> button, or the ⌘K palette.
           </li>
-          <li className="flex items-start gap-2">
+          <li className="flex min-w-0 items-start gap-2">
             <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
             Findings counts and build figures come from the doctor payload at scan completion (measured vs estimated
             labeled per run, Gate 21); the wall-clock duration is measured in your browser.
           </li>
-          <li className="flex items-start gap-2">
+          <li className="flex min-w-0 items-start gap-2">
             <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
             Each run is also POSTed to the durable server log (<span className="font-mono text-foreground/85">wanyrix.scan-runs/v1</span>)
             — fire-and-forget, so a sync failure never blocks or loses the local entry. Runs missing from the server
             log can be recovered with the panel&apos;s <span className="font-mono text-foreground/85">Sync unsynced</span> action.
           </li>
-          <li className="flex items-start gap-2">
+          <li className="flex min-w-0 items-start gap-2">
             <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
             The engine replays the same telemetry each run in this demo environment — history tracks what the CLI
             would report across runs, honestly labeled as such in every export.
