@@ -20,13 +20,29 @@ semantics, honesty architecture); for workflow rules see
 | `bun run dev` | Next.js dev server on :3000, output tee'd to `dev.log` |
 | `bun run lint` | ESLint over the repo — must stay clean |
 | `bun run typecheck` | `tsc --noEmit` (scopes to product code + `tests/`; `examples/`/`skills/` scaffolding excluded) |
-| `bun run test` | full suite: unit + live API contract tests (currently **138 tests / 2,871 assertions**, ~2 s) |
+| `bun run test` | full suite: unit + live API contract tests (currently **262 tests**, ~3 s) |
 | `bun run build` / `bun run start` | production build + standalone server (not needed for day-to-day dev) |
 | `bash scripts/check-branding.sh` | brand gate — fails on unsanctioned legacy brand tokens (below) |
-| `bun run db:*` | Prisma scaffold scripts — **unused by product flows**, listed for completeness |
+| `bun run brand:assets` | regenerate raster brand assets (OG card, banner, icons) from `scripts/generate-brand-assets.mjs` |
+| `bun run db:push` | apply `prisma/schema.prisma` to the SQLite file — **required once** for the optional durable scan-run sync (see Environment below) |
 
 The API contract tests talk to a **live dev server** on :3000; if it is down the API
 suite skips itself with a clear message instead of failing (unit tests always run).
+
+## Environment variables
+
+Copy `.env.example` to `.env` (git-ignored) and adjust. All of them are optional
+for the deterministic core — the dashboard serves its workspace intelligence
+without any configuration.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | for durable sync | SQLite file backing the **optional** server-side scan-run log (`POST /api/wanyrix/scan-runs`). Example: `file:../db/custom.db` (relative paths resolve against `prisma/schema.prisma`; absolute paths also work). Run `bun run db:push` after changing it. Without it configured, scan history still works fully in per-browser localStorage. |
+| `NEXT_PUBLIC_SITE_URL` | no | Canonical base URL used to resolve absolute OpenGraph/Twitter image URLs in metadata. Defaults to `https://wanyrix.dev` for local previews. |
+
+The Rust engine (`engine/`) needs a stable Rust toolchain (≥ 1.98) only when you
+want to build/run it locally: `cd engine && cargo build && cargo test`. CI builds
+and tests it on every push.
 
 ## Test harness layout
 

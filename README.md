@@ -8,7 +8,7 @@
 ![Rust](https://img.shields.io/badge/Rust-1.98-DEA584?logo=rust&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-365_passing-2EA043)
+![Tests](https://img.shields.io/badge/tests-364_passing-2EA043)
 
 <img src="public/brand/banner.png" alt="Wanyrix — engineering intelligence. The Beacon-W brand mark over a dark amber energy burst." width="100%" />
 
@@ -22,8 +22,8 @@ Wanyrix continuously understands a Rust workspace and explains **why development
 
 | | |
 | --- | --- |
-| 🧪 **365 automated tests** | 262 web (bun) + 103 engine (cargo) — unit, live-API contract, conformance, crash-recovery, instrumented-build IPC |
-| 🔍 **16 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
+| 🧪 **364 automated tests** | 262 web (bun) + 102 engine (cargo) — unit, live-API contract, conformance, crash-recovery, instrumented-build IPC |
+| 🔍 **18 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
 | 🦀 **Real Rust engine** | `wanyrix-engine` v0.4: doctor · graph · health · build (instrumented cargo builds) · synth · SQLite store (WAL + crash recovery) · daemon · telemetry |
 | 🖥️ **18-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui, light/dark, mobile-clean (0 px overflow @ 390 px) |
 | 🤖 **Grounded AI, non-authoritative** | facts server-rendered; model output validated against evidence, violations redacted |
@@ -146,7 +146,7 @@ Full task-oriented guide: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 
 ---
 
-## API surface (16 routes, `/api/wanyrix/*`)
+## API surface (18 routes, `/api/wanyrix/*`)
 
 | Route | Purpose |
 | --- | --- |
@@ -168,7 +168,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 ```text
 ├── src/                     # Web platform (Next.js 16 · TypeScript strict · Tailwind 4 · shadcn/ui)
-│   ├── app/api/wanyrix/     #   16 versioned API routes
+│   ├── app/api/wanyrix/     #   18 versioned API routes
 │   ├── components/wanyrix/  #   18-surface information architecture
 │   └── lib/wanyrix/         #   stores, contracts, fixtures (17 domain modules), exporters
 ├── engine/                  # wanyrix-engine (Rust 2021, zero-dep core + rusqlite)
@@ -185,7 +185,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 This repository is built the way it asks you to build software — with verifiable claims:
 
-- **365 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery.
+- **364 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery.
 - **CI on every push/PR** — ESLint, `tsc --noEmit`, full test suite, legacy-token brand gate, `cargo build --locked` + `clippy -D warnings` + `cargo test --locked`.
 - **Contract-first** — all machine payloads are versioned (`wanyrix.*​/v1`); determinism is pinned by tests (same input ⇒ byte-identical output, timestamp last).
 - **Honesty is load-bearing** — the `estimated/verified` separation, workspace guards, and grounding redaction are *tested behaviors*, not documentation.

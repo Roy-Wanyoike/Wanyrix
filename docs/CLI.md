@@ -1,10 +1,10 @@
 # Wanyrix CLI — contract reference
 
-Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.3.0
+Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.4.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
-store · synth · daemon · telemetry`. Every engine command emits a versioned JSON
+store · synth · daemon · telemetry · build`. Every engine command emits a versioned JSON
 envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
-`wanyrix.daemon/v1`, `wanyrix.telemetry/v1`) behind a `--json` switch, plus
+`wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`) behind a `--json` switch, plus
 human-readable output by default. The web platform mirrors the same payloads over
 HTTP; the in-app **CLI contract** dialog
 (`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)

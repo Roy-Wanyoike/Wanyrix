@@ -767,7 +767,7 @@ mod tests {
     #[test]
     fn package_id_forms_parse_to_names() {
         assert_eq!(
-            package_name_from_id("path+file:///home/z/my-project/engine#/wanyrix-engine/0.4.0"),
+            package_name_from_id("path+file:///home/dev/workspaces/engine#/wanyrix-engine/0.4.0"),
             "wanyrix-engine"
         );
         assert_eq!(
