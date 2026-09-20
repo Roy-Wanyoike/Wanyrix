@@ -5,6 +5,9 @@ import { useMutation, useQueries, useQuery, useQueryClient, UseMutationResult } 
 import type {
   DiagnosticsPayload,
   DoctorReport,
+  EngineGitReport,
+  EngineImpactReport,
+  EngineWhatChangedReport,
   ExplainRequest,
   ExplainResponse,
   GatesPayload,
@@ -521,16 +524,25 @@ export function useBackfillScanRuns(): UseMutationResult<BackfillResult, Error, 
 
 /* ------------------------------------------------------- real engine exec */
 
-/** Envelope of `GET /api/wanyrix/engine/doctor` (`wanyrix.engine-exec/v1`). */
-export interface EngineExecPayload {
+/**
+ * Minimal `wanyrix.engine-exec/v1` envelope MINUS the surface-specific
+ * `report` — the shared base for every real-exec payload (doctor, build and
+ * the issue #69 change-intelligence surfaces). `report` is always the
+ * engine's verbatim stdout; only its TYPE differs per surface.
+ */
+export interface EngineSurfaceEnvelope {
   schema: string
   executedAt: string
   durationMs: number
   binary: { version: string; profile: 'debug' | 'release' }
   scanTarget: string
-  /** present only when the scan targeted a REGISTERED local project (`?workspace=<id>`) */
+  /** present only when the exec targeted a REGISTERED local project (`?workspace=<id>`) */
   workspaceId?: string
   note: string
+}
+
+/** Envelope of `GET /api/wanyrix/engine/doctor` (`wanyrix.engine-exec/v1`). */
+export interface EngineExecPayload extends EngineSurfaceEnvelope {
   /** verbatim `wanyrix.doctor/v1` stdout of the real binary (loosely typed) */
   report: {
     schema?: string
@@ -576,7 +588,7 @@ export function useEngineBuild(): UseMutationResult<EngineBuildPayload, EngineEx
 }
 
 /** Shared engine-route response handling — verbatim envelope or honest error. */
-function parseEngineExecResponse<P extends EngineExecPayload>(res: Response): Promise<P> {
+function parseEngineExecResponse<P extends EngineSurfaceEnvelope>(res: Response): Promise<P> {
   return (async () => {
     const body: unknown = await res.json().catch(() => null)
     const rec = (body ?? {}) as Record<string, unknown>
@@ -644,6 +656,98 @@ export interface EngineBuildPayload {
     notes?: string[]
     [k: string]: unknown
   }
+}
+
+/* ------------------------------------------- engine change intelligence -- */
+
+/**
+ * Issue #69 — the three engine v0.8.0 change-intelligence surfaces served by
+ * the real binary through `wanyrix.engine-exec/v1` wrappers:
+ *   GET /api/wanyrix/git                    → `wanyrix.git/v1`
+ *   GET /api/wanyrix/engine/impact?crate=…  → `wanyrix.impact/v1`
+ *   GET /api/wanyrix/what-changed           → `wanyrix.what-changed/v1`
+ * Queries (not mutations): the panel renders live state on mount; each refetch
+ * is a fresh process spawn, so results are point-in-time measurements and
+ * named errors (EngineExecError) are terminal — no silent retries of a
+ * process that already reported honestly.
+ */
+
+/** Envelope of `GET /api/wanyrix/git` — `report` is the verbatim `wanyrix.git/v1`. */
+export interface EngineGitPayload extends EngineSurfaceEnvelope {
+  surface: 'git'
+  report: EngineGitReport
+}
+
+/**
+ * The measured git state of one real exec target — dogfood engine dir by
+ * default, or a REGISTERED local project via its `ws-local-…` id (the same
+ * resolution contract as {@link useScanRegisteredWorkspace}).
+ */
+export function useEngineGit(target?: string) {
+  return useQuery<EngineGitPayload, EngineExecError>({
+    queryKey: ['engine-git', target ?? ''],
+    queryFn: async () => {
+      const qs = target ? `?workspace=${encodeURIComponent(target)}` : ''
+      return parseEngineExecResponse<EngineGitPayload>(
+        await fetch(`/api/wanyrix/git${qs}`),
+      )
+    },
+    staleTime: 15_000,
+    retry: false,
+  })
+}
+
+/** Envelope of `GET /api/wanyrix/engine/impact` — `report` is the verbatim `wanyrix.impact/v1`. */
+export interface EngineImpactPayload extends EngineSurfaceEnvelope {
+  surface: 'impact'
+  report: EngineImpactReport
+}
+
+/**
+ * Measured rebuild blast radius for one crate of the exec target. Disabled
+ * until a crate name is committed (the panel auto-commits the engine's own
+ * `workspace` name / first changed crate, or the user types one).
+ */
+export function useEngineImpact(crate: string, target?: string) {
+  return useQuery<EngineImpactPayload, EngineExecError>({
+    queryKey: ['engine-impact', crate, target ?? ''],
+    queryFn: async () => {
+      const params = new URLSearchParams({ crate })
+      if (target) params.set('workspace', target)
+      return parseEngineExecResponse<EngineImpactPayload>(
+        await fetch(`/api/wanyrix/engine/impact?${params.toString()}`),
+      )
+    },
+    enabled: crate.trim().length > 0,
+    staleTime: 15_000,
+    retry: false,
+  })
+}
+
+/** Envelope of `GET /api/wanyrix/what-changed` — `report` is the verbatim `wanyrix.what-changed/v1`. */
+export interface EngineWhatChangedPayload extends EngineSurfaceEnvelope {
+  surface: 'what-changed'
+  report: EngineWhatChangedReport
+}
+
+/**
+ * Findings delta vs the stored baseline of the exec target's own
+ * `.wanyrix/store.db`. A missing store surfaces as a 503 EngineExecError
+ * (verbatim engine stderr) — an initialized but baseline-less store is a
+ * VALID envelope with `against` omitted + `baselineNote`, rendered as-is.
+ */
+export function useEngineWhatChanged(target?: string) {
+  return useQuery<EngineWhatChangedPayload, EngineExecError>({
+    queryKey: ['engine-what-changed', target ?? ''],
+    queryFn: async () => {
+      const qs = target ? `?workspace=${encodeURIComponent(target)}` : ''
+      return parseEngineExecResponse<EngineWhatChangedPayload>(
+        await fetch(`/api/wanyrix/what-changed${qs}`),
+      )
+    },
+    staleTime: 15_000,
+    retry: false,
+  })
 }
 
 /** Typed engine-exec failure — status + optional detail/hint from the route. */
