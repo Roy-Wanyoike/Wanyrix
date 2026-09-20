@@ -142,3 +142,39 @@ The fixture is deterministic (`--seed 42` ⇒ byte-identical tree), so the
 input side of these measurements is reproducible; the timing side is not
 (different machine = different numbers — that is what the honesty note at
 the top is for).
+
+## Instrumented build telemetry (v0.4.0 slice) — `wanyrix build` on the engine crate itself
+
+Same honesty note as above: single sandbox machine, single run day,
+`std::time::Instant`-measured wall clocks; relative evidence, not
+absolute claims, never `verified`.
+
+Fixture: the engine crate itself (v0.4.0 — 58 third-party crates + the
+wanyrix-engine lib/bin, 60 artifacts total), built with
+`wanyrix build --path . --json` (debug profile, pre-warmed registry
+cache — no network involved; `cargo build --message-format=json --quiet`):
+
+| Scenario | Measured |
+| --- | --- |
+| Warm (no-op rebuild) wall clock | ≈ 50–56 ms |
+| Warm artifacts | 60 total · 60 fresh · cache-hit rate **100** (`measured` status) |
+| Partial rebuild (touch `src/lib.rs`) wall clock | ≈ 1,271 ms |
+| Partial rebuild artifacts | 60 total · 58 fresh · 2 rebuilt · cache-hit rate **96** |
+| Diagnostics (both runs) | 0 warnings · 0 errors · 0 ICE |
+
+Reproduction (every number above is one command away):
+
+```sh
+cd engine
+./target/debug/wanyrix build --path . --json --pretty   # warm run
+touch src/lib.rs
+./target/debug/wanyrix build --path . --json --pretty   # partial rebuild
+```
+
+Scope limits (honest): `arrivalDeltaMs` per artifact is measured
+inter-message stream activity — cargo runs parallel jobs, so deltas
+overlap and are NOT per-crate build times (the envelope's notes say so
+on every response). Cold-from-scratch timings of the 58-crate dep tree
+were not re-measured this round (the tree was already compiled); the
+storage/cache numbers here characterize the warm + partial-rebuild path
+only.

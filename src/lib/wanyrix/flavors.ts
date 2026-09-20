@@ -81,6 +81,11 @@ export interface ScanHistoryRunFlavor {
   /** R7: optional findings fingerprint — included only when the entry has one. */
   findingIds?: string[]
   findingIdsTruncated?: boolean
+  /**
+   * R8: present (and `'not-measured'`) only on engine-exec rows whose build
+   * time is a visible zero — never on measured demo rows (additive key).
+   */
+  buildTimeStatus?: 'not-measured'
 }
 
 export interface ScanHistoryFlavor {
@@ -199,6 +204,9 @@ export function toScanHistoryRunFlavor(entry: ScanHistoryEntry): ScanHistoryRunF
           ...(entry.findingIdsTruncated ? { findingIdsTruncated: true } : {}),
         }
       : {}),
+    // R8: the not-measured build-time marker travels with the row so every
+    // export surfaces the visible zero AS a visible zero (additive key).
+    ...(entry.buildTimeStatus === 'not-measured' ? { buildTimeStatus: 'not-measured' as const } : {}),
   }
 }
 

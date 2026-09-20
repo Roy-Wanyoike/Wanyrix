@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, Subcommand};
 
 use crate::analysis::{analyze, Finding};
+use crate::build::{self, BuildOptions};
 use crate::graph::{build_graph, Graph};
 use crate::health::build_health;
 use crate::model::{EngineError, WorkspaceScan};
@@ -87,6 +88,22 @@ pub enum Command {
     Telemetry {
         #[command(subcommand)]
         cmd: TelemetryCmd,
+    },
+    /// Execute a REAL instrumented build (`cargo build
+    /// --message-format=json`) and measure it: wall clock, fresh/cache-hit
+    /// rate and redacted diagnostics (wanyrix.build/v1). A failed build is
+    /// data (buildSuccess: false); only a missing path or missing cargo
+    /// binary is an error.
+    Build {
+        /// Directory to build (must contain a Cargo.toml workspace/package).
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Emit the JSON flavor instead of a human-readable summary.
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
     },
 }
 
@@ -386,6 +403,16 @@ pub fn telemetry_run(cmd: TelemetryCmd) -> Result<String, EngineError> {
             };
             telemetry::ingest_run(&input, out.as_deref(), &opts)
         }
+    }
+}
+
+/// Run `wanyrix build` — the instrumented build-telemetry surface.
+pub fn build_run(path: &Path, json: bool, pretty: bool) -> Result<String, EngineError> {
+    let report = build::run_build(path, &BuildOptions::default())?;
+    if json {
+        serialize_json(&report, pretty)
+    } else {
+        Ok(build::human_summary(&report))
     }
 }
 

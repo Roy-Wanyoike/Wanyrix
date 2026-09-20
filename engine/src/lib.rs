@@ -15,6 +15,14 @@
 //! surface), and [`telemetry`] ingests rustc JSON diagnostics with
 //! default-on source/secret redaction.
 //!
+//! Phase-3 slice (engine v0.4.0): [`build`] instruments a REAL
+//! `cargo build --message-format=json` and measures it — wall clock, the
+//! fresh/cache-hit rate read from the stream's artifact flags, and counted
+//! diagnostics with the same redaction guarantees — emitting
+//! `wanyrix.build/v1`. The engine now MEASURES build telemetry instead of
+//! labeling it not-measured (the envelope stays honest about what a
+//! parallel build can and cannot attribute).
+//!
 //! # Honesty contract (the product's core identity — Gate 21 / Gate 7)
 //!
 //! 1. Everything emitted is MEASURED from the real filesystem. Nothing is
@@ -28,7 +36,9 @@
 //! 3. Fields the web contract requires but the engine cannot measure (build
 //!    times, cache hit rates, change frequency) are emitted as 0 with an
 //!    explicit `not-measured` status — a visible zero plus a status, never
-//!    an estimate in disguise.
+//!    an estimate in disguise. EXCEPTION (v0.4.0): `wanyrix build` MEASURES
+//!    the wall clock and cache-hit rate of a real cargo build it executed —
+//!    those fields carry a `measured` status and real numbers instead.
 //! 4. Deterministic output: identical input ⇒ identical JSON except
 //!    `generatedAt`, which is declared LAST in every envelope.
 //!
@@ -45,10 +55,13 @@
 //!   (`wanyrix.daemon/v1`; fingerprint invalidation, mode-0600 socket)
 //! - [`telemetry`] — rustc JSON diagnostics ingest with default-on
 //!   source/secret redaction (`wanyrix.telemetry/v1`)
+//! - [`build`] — instrumented cargo-build runner measuring wall clock, the
+//!   fresh/cache-hit rate and redacted diagnostics (`wanyrix.build/v1`)
 //! - [`synth`] — deterministic synthetic workspace generator (fixtures)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
 pub mod analysis;
+pub mod build;
 pub mod cli;
 pub mod daemon;
 pub mod graph;
@@ -64,6 +77,7 @@ pub mod telemetry;
 pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
+pub use build::{ArtifactRow, BuildOptions, BuildReport, BUILD_PROFILE, BUILD_SCHEMA};
 pub use graph::{Graph, GraphEdge, GraphNode};
 pub use model::{
     Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan,

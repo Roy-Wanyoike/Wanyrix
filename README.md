@@ -20,9 +20,9 @@ Wanyrix continuously understands a Rust workspace and explains **why development
 
 | | |
 | --- | --- |
-| 🧪 **262 automated tests** | 222 web (bun) + 40 engine (cargo) — unit, live-API contract, conformance, crash-recovery |
-| 🔍 **13 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
-| 🦀 **Real Rust engine** | `wanyrix-engine` v0.2: doctor · graph · health · synth · SQLite store (WAL + crash recovery) |
+| 🧪 **340 automated tests** | 237 web (bun) + 103 engine (cargo) — unit, live-API contract, conformance, crash-recovery, instrumented-build IPC |
+| 🔍 **16 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
+| 🦀 **Real Rust engine** | `wanyrix-engine` v0.4: doctor · graph · health · build (instrumented cargo builds) · synth · SQLite store (WAL + crash recovery) · daemon · telemetry |
 | 🖥️ **18-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui, light/dark, mobile-clean (0 px overflow @ 390 px) |
 | 🤖 **Grounded AI, non-authoritative** | facts server-rendered; model output validated against evidence, violations redacted |
 | 🔒 **Local-first, zero telemetry** | state in your browser; the one scaffold telemetry snippet was found and removed |
@@ -144,7 +144,7 @@ Full task-oriented guide: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 
 ---
 
-## API surface (15 routes, `/api/wanyrix/*`)
+## API surface (16 routes, `/api/wanyrix/*`)
 
 | Route | Purpose |
 | --- | --- |
@@ -155,7 +155,8 @@ Full task-oriented guide: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 | `report` | workspace report — `?format=markdown\|json` and machine flavors `?flavor=scorecard\|scan-history` |
 | `explain` | grounded AI — `context`+`question` ⇒ 400 if missing; GET ⇒ `405` (`Allow: POST`); >256 KB ⇒ `413` |
 | `scan-runs` | durable scan-run log (`wanyrix.scan-runs/v1`) — browser runs POST here (idempotent upsert, optional findings-fingerprint `findingIds` per run); GET serves exactly what was synced, never fabricated (Gate 21) |
-| `engine/doctor` | the ONE route that executes — spawns the real `wanyrix` binary from `engine/` and returns verbatim `wanyrix.doctor/v1` stdout (`wanyrix.engine-exec/v1`); 503 when not built on the host |
+| `engine/doctor` | executes — spawns the real `wanyrix` binary from `engine/` and returns verbatim `wanyrix.doctor/v1` stdout (`wanyrix.engine-exec/v1`); 503 when not built on the host |
+| `engine/build` | executes an INSTRUMENTED BUILD — the real binary runs a real `cargo build --message-format=json` and measures it (`wanyrix.build/v1`: measured wall clock, measured fresh/cache-hit rate, redacted diagnostics); a failed build is data (`buildSuccess: false`), not an HTTP error |
 
 Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{error, knownWorkspaces}` — data is never silently served for the wrong workspace. Error semantics: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · machine contract: [`docs/CLI.md`](docs/CLI.md).
 
@@ -165,7 +166,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 ```text
 ├── src/                     # Web platform (Next.js 16 · TypeScript strict · Tailwind 4 · shadcn/ui)
-│   ├── app/api/wanyrix/     #   15 versioned API routes
+│   ├── app/api/wanyrix/     #   16 versioned API routes
 │   ├── components/wanyrix/  #   18-surface information architecture
 │   └── lib/wanyrix/         #   stores, contracts, fixtures (17 domain modules), exporters
 ├── engine/                  # wanyrix-engine (Rust 2021, zero-dep core + rusqlite)

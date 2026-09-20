@@ -191,6 +191,11 @@ pub enum EngineError {
     /// path). Malformed diagnostic LINES are never an error — they are
     /// counted in the report (`meta.summary.malformedLines`).
     Telemetry(String),
+    /// The instrumented build (`wanyrix build`) could not be STARTED: the
+    /// scan path is missing (see `PathNotFound`) or the cargo executable was
+    /// not found / could not spawn. A build that RAN but failed is never
+    /// this — it is data in the envelope (`buildSuccess: false`).
+    Build(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -212,6 +217,7 @@ impl std::fmt::Display for EngineError {
             EngineError::Synth(e) => write!(f, "synthetic workspace error: {e}"),
             EngineError::Daemon(e) => write!(f, "daemon error: {e}"),
             EngineError::Telemetry(e) => write!(f, "telemetry error: {e}"),
+            EngineError::Build(e) => write!(f, "build telemetry error: {e}"),
         }
     }
 }

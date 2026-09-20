@@ -391,7 +391,8 @@ export interface EngineExecPayload {
   report: {
     schema?: string
     workspace?: string
-    findings?: { severity?: string; [k: string]: unknown }[]
+    /** R8: engine findings carry their own stable ids (`FER-ENG-*`). */
+    findings?: { id?: string; severity?: string; [k: string]: unknown }[]
     crates?: unknown[]
     [k: string]: unknown
   }
@@ -408,19 +409,97 @@ export function useEngineDoctor(): UseMutationResult<EngineExecPayload, EngineEx
   return useMutation<EngineExecPayload, EngineExecError, void>({
     mutationFn: async () => {
       const res = await fetch('/api/wanyrix/engine/doctor')
-      const body: unknown = await res.json().catch(() => null)
-      const rec = (body ?? {}) as Record<string, unknown>
-      if (!res.ok || typeof rec.error === 'string') {
-        throw new EngineExecError(
-          typeof rec.error === 'string' ? rec.error : `engine exec → ${res.status}`,
-          res.status,
-          typeof rec.detail === 'string' ? rec.detail : undefined,
-          typeof rec.hint === 'string' ? rec.hint : undefined,
-        )
-      }
-      return body as EngineExecPayload
+      return parseEngineExecResponse(res)
     },
   })
+}
+
+/**
+ * R8: on-demand INSTRUMENTED BUILD through the real binary
+ * (`wanyrix build --path engine --json` → `wanyrix.build/v1`): measured wall
+ * clock, measured fresh/cache-hit rate (read from cargo's artifact flags),
+ * per-artifact stream activity and redacted diagnostics. This is the first
+ * surface where `cacheHitRate` is MEASURED rather than labeled not-measured.
+ * Longer timeout than the doctor exec (a cold build may recompile crates).
+ */
+export function useEngineBuild(): UseMutationResult<EngineBuildPayload, EngineExecError, void> {
+  return useMutation<EngineBuildPayload, EngineExecError, void>({
+    mutationFn: async () => {
+      const res = await fetch('/api/wanyrix/engine/build')
+      return parseEngineExecResponse(res)
+    },
+  })
+}
+
+/** Shared engine-route response handling — verbatim envelope or honest error. */
+function parseEngineExecResponse<P extends EngineExecPayload>(res: Response): Promise<P> {
+  return (async () => {
+    const body: unknown = await res.json().catch(() => null)
+    const rec = (body ?? {}) as Record<string, unknown>
+    if (!res.ok || typeof rec.error === 'string') {
+      throw new EngineExecError(
+        typeof rec.error === 'string' ? rec.error : `engine exec → ${res.status}`,
+        res.status,
+        typeof rec.detail === 'string' ? rec.detail : undefined,
+        typeof rec.hint === 'string' ? rec.hint : undefined,
+      )
+    }
+    return body as P
+  })()
+}
+
+/** Envelope of `GET /api/wanyrix/engine/build` (`wanyrix.engine-build/v1`). */
+export interface EngineBuildPayload {
+  schema: string
+  executedAt: string
+  /** wall clock of the whole wanyrix build exec (route-measured) */
+  durationMs: number
+  binary: { version: string; profile: 'debug' | 'release' }
+  scanTarget: string
+  note: string
+  /** verbatim `wanyrix.build/v1` stdout of the real binary (loosely typed) */
+  report: {
+    schema?: string
+    workspace?: string
+    command?: string
+    buildSuccess?: boolean
+    exitCode?: number
+    cargoStderrTail?: string
+    wallClockMs?: number
+    durationStatus?: string
+    summary?: {
+      artifactsTotal?: number
+      artifactsFresh?: number
+      artifactsRebuilt?: number
+      cacheHitRate?: number
+      cacheHitRateStatus?: string
+      warnings?: number
+      errors?: number
+      ice?: number
+      notes?: number
+      malformedLines?: number
+      unknownReasons?: number
+      lifecycleEvents?: number
+      [k: string]: unknown
+    }
+    artifacts?: {
+      package?: string
+      targetKinds?: string[]
+      fresh?: boolean
+      arrivalDeltaMs?: number
+      [k: string]: unknown
+    }[]
+    byCode?: { code?: string; count?: number; [k: string]: unknown }[]
+    redaction?: {
+      applied?: boolean
+      policy?: string
+      renderedDropped?: number
+      secretsScrubbed?: number
+      [k: string]: unknown
+    }
+    notes?: string[]
+    [k: string]: unknown
+  }
 }
 
 /** Typed engine-exec failure — status + optional detail/hint from the route. */

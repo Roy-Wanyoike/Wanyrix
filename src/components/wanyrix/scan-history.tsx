@@ -39,6 +39,7 @@ const TRIGGER_LABEL: Record<ScanHistoryEntry['trigger'], string> = {
   manual: 'doctor view',
   topbar: 'topbar',
   palette: '⌘K palette',
+  'engine-exec': 'engine exec',
 }
 
 const TIME_FMT = new Intl.DateTimeFormat('en-GB', {
@@ -55,6 +56,7 @@ const TRIGGER_FILTERS: { key: TriggerFilter; label: string }[] = [
   { key: 'manual', label: 'doctor view' },
   { key: 'topbar', label: 'topbar' },
   { key: 'palette', label: '⌘K' },
+  { key: 'engine-exec', label: 'engine' },
 ]
 
 function downloadBlob(filename: string, content: string, mime: string) {
@@ -78,10 +80,13 @@ function exportJson(workspace: string, runs: ScanHistoryEntry[]) {
 }
 
 function exportMarkdown(workspace: string, runs: ScanHistoryEntry[]): string {
-  const rows = runs.map(
-    (h) =>
-      `| ${TIME_FMT.format(h.at)} | ${TRIGGER_LABEL[h.trigger]} | ${h.critical} / ${h.warning} / ${h.info} | ${h.findings} | ${h.buildTime.toFixed(1)}s | ${h.estimatedFrom}–${h.estimatedTo}s | ${(h.durationMs / 1000).toFixed(1)}s |`,
-  )
+  const rows = runs.map((h) => {
+    const buildCell =
+      h.buildTimeStatus === 'not-measured'
+        ? `n/a (not measured) | – – s`
+        : `${h.buildTime.toFixed(1)}s | ${h.estimatedFrom}–${h.estimatedTo}s`
+    return `| ${TIME_FMT.format(h.at)} | ${TRIGGER_LABEL[h.trigger]} | ${h.critical} / ${h.warning} / ${h.info} | ${h.findings} | ${buildCell} | ${(h.durationMs / 1000).toFixed(1)}s |`
+  })
   return [
     `# wanyrix scan history — ${workspace}`,
     ``,
@@ -115,6 +120,7 @@ function exportCsv(runs: ScanHistoryEntry[]): string {
     'fingerprint_count',
     'fingerprint_truncated',
     'build_seconds',
+    'build_time_status',
     'estimated_from_seconds',
     'estimated_to_seconds',
     'wall_clock_seconds',
@@ -131,6 +137,7 @@ function exportCsv(runs: ScanHistoryEntry[]): string {
       h.findingIds?.length ?? '',
       h.findingIdsTruncated === true ? 'true' : 'false',
       h.buildTime.toFixed(1),
+      h.buildTimeStatus ?? 'measured',
       h.estimatedFrom,
       h.estimatedTo,
       (h.durationMs / 1000).toFixed(1),
@@ -396,7 +403,8 @@ export function ScanHistoryPanel({
           {/* run rows */}
           <ul className="max-h-[264px] space-y-1.5 overflow-y-auto pr-1">
             {filtered.map((h, i) => {
-              const delta = h.buildTime - currentBuildTime
+              const notMeasured = h.buildTimeStatus === 'not-measured'
+              const delta = notMeasured ? 0 : h.buildTime - currentBuildTime
               const slot = baseId === h.id ? 'A' : targetId === h.id ? 'B' : null
               return (
                 <motion.li
@@ -459,8 +467,19 @@ export function ScanHistoryPanel({
                     findings <span className="tabular-nums text-foreground/85">{h.findings}</span>
                   </span>
                   <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {h.buildTime.toFixed(1)}s measured
-                    <span className="text-orange-300/90"> → {h.estimatedFrom}–{h.estimatedTo}s est.</span>
+                    {notMeasured ? (
+                      <span title="the real engine's doctor scan measures no build time (Gate 21)">
+                        not measured
+                      </span>
+                    ) : (
+                      <>
+                        {h.buildTime.toFixed(1)}s measured
+                        <span className="text-orange-300/90">
+                          {' '}
+                          → {h.estimatedFrom}–{h.estimatedTo}s est.
+                        </span>
+                      </>
+                    )}
                   </span>
                   <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground/70">
                     {(h.durationMs / 1000).toFixed(1)}s wall clock
@@ -483,6 +502,11 @@ export function ScanHistoryPanel({
                   </button>
                   {Math.abs(delta) > 0.05 && (
                     <MeasurementBadge status={delta < 0 ? 'measured' : 'estimated'} />
+                  )}
+                  {notMeasured && (
+                    <span className="rounded border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground/80">
+                      not-measured
+                    </span>
                   )}
                 </motion.li>
               )

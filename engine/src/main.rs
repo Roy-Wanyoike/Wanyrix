@@ -69,5 +69,6 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
         Command::Synth { crates, out, seed } => cli::synth_run(crates, &out, seed),
         Command::Daemon { cmd } => cli::daemon_run(cmd),
         Command::Telemetry { cmd } => cli::telemetry_run(cmd),
+        Command::Build { path, json, pretty } => cli::build_run(&path, json, pretty),
     }
 }

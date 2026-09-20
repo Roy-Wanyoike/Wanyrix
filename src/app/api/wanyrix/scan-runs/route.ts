@@ -28,7 +28,7 @@ import { isValidFindingIdList, FINDING_IDS_CAP } from '@/lib/wanyrix/finding-dif
  */
 
 const SCHEMA = 'wanyrix.scan-runs/v1'
-const TRIGGERS = new Set(['manual', 'topbar', 'palette'])
+const TRIGGERS = new Set(['manual', 'topbar', 'palette', 'engine-exec'])
 
 /** Body cap — scan-run payloads are tiny; 64 KB is generous. */
 const MAX_BODY_BYTES = 64 * 1024

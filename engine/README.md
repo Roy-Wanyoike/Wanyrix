@@ -6,47 +6,59 @@ the web dashboard's honesty-first product identity (AUDIT-I8): every number
 it reports is **measured**, and anything it cannot measure is labeled, never
 simulated.
 
-## Status — engine v0.3.0
+## Status — engine v0.4.0
 
 **Built:** filesystem manifest analysis, local persistence, an incremental
-analysis daemon, redacted rustc-telemetry ingestion, and a synthetic
-fixture generator. The engine walks a Rust workspace, parses every
+analysis daemon, redacted rustc-telemetry ingestion, an INSTRUMENTED BUILD
+runner (the engine now executes and measures a real `cargo build`), and a
+synthetic fixture generator. The engine walks a Rust workspace, parses every
 `Cargo.toml`, resolves intra-workspace path dependencies into ONE canonical
-edge list, and serves three versioned JSON flavors computed from that
-single measured source:
+edge list, and serves versioned JSON flavors computed from measured inputs:
 
 | Command | Flavor schema | Emits |
 | --- | --- | --- |
 | `wanyrix doctor --path <dir> [--json] [--pretty]` | `wanyrix.doctor/v1` | workspace name, crate list, `FER-ENG-*` findings, severity summary, scan provenance |
 | `wanyrix graph --path <dir> [--json] [--pretty]` | `wanyrix.graph/v1` | nodes + edges, per-crate fanIn/fanOut, downstream/recompileImpact closure (derived from the served edges only — no ghost nodes) |
 | `wanyrix health --path <dir> [--json] [--pretty]` | `wanyrix.health/v1` | KPI summary derived from doctor + graph results |
+| `wanyrix build --path <dir> [--json] [--pretty]` | `wanyrix.build/v1` | MEASURED instrumented `cargo build`: wall clock, fresh/cache-hit rate, per-artifact stream activity, redacted diagnostics |
 | `wanyrix store init/save/list/fsck --db <file>` | local SQLite (layout v1) | WAL-backed scan history; two-phase commit; crash-detecting `fsck` |
 | `wanyrix daemon start/call` | `wanyrix.daemon/v1` | persistent in-process scan cache over a Unix socket; fingerprint-invalidated incremental analysis |
 | `wanyrix telemetry ingest` | `wanyrix.telemetry/v1` | redacted, aggregated rustc JSON diagnostics (source + secrets stripped by default) |
 | `wanyrix synth --crates N --seed S` | synthetic fixture | deterministic synthetic workspace for scale testing |
 
 Exit codes: `0` succeeded (findings do NOT affect the exit code — CI
-consumers parse the JSON; `daemon call` reports `ok:false` as exit 2),
-`2` failed (scan error, bad store/db, telemetry input error).
-Omitting `--json` prints a deterministic human summary; `--pretty` only
-affects JSON output.
+consumers parse the JSON; a `wanyrix build` whose cargo run FAILED also
+exits 0 with `buildSuccess: false` — the failed build is data;
+`daemon call` reports `ok:false` as exit 2), `2` failed (scan error,
+build could not be STARTED — missing path or missing cargo executable,
+bad store/db, telemetry input error).
+Omitting `--json` prints a human summary (deterministic for the
+static-analysis flavors; the `build` summary contains live measured
+durations by design). `--pretty` only affects JSON output.
 
 Determinism: identical input ⇒ byte-identical output except `generatedAt`
 (and `meta.lastScan`, which mirrors it). Every list is sorted and the
-timestamp key is emitted LAST.
+timestamp key is emitted LAST. SCOPE: the static-analysis flavors
+(doctor/graph/health). `wanyrix build` is a LIVE measurement — identical
+input legitimately yields different durations, because the durations ARE
+the data (the envelope's notes say so).
 
 ## Honesty contract (non-negotiable — Gate 21 / Gate 7)
 
 1. **Everything is measured.** Findings come from real filesystem parsing.
    `measurementStatus` is always `"measured"`, `confidenceClass`
    `"deterministic"`. Nothing is labeled `verified` (nothing here was
-   benchmark-verified) and no timing is asserted (`impactSeconds` is unset).
+   benchmark-verified) and the static-analysis flavors assert no timing
+   (`impactSeconds` is unset). The ONE measured-timing surface is
+   `wanyrix build`, which actually executes a build — its durations are
+   measurements of a real process, and its envelope says exactly that.
 2. **Absent telemetry is labeled, never invented.** The web contract
-   requires fields the engine cannot measure yet (`buildTime`,
-   `changeFreq`, `cacheHitRate`, …). They are emitted as `0` with an
-   explicit `not-measured` status field (`buildTimeStatus`,
-   `changeFreqStatus`, `cacheHitRateStatus`) — a visible zero plus a status,
-   never an estimate in disguise.
+   requires fields the static-analysis engine cannot measure (`buildTime`,
+   `changeFreq`, …). They are emitted as `0` with an explicit
+   `not-measured` status field (`buildTimeStatus`, `changeFreqStatus`) — a
+   visible zero plus a status, never an estimate in disguise. The
+   exception is `cacheHitRate`: since v0.4.0 `wanyrix build` MEASURES it
+   from a real cargo build's fresh flags (envelope `wanyrix.build/v1`).
 3. **Single source of truth.** `fanIn`, `fanOut`, `downstream` and
    `recompileImpact` are computed exclusively from the served edge list;
    every edge endpoint is a served node.
@@ -71,6 +83,34 @@ a hard edge (critical) · `FER-ENG-006` dev-only cycle (info) ·
 `FER-ENG-007` broken path dependency (critical) · `FER-ENG-008` path dep
 outside the analyzed set (info) · `FER-ENG-ERR-n` unparseable manifest
 (critical).
+
+## Build telemetry — instrumented cargo builds (`wanyrix.build/v1`)
+
+```sh
+wanyrix build --path . --json            # build THIS directory, measure it
+wanyrix build --path . --json --pretty   # eyeball the envelope
+```
+
+The engine spawns a REAL `cargo build --message-format=json`, classifies
+the stream, and emits: measured wall clock; per-artifact `fresh` flags →
+`cacheHitRate` (the engine's first MEASURED cache-hit rate — the web demo
+labels the same field `not-measured`); per-artifact `arrivalDeltaMs`
+stream activity; diagnostics counted by level/code. Redaction holds by
+construction: `rendered`, span text and suggestions are NEVER emitted
+(diagnostics are counted, not copied); retained identifiers still pass
+the secret scrubber (`policy wanyrix.telemetry-redaction/v1`, counter
+`redaction.secretsScrubbed`). A build that RAN but failed is data
+(`buildSuccess: false` + scrubbed `cargoStderrTail`); a build that could
+not START (missing path, missing cargo) is an honest exit-2 error —
+nothing is ever fabricated.
+
+**The parallelism honesty note (in every envelope):** cargo builds run
+with parallel jobs, so per-artifact `arrivalDeltaMs` values OVERLAP —
+they are real measurements of stream activity, NOT per-crate build
+times. `wallClockMs` is the only exact duration. Measured on the engine
+crate itself (v0.4.0, warm): 60 artifacts, 60/60 fresh, cache-hit rate
+100, wall clock ≈50 ms — numbers + scope in
+[`BENCHMARKS.md`](BENCHMARKS.md).
 
 ## The daemon — incremental analysis (`wanyrix.daemon/v1`)
 
@@ -133,26 +173,28 @@ field-for-field to the shapes in `src/lib/wanyrix/types.ts` (pinned by
 
 ```sh
 cargo build            # clean, zero warnings
-cargo test             # 88 tests — fixtures in tests/fixtures/
+cargo test             # 103 tests — fixtures in tests/fixtures/ (2 skip when cargo or Linux /proc is unavailable)
 cargo clippy --all-targets -- -D warnings   # zero warnings
 ./target/debug/wanyrix doctor --path tests/fixtures/tiny-ws --json | python3 -m json.tool
 ```
 
 Suites: unit tests per module (protocol, redaction, fingerprint, store,
-synth rules) + integration tests that spawn the real binary
-(`daemon_ipc.rs` — full IPC lifecycle, live-socket theft refusal, RSS
-budget; `telemetry_cli.rs` — end-to-end redaction via the CLI;
-`conformance.rs` — web-contract shape pinning; `store_recovery.rs` —
-WAL crash recovery). Fixtures: `tests/fixtures/tiny-ws` (3 crates, exactly
-4 warnings) and `tests/fixtures/cycle-ws` (hard cycle + dev-only cycle; the
-graph still renders without hanging). Architecture is `lib.rs` + thin
-`main.rs`, so tests drive the exact CLI code path through the library API.
-No `unwrap` on user-input paths; serialization errors surface as exit code
-2, never a silent `{}`.
+synth rules, build-stream classification) + integration tests that spawn
+the real binary (`daemon_ipc.rs` — full IPC lifecycle, live-socket theft
+refusal, RSS budget; `telemetry_cli.rs` — end-to-end redaction via the
+CLI; `build_cli.rs` — real instrumented builds, cold/warm cache-hit
+measurement, failed-build-is-data; `conformance.rs` — web-contract shape
+pinning; `store_recovery.rs` — WAL crash recovery). Fixtures:
+`tests/fixtures/tiny-ws` (3 crates, exactly 4 warnings) and
+`tests/fixtures/cycle-ws` (hard cycle + dev-only cycle; the graph still
+renders without hanging). Architecture is `lib.rs` + thin `main.rs`, so
+tests drive the exact CLI code path through the library API. No `unwrap`
+on user-input paths; serialization errors surface as exit code 2, never a
+silent `{}`.
 
 ## Roadmap
 
-**Built (v0.3.0):**
+**Built (v0.4.0):**
 - `wanyrix doctor|graph|health` — measured filesystem analysis (v0.1.0)
 - `wanyrix synth` — deterministic synthetic-workspace generator (`--crates N --seed S`;
   same seed ⇒ byte-identical tree; every artifact is synthetic, never presented as measured)
@@ -164,12 +206,14 @@ No `unwrap` on user-input paths; serialization errors surface as exit code
   warm/cold evidence in [`BENCHMARKS.md`](BENCHMARKS.md). (v0.3.0)
 - `wanyrix telemetry ingest` — redacted rustc JSON diagnostics
   (`wanyrix.telemetry/v1`); default-on source/secret redaction. (v0.3.0)
+- `wanyrix build` — instrumented cargo-build runner measuring wall clock,
+  fresh/cache-hit rate and redacted diagnostics (`wanyrix.build/v1`). (v0.4.0)
 
 **Explicitly NOT built yet:**
-- **Build telemetry** — measured dev/CI build times, cache hit rates,
-  critical path with real seconds (requires instrumented `cargo` runs;
-  `telemetry ingest` consumes existing rustc JSON streams but does not
-  instrument builds itself).
+- **Full build-time attribution** — per-crate build seconds that survive
+  cargo's parallel jobs (requires the experimental `cargo` parallelism
+  model or `--timings` parsing; `wanyrix build` measures the exact wall
+  clock and honest per-artifact stream activity, and says so).
 - **Experiment runner** — before/after benchmark verification (the only
   path by which a claim may ever become `verified`).
 - **PR regression analysis, runtime telemetry, AI explain integration.**

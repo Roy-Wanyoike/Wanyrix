@@ -31,7 +31,13 @@ import { createMigratingStorage } from './legacy-migration'
  * contains runs the client explicitly POSTed.
  */
 
-export type ScanTrigger = 'manual' | 'topbar' | 'palette'
+/**
+ * Where a run originated. `engine-exec` (R8) marks runs measured by the REAL
+ * wanyrix binary via `/api/wanyrix/engine/*` — their findings carry the
+ * engine's own `FER-ENG-*` id registry, so they are visually distinct from
+ * demo-replay runs (`WAN-*` ids) in every history surface.
+ */
+export type ScanTrigger = 'manual' | 'topbar' | 'palette' | 'engine-exec'
 
 export interface ScanHistoryEntry {
   id: string
@@ -46,6 +52,14 @@ export interface ScanHistoryEntry {
   estimatedFrom: number // s, estimated (payload)
   estimatedTo: number // s, estimated (payload)
   trigger: ScanTrigger
+  /**
+   * R8 (additive, honesty): present ONLY on rows whose build time is a
+   * visible zero rather than a measured figure — `engine-exec` runs record
+   * the REAL binary's doctor scan, which deliberately measures no build
+   * time (Gate 21: a fake 0.0s "measured" would be an estimate in
+   * disguise). Legacy/demo rows omit the key (build time is measured).
+   */
+  buildTimeStatus?: 'measured' | 'not-measured'
   /**
    * Findings fingerprint (R7): the sorted unique finding ids this run's
    * payload contained — OPTIONAL. The key is only present when a payload
