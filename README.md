@@ -10,6 +10,8 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-365_passing-2EA043)
 
+<img src="public/brand/banner.png" alt="Wanyrix — engineering intelligence. The Beacon-W brand mark over a dark amber energy burst." width="100%" />
+
 </div>
 
 ---

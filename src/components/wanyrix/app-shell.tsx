@@ -18,7 +18,7 @@ import {
 const subscribeNoop = () => () => {}
 
 import { cn } from '@/lib/utils'
-import { WanyrixLogo } from './logo'
+import { WanyrixLogo, WanyrixLockup } from './logo'
 import { CommandPalette } from './command-palette'
 import { DiffQueueSheet } from './diff-queue-sheet'
 import { StorageDialog } from './storage-dialog'
@@ -203,12 +203,8 @@ export function AppShell({
 
       {/* ---------------- sidebar ---------------- */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-border/70 bg-sidebar lg:flex">
-        <div className="flex items-center gap-2.5 px-4 py-4">
-          <WanyrixLogo size={30} />
-          <div>
-            <p className="text-sm font-bold tracking-tight">Wanyrix</p>
-            <p className="font-mono text-[10px] text-muted-foreground">engineering intelligence</p>
-          </div>
+        <div className="px-4 py-4">
+          <WanyrixLockup size={30} />
         </div>
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Wanyrix views">

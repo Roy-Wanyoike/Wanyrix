@@ -20,6 +20,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Canonical base for resolving absolute OG/twitter image URLs. Override in
+  // deployment via NEXT_PUBLIC_SITE_URL; the default keeps local previews valid.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://wanyrix.dev"),
   title: "Wanyrix — Engineering Intelligence",
   applicationName: "Wanyrix",
   description:
@@ -31,6 +34,21 @@ export const metadata: Metadata = {
     description: "Rust made software safer. Wanyrix makes Rust development easier to understand and operate.",
     siteName: "Wanyrix",
     type: "website",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "Wanyrix — the Beacon-W mark on a warm rust gradient, wordmark and tagline: Engineering Intelligence for Rust",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Wanyrix — Engineering Intelligence",
+    description:
+      "Wanyrix continuously understands your Rust codebase: why builds are slow, what a change will cost, and how to verify improvements.",
+    images: ["/og.png"],
   },
 };
 
