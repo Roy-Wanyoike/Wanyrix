@@ -69,9 +69,11 @@
 pub mod ai;
 pub mod analysis;
 pub mod build;
+pub mod change;
 pub mod cli;
 pub mod daemon;
 pub mod events;
+pub mod git;
 pub mod graph;
 pub mod health;
 pub mod manifest;

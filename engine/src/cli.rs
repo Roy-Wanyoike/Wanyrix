@@ -203,6 +203,46 @@ pub enum Command {
         #[arg(long)]
         pretty: bool,
     },
+    /// Measured Git facts for this workspace (wanyrix.git/v1): branch,
+    /// HEAD, dirty state, changed files mapped onto crates, recent
+    /// commits. Redacted by design: paths and subjects only — never
+    /// diffs, never file contents, never author identities.
+    Git {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Reverse-dependency blast radius derived ONLY from the measured edge
+    /// list (wanyrix.impact/v1). Dev-dependency edges never propagate.
+    /// Unknown crates are a named refusal — impact is never guessed.
+    Impact {
+        /// The crate whose dependents to measure.
+        #[arg(long = "crate")]
+        crate_name: String,
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Diff the fresh measured scan against the newest stored scan for this
+    /// workspace (wanyrix.what-changed/v1). No baseline yet is a valid
+    /// envelope with a named remediation note — never a fake baseline.
+    WhatChanged {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// SQLite scan store to read the baseline from (wanyrix store init).
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
 }
 
 /// Subcommands for `wanyrix experiment` (local ledger, no network).
@@ -773,6 +813,53 @@ pub fn ai_run(
         serialize_json(&report, pretty)
     } else {
         Ok(crate::ai::ai_human(&report))
+    }
+}
+
+/// Run `wanyrix git` — measured repository facts, read-only, redacted by
+/// design (paths and subjects only).
+pub fn git_run(path: &Path, json: bool, pretty: bool) -> Result<String, EngineError> {
+    let scan = scan(path)?;
+    let report = crate::git::git_facts(&scan)?;
+    if json {
+        serialize_json(&report, pretty)
+    } else {
+        Ok(crate::git::git_human(&report))
+    }
+}
+
+/// Run `wanyrix impact` — reverse-dependency blast radius derived only
+/// from the measured edge list. Never an AI output; never a guess.
+pub fn impact_run(
+    crate_name: &str,
+    path: &Path,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let scan = scan(path)?;
+    let report = crate::change::impact_report(&scan, crate_name)?;
+    if json {
+        serialize_json(&report, pretty)
+    } else {
+        Ok(crate::change::impact_human(&report))
+    }
+}
+
+/// Run `wanyrix what-changed` — fresh measured scan diffed against the
+/// newest stored baseline for the same workspace.
+pub fn what_changed_run(
+    path: &Path,
+    db: &Path,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let scan = scan(path)?;
+    let findings = doctor(&scan);
+    let report = crate::change::what_changed(&scan, &findings, db)?;
+    if json {
+        serialize_json(&report, pretty)
+    } else {
+        Ok(crate::change::what_changed_human(&report))
     }
 }
 

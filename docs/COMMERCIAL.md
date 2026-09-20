@@ -38,7 +38,7 @@ organization policies → fleet intelligence → enterprise
 | Full offline operation, CLI, local storage | **shipped** — zero network by design |
 | Grounded AI (provider-side, with deterministic fallback) | **shipped** — web `/explain` |
 | **Local** AI models (e.g. Ollama-class — "your repo stays local, your model runs locally") | **shipped** — `wanyrix ai` (v0.7.0): local-model grounding over the measured evidence digest; deterministic fallback is a named refusal, never a fabrication |
-| Git intelligence (evidence sourcing from history) | designed — findings evidence schema already names git sources |
+| Git intelligence (evidence sourcing from history) | **shipped** — `wanyrix git` (v0.8.0, issue #67): measured branch/HEAD/dirty/changed-file facts mapped onto crates; redacted by design (paths + subjects only, never diffs or author identities) |
 
 ## The tiers
 
