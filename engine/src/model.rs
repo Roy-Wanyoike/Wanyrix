@@ -204,6 +204,13 @@ pub enum EngineError {
     /// status, malformed model reply, or endpoint address could not be parsed.
     /// The transport detail is preserved verbatim — never swallowed.
     Ai(String),
+    /// Git facts could not be measured: not a repository, unborn HEAD,
+    /// missing git binary, or a git command failed. The detail is preserved
+    /// verbatim — never swallowed, never replaced by fabricated facts.
+    Git(String),
+    /// The impact surface refused: the requested crate is not a workspace
+    /// crate under the scan root (the verify-ledger refusal pattern).
+    Impact(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -228,6 +235,8 @@ impl std::fmt::Display for EngineError {
             EngineError::Build(e) => write!(f, "build telemetry error: {e}"),
             EngineError::Experiment(e) => write!(f, "experiment ledger error: {e}"),
             EngineError::Ai(e) => write!(f, "local AI error: {e}"),
+            EngineError::Git(e) => write!(f, "git error: {e}"),
+            EngineError::Impact(e) => write!(f, "impact error: {e}"),
         }
     }
 }

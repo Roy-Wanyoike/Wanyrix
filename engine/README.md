@@ -6,13 +6,14 @@ the web dashboard's honesty-first product identity (AUDIT-I8): every number
 it reports is **measured**, and anything it cannot measure is labeled, never
 simulated.
 
-## Status — engine v0.7.0
+## Status — engine v0.8.0
 
 **Built:** filesystem manifest analysis, local persistence, an incremental
 analysis daemon, redacted rustc-telemetry ingestion, an INSTRUMENTED BUILD
 runner (the engine now executes and measures a real `cargo build`), a
-synthetic fixture generator, and a LOCAL-AI explanation surface grounded on
-measured evidence only. The engine walks a Rust workspace, parses every
+synthetic fixture generator, a LOCAL-AI explanation surface grounded on
+measured evidence only, GIT FACTS measured from the real repository, and
+DETERMINISTIC CHANGE INTELLIGENCE (`impact` + `what-changed`). The engine walks a Rust workspace, parses every
 `Cargo.toml`, resolves intra-workspace path dependencies into ONE canonical
 edge list, and serves versioned JSON flavors computed from measured inputs:
 
@@ -174,7 +175,7 @@ field-for-field to the shapes in `src/lib/wanyrix/types.ts` (pinned by
 
 ```sh
 cargo build            # clean, zero warnings
-cargo test             # 139 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
+cargo test             # 157 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
 cargo clippy --all-targets -- -D warnings   # zero warnings
 ./target/debug/wanyrix doctor --path tests/fixtures/tiny-ws --json | python3 -m json.tool
 ```
@@ -230,6 +231,20 @@ silent `{}`.
   Unreachable/broken servers fail with named errors; the reply rides in
   `wanyrix.ai/v1` labeled as inference, never a measurement, and the
   deterministic core never calls a model.
+- **Git intelligence (v0.8.0, issue #67)** — `wanyrix git` measures real
+  repository facts (`wanyrix.git/v1`): branch, HEAD, dirty state, changed
+  files (rename-aware, capped with exact counts), changed files mapped onto
+  scanned crate roots, commit count and the 10 newest commits. Redacted by
+  design: paths and subjects only — never diffs, contents, or author
+  identities. Not a repo / unborn HEAD / missing git are named errors.
+- **Change intelligence (v0.8.0, issue #68)** — `wanyrix impact --crate X`
+  derives the reverse-dependency blast radius from the measured edge list
+  (dev edges never propagate; unknown crates are a named refusal;
+  `blastRadiusPerMille` uses integer math — no floats), and
+  `wanyrix what-changed --db <store>` diffs the fresh measured scan against
+  the newest stored baseline (duplicate-safe finding pairing; no baseline
+  is a valid envelope with a named remediation note). Both are pure
+  deterministic engine surfaces — AI is never in the path.
 
 **Explicitly NOT built yet:**
 - **Full build-time attribution** — per-crate build seconds that survive

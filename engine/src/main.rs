@@ -106,5 +106,18 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             json,
             pretty,
         ),
+        Command::Git { path, json, pretty } => cli::git_run(&path, json, pretty),
+        Command::Impact {
+            crate_name,
+            path,
+            json,
+            pretty,
+        } => cli::impact_run(&crate_name, &path, json, pretty),
+        Command::WhatChanged {
+            path,
+            db,
+            json,
+            pretty,
+        } => cli::what_changed_run(&path, &db, json, pretty),
     }
 }

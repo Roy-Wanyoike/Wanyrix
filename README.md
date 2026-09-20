@@ -8,7 +8,7 @@
 ![Rust](https://img.shields.io/badge/Rust-1.98-DEA584?logo=rust&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![Engine](https://img.shields.io/badge/engine-v0.7.0-DEA584)
+![Engine](https://img.shields.io/badge/engine-v0.8.0-DEA584)
 ![Tests](https://img.shields.io/badge/tests-429_passing-2EA043)
 ![License](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2EA043)
 
@@ -32,7 +32,7 @@ That honesty rule is the product. Dashboards that make numbers look good are com
 | --- | --- |
 | 🧪 **429 automated tests** | 290 web (bun) + 139 engine (cargo) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
 | 🔍 **18 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
-| 🦀 **Real Rust engine** | `wanyrix-engine` v0.7.0, 15 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · **local AI** · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
+| 🦀 **Real Rust engine** | `wanyrix-engine` v0.8.0, 18 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · **local AI** · **git facts** · **impact** · **what-changed** · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
 | 🖥️ **18-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui — dark & light themes, mobile-clean (0 px overflow @ 390 px) |
 | 🤖 **Grounded AI, non-authoritative** | facts server-rendered; model output validated against evidence, violations redacted; `wanyrix ai` grounds a LOCAL model on the measured evidence digest only — never source code |
 | 🔒 **Local-first, zero telemetry** | state in your browser; nothing transmits unless you explicitly configure it |
@@ -204,7 +204,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 │   ├── app/api/wanyrix/     #   18 versioned API routes
 │   ├── components/wanyrix/  #   18-surface information architecture
 │   └── lib/wanyrix/         #   stores, contracts, fixtures (17 domain modules), exporters
-├── engine/                  # wanyrix-engine v0.7.0 (Rust 2021, zero-dep core + rusqlite)
+├── engine/                  # wanyrix-engine v0.8.0 (Rust 2021, zero-dep core + rusqlite)
 │   └── tests/               #   conformance, WAL crash-recovery, chaos fault-injection
 ├── tests/                   # bun test suite (unit + live API contracts)
 ├── scripts/                 # brand gate, fixture generator, soak + flake-budget harnesses
@@ -251,7 +251,7 @@ This repository is built the way it asks you to build software — with verifiab
 
 ## Roadmap
 
-Shipped: the full offline product contract (15 command surfaces), the durable event log, local-AI grounding, the connect-a-project bridge, chaos-tested resilience, release engineering with SBOM, and the design directions for cloud and plugins. Next, in order:
+Shipped: the full offline product contract (18 command surfaces), the durable event log, local-AI grounding, git facts, impact + what-changed change intelligence, the connect-a-project bridge, chaos-tested resilience, release engineering with SBOM, and the design directions for cloud and plugins. Next, in order:
 
 - **crates.io publish** of `wanyrix-engine` once the release checklist (MSRV, feature flags, signing secrets) is exercised on a real tag.
 - **Plugin API v1** — the event log is the first shipped extension surface; the out-of-process plugin contract follows the decision points in [`docs/PLUGIN_AND_EVENTS.md`](docs/PLUGIN_AND_EVENTS.md).

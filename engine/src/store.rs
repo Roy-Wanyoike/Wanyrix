@@ -501,6 +501,37 @@ pub fn list(db_path: &Path, workspace: Option<&str>) -> Result<Vec<ScanRow>, Eng
     Ok(rows)
 }
 
+// ---------------------------------------------------------- findings read
+
+/// The persisted findings rows for one scan, ordered by `finding_id`
+/// (deterministic). Read-only helper backing `wanyrix what-changed`:
+/// the baseline side of the diff is exactly what the store saved — never
+/// re-derived, never re-shaped.
+pub fn findings_for(db_path: &Path, scan_id: i64) -> Result<Vec<FindingRow>, EngineError> {
+    let conn = open_existing(db_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT finding_id, severity, title, evidence_json
+             FROM findings
+             WHERE scan_id = ?1
+             ORDER BY finding_id ASC",
+        )
+        .map_err(store_err)?;
+    let rows = stmt
+        .query_map(rusqlite::params![scan_id], |r| {
+            Ok(FindingRow {
+                finding_id: r.get(0)?,
+                severity: r.get(1)?,
+                title: r.get(2)?,
+                evidence_json: r.get(3)?,
+            })
+        })
+        .map_err(store_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(store_err)?;
+    Ok(rows)
+}
+
 // ----------------------------------------------------------------- fsck
 
 /// Check store integrity (issue #58 acceptance): every scan must have its

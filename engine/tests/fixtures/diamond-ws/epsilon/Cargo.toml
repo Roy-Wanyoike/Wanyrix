@@ -1,0 +1,8 @@
+[package]
+name = "epsilon"
+version = "0.1.0"
+license = "MIT"
+description = "Diamond fixture dev-only dependent (impact must not propagate)."
+
+[dev-dependencies]
+delta = { path = "../delta" }
