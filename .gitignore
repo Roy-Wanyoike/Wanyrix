@@ -76,3 +76,4 @@ tool-results/
 
 # Local-only working artifact: master validation prompt (never published)
 /pending-task.md
+.wanyrix/
