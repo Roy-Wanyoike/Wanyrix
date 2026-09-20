@@ -36,6 +36,7 @@ import { useScanStore } from '@/lib/wanyrix/scan-store'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useToast } from '@/hooks/use-toast'
 import { FindingSheet } from '../finding-sheet'
+import { EngineExecPanel } from '../engine-exec-panel'
 import { ScanHistoryPanel } from '../scan-history'
 import { SccacheSimulator } from '../sccache-simulator'
 import type {
@@ -714,6 +715,9 @@ export default function DoctorView({ onNavigate }: ViewProps) {
 
       {/* finding drill-down drawer (issue #25) */}
       <FindingSheet finding={selected} onOpenChange={(o) => !o && setSelected(null)} onNavigate={onNavigate} />
+
+      {/* ------------------------------------------------ 5.5) real engine exec */}
+      <EngineExecPanel />
 
       {/* ------------------------------------------------ 6) bottom estimates */}
       <div className="grid gap-4 sm:grid-cols-3">

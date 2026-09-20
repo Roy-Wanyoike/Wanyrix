@@ -374,6 +374,65 @@ export function useBackfillScanRuns(): UseMutationResult<BackfillResult, Error, 
   })
 }
 
+/* ------------------------------------------------------- real engine exec */
+
+/** Envelope of `GET /api/wanyrix/engine/doctor` (`wanyrix.engine-exec/v1`). */
+export interface EngineExecPayload {
+  schema: string
+  executedAt: string
+  durationMs: number
+  binary: { version: string; profile: 'debug' | 'release' }
+  scanTarget: string
+  note: string
+  /** verbatim `wanyrix.doctor/v1` stdout of the real binary (loosely typed) */
+  report: {
+    schema?: string
+    workspace?: string
+    findings?: { severity?: string; [k: string]: unknown }[]
+    crates?: unknown[]
+    [k: string]: unknown
+  }
+}
+
+/**
+ * On-demand execution of the REAL `wanyrix` binary on the server host
+ * (`wanyrix doctor --path engine --json`) — the one route that executes
+ * instead of mirroring. Mutation (not query) because each click is a fresh
+ * process spawn whose result is a point-in-time measurement; errors carry
+ * the honest per-status contract (503 not built / 502 failed / 504 timeout).
+ */
+export function useEngineDoctor(): UseMutationResult<EngineExecPayload, EngineExecError, void> {
+  return useMutation<EngineExecPayload, EngineExecError, void>({
+    mutationFn: async () => {
+      const res = await fetch('/api/wanyrix/engine/doctor')
+      const body: unknown = await res.json().catch(() => null)
+      const rec = (body ?? {}) as Record<string, unknown>
+      if (!res.ok || typeof rec.error === 'string') {
+        throw new EngineExecError(
+          typeof rec.error === 'string' ? rec.error : `engine exec → ${res.status}`,
+          res.status,
+          typeof rec.detail === 'string' ? rec.detail : undefined,
+          typeof rec.hint === 'string' ? rec.hint : undefined,
+        )
+      }
+      return body as EngineExecPayload
+    },
+  })
+}
+
+/** Typed engine-exec failure — status + optional detail/hint from the route. */
+export class EngineExecError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly detail?: string,
+    readonly hint?: string,
+  ) {
+    super(message)
+    this.name = 'EngineExecError'
+  }
+}
+
 /* ------------------------------------------------------ scan-run recording */
 
 /** Input of {@link useRecordScanRun} — run figures only, workspace folded in. */
