@@ -30,7 +30,7 @@ That honesty rule is the product. Dashboards that make numbers look good are com
 
 | | |
 | --- | --- |
-| 🧪 **472 automated tests** | 290 web (bun) + 182 engine (cargo) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
+| 🧪 **478 automated tests** | 296 web (bun) + 182 engine (cargo) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
 | 🔍 **18 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
 | 🦀 **Real Rust engine** | `wanyrix-engine` v0.8.0, 18 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · **local AI** · **git facts** · **impact** · **what-changed** · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
 | 🖥️ **18-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui — dark & light themes, mobile-clean (0 px overflow @ 390 px) |
@@ -218,7 +218,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 This repository is built the way it asks you to build software — with verifiable claims:
 
-- **472 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers) + wire-level local-AI mock tests.
+- **478 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers) + wire-level local-AI mock tests.
 - **CI on every push/PR** — ESLint, `tsc --noEmit`, full test suite, legacy-token brand gate, `cargo build --locked` + `clippy -D warnings` + `cargo test --locked`. Release workflow ships binaries + CycloneDX SBOM + cargo-audit; perf workflow scales the soak/flake harnesses.
 - **Contract-first** — all machine payloads are versioned (`wanyrix.*​/v1`); determinism is pinned by tests (same input ⇒ byte-identical output, timestamp last). The web pins the engine version in one constant, tested against `engine/Cargo.toml`.
 - **Honesty is load-bearing** — the `estimated/verified` separation, workspace guards, grounding redaction, and the event log's *refusals-mint-no-events* rule are **tested behaviors**, not documentation.
