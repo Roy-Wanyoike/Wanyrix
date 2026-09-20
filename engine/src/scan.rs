@@ -16,7 +16,7 @@ use crate::manifest::{
 use crate::model::{
     Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan,
 };
-use crate::pathutil::{read_to_string, rel_forward};
+use crate::pathutil::{read_regular_file, rel_forward};
 
 /// Maximum directory depth for the walk — a guard against pathological
 /// trees (we never follow symlinked directories anyway).
@@ -70,7 +70,10 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
                 stack.push((path, depth + 1));
             } else if name == "Cargo.toml" {
                 let rel = rel_forward(&root, &path);
-                let parsed = read_to_string(&path)
+                // read_regular_file: symlinks/FIFOs/devices/oversized files
+                // can never hang or OOM the scan — they degrade to the same
+                // named "unreadable manifest" finding a parse failure does.
+                let parsed = read_regular_file(&path)
                     .map_err(|e| format!("unreadable manifest: {e}"))
                     .and_then(|text| {
                         toml::from_str::<Manifest>(&text)
@@ -314,7 +317,7 @@ fn build_crate_info(
     let ws_target: Option<WorkspacePackage> = match pointer {
         Some(rel) => {
             let target = canon_dir.join(rel).join("Cargo.toml");
-            read_to_string(&target)
+            read_regular_file(&target)
                 .ok()
                 .and_then(|t| toml::from_str::<Manifest>(&t).ok())
                 .filter(|m| m.has_workspace_table())
@@ -379,6 +382,12 @@ fn edge_kind(section: &str) -> EdgeKind {
     }
 }
 
+/// File names the engine MEASURES (scan + fingerprint must agree on this
+/// set — see [`manifest_fingerprint`]).
+fn is_measured_file_name(name: &str) -> bool {
+    name == "Cargo.toml" || name == "rust-toolchain.toml" || name == "rust-toolchain"
+}
+
 fn is_skipped_dir(name: &str) -> bool {
     name == "target"
         || name == "node_modules"
@@ -395,7 +404,10 @@ fn has_main_rs(canon_dir: &Path) -> bool {
 /// Measured toolchain channel from `rust-toolchain.toml` at the scan root.
 fn read_toolchain(root: &Path) -> String {
     let path = root.join("rust-toolchain.toml");
-    if let Ok(text) = read_to_string(&path) {
+    // read_regular_file: a symlinked/FIFO/oversized toolchain file is
+    // treated as ABSENT (measured honestly as "unspecified") — opening a
+    // hostile one (e.g. a symlink to /dev/zero) must never hang the scan.
+    if let Ok(text) = read_regular_file(&path) {
         if let Ok(v) = toml::from_str::<toml::Table>(&text) {
             if let Some(channel) = v
                 .get("toolchain")
@@ -408,7 +420,7 @@ fn read_toolchain(root: &Path) -> String {
     }
     // Fallback: plain `rust-toolchain` file containing just the channel.
     let plain = root.join("rust-toolchain");
-    if let Ok(text) = read_to_string(&plain) {
+    if let Ok(text) = read_regular_file(&plain) {
         if let Some(channel) = text.lines().map(str::trim).find(|l| !l.is_empty()) {
             return channel.to_owned();
         }
@@ -465,10 +477,11 @@ pub fn manifest_fingerprint(root: &Path) -> Result<u64, EngineError> {
                     continue;
                 }
                 stack.push((path, depth + 1));
-            } else if name == "Cargo.toml"
-                || name == "rust-toolchain.toml"
-                || name == "rust-toolchain"
-            {
+            } else if is_measured_file_name(&name) {
+                // Non-regular measured-name entries (a hostile FIFO or
+                // device wearing the name) still PARTICIPATE in the
+                // fingerprint — their presence changes what a scan reports —
+                // but the read below never OPENS them.
                 paths.push(rel_forward(&root, &path));
             }
         }
@@ -498,8 +511,15 @@ pub fn manifest_fingerprint(root: &Path) -> Result<u64, EngineError> {
                     chunk
                         .into_iter()
                         .map(|rel| {
-                            let h = match std::fs::read(root.join(&rel)) {
-                                Ok(bytes) => fnv1a(&bytes),
+                            let path = root.join(&rel);
+                            // Never open a non-regular file (a FIFO wearing a
+                            // measured name would hang this read forever).
+                            let h = match std::fs::symlink_metadata(&path) {
+                                Ok(meta) if meta.is_file() => match std::fs::read(&path) {
+                                    Ok(bytes) => fnv1a(&bytes),
+                                    Err(_) => fnv1a(b"<vanished>"),
+                                },
+                                Ok(_) => fnv1a(b"<not-a-regular-file>"),
                                 Err(_) => fnv1a(b"<vanished>"),
                             };
                             (rel, h)

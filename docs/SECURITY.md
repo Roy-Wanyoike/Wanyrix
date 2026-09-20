@@ -109,3 +109,60 @@ through typed getters; no user string is ever used as a file path or query.
 This repository accepts no external bug reports yet (no public issue tracker until the
 GitHub rename/push completes — AUDIT-I5). Internal findings follow the audit process in
 [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## 9. Adversarial input fixtures (engine, issue #71)
+
+The **engine** (`wanyrix-engine`) treats a repository as UNTRUSTED INPUT: hostile
+content must fail safe — a named finding (`FER-ENG-ERR-n`) or a named error
+(`EngineError` variant) — never a panic, never a hang, never a silent drop. The
+fixture suite `engine/tests/adversarial.rs` (24 tests) pins this contract case by
+case. Two real defects were found and fixed while building it (both hangs in
+`engine/src/scan.rs`, fixed via the `pathutil::read_regular_file` guard: symlink /
+non-regular-file / 16 MiB-cap refusal):
+
+| # | Hostile case | Expected outcome (pinned) | Test name |
+| --- | --- | --- | --- |
+| 1 | Unicode/homoglyph crate names (CJK, emoji, Cyrillic homoglyph, RTL override) | Measured verbatim as strings; edge + finding ids keep the names; every JSON envelope stays valid UTF-8 and round-trips | `unicode_and_homoglyph_crate_names_round_trip_through_json` |
+| 2 | Unquoted non-ASCII TOML dependency key (emoji) | Named critical `FER-ENG-ERR` finding ("invalid unquoted key"); declaring crate honestly absent | `unquoted_unicode_dep_key_is_a_named_parse_finding` |
+| 3 | Non-UTF-8 directory name (lone `0xE9` byte) | Measured with a visible U+FFFD lossy marker; output stays valid UTF-8 JSON | `non_utf8_directory_name_is_measured_with_a_visible_lossy_marker` |
+| 4 | 100-level deep directory nesting | Walk terminates at the documented depth cap (`MAX_DEPTH` = 48): depths ≤ 48 walked, first dir past the cap counted in `skipped`, deeper never visited | `deep_nesting_terminates_at_the_documented_depth_cap` |
+| 5 | Huge manifest (4,100 dependencies) | Linear parse; full doctor + graph surface bounded (5 s blowup guard, not an SLO) | `huge_manifest_with_thousands_of_deps_is_bounded` |
+| 6 | Manifest beyond the 16 MiB measured-file cap | Named `FER-ENG-ERR` ("exceeds the measured-file cap") — no OOM, no unbounded parse | `oversized_manifest_is_a_named_finding_not_an_oom` |
+| 7 | Symlinked directories (incl. `ws → ws/loop` cycle) + symlinked `Cargo.toml` | Never followed, never read; every skip counted in `scan.skipped` | `symlinks_are_skipped_never_followed_never_parsed` |
+| 8 | Scan root is a symlink loop (ELOOP) | Named `EngineError::Io` from canonicalize — no hang, no panic | `symlink_loop_as_scan_root_is_a_named_error` |
+| 9 | `rust-toolchain.toml` symlinked to `/dev/zero` | **Defect fixed (was an infinite read/hang):** file refused by the regular-file guard, toolchain honestly measured as absent | `toolchain_symlink_to_dev_zero_cannot_hang_the_scan` |
+| 10 | Non-regular file (unix socket / FIFO class) named `Cargo.toml` | **Defect fixed (was a blocking open):** named `FER-ENG-ERR` ("not a regular file"); fingerprint walk never opens it, hashes `<not-a-regular-file>`, and its presence still changes the fingerprint | `non_regular_file_wearing_a_measured_name_is_a_named_finding` |
+| 11 | Invalid TOML manifest | Scan succeeds; exactly one critical `FER-ENG-ERR` naming the manifest and the parser reason | `invalid_toml_is_a_critical_finding_not_a_crash` |
+| 12 | `[package]` missing `name` | Clean parse (not an error): record retained, crate honestly absent from every view, no finding | `missing_package_name_is_a_clean_parse_without_a_crate` |
+| 13 | Non-string metadata (`version = 42`) | Named `FER-ENG-ERR` (untagged `MetaValue` mismatch) | `non_string_version_is_a_named_parse_finding` |
+| 14 | UTF-8 BOM prefix | Clean parse (TOML spec 1.1 allows it) — pinned against future parser drift | `bom_prefixed_manifest_parses_cleanly` |
+| 15 | CRLF line endings | Clean parse | `crlf_line_endings_parse_cleanly` |
+| 16 | Empty `Cargo.toml` | Clean parse: no package, no crate, no finding | `empty_manifest_is_a_clean_parse_with_no_crate` |
+| 17 | Binary bytes in a `.toml` | Named `FER-ENG-ERR` ("unreadable manifest") — read failure preserved verbatim | `binary_bytes_manifest_is_a_named_unreadable_finding` |
+| 18 | 500-crate dependency chain | Scan + graph + Tarjan SCC + change `propagate_closure` all terminate; closure exact at both ends (499 / 0) | `chain_500_scan_graph_scc_and_impact_all_terminate` |
+| 19 | Fan-out 200 hub | Terminates; reverse closure = the 200 direct dependents exactly | `fanout_200_impact_closure_terminates_and_is_exact` |
+| 20 | Diamond + cycle mix (5 crates, 7 edges) | One 5-member SCC with all internal edges; impact closure terminates through the cycle | `diamond_cycle_mix_scc_is_found_and_impact_terminates` |
+| 21 | Crates named like Rust keywords (`match`, `fn`, `type`, `crate`) | Ordinary strings in the model: measured, impact-targetable, serialized verbatim | `keyword_named_crates_are_ordinary_strings` |
+| 22 | Read-only workspace directory (mode 0555) | Read surfaces (`doctor`/`graph`) still measure without writing; `store init` → named `Store` error; `product init` → named `Io` error and writes nothing | `read_only_workspace_read_surfaces_measure_and_write_surfaces_name_the_error` |
+| 23 | `Cargo.toml` that is a DIRECTORY | Walked as a directory, never parsed as a manifest; root-manifest fallback picks the shallowest manifest deterministically | `cargo_toml_as_directory_is_walked_and_devnull_symlink_is_skipped` |
+| 24 | `Cargo.toml` symlinked to `/dev/null` | Skipped by the no-follow policy (never opened), counted in `scan.skipped`, not a parse failure | `cargo_toml_as_directory_is_walked_and_devnull_symlink_is_skipped` |
+| 25 | Empty scan root (zero manifests) | Named `NoManifests` error | `empty_scan_root_is_the_named_no_manifests_error` |
+
+**Documented limitations** (honest boundaries of the current engine — not fixed by
+this suite):
+
+- **No sandboxed build isolation.** `wanyrix build` executes a real `cargo build`
+  inside the workspace: a hostile `build.rs` runs arbitrary code at build time. The
+  adversarial fixtures cover only the engine's *analysis* surfaces (scan/doctor/
+  graph/health/store/daemon/impact/what-changed), never the build.
+- **Engine-owned dotfiles are trusted as engine-written.** `.wanyrix/state.json`,
+  `events.jsonl` and `experiments.jsonl` are read/written by `init`/`status`/
+  `events`/experiment surfaces without the regular-file guard. A repository that
+  pre-plants a symlink/FIFO at those exact paths can still block those surfaces on
+  read. Scan-path reads are hardened (rows 9/10 above); dotfile hardening is
+  tracked as follow-up work.
+- **The 16 MiB measured-file cap is a deliberate bound:** a legitimate repository
+  with a larger `Cargo.toml`/`rust-toolchain` file would be reported as an
+  unreadable finding rather than analyzed.
+- The 5 s bounds asserted in the pathological-graph and huge-manifest fixtures are
+  blowup guards (≈100× headroom in debug builds), not performance claims.
