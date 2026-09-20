@@ -26,6 +26,7 @@ import {
   type EngineExecPayload,
 } from '@/lib/wanyrix/hooks'
 import { capFindingIds } from '@/lib/wanyrix/finding-diff'
+import { useBuildTelemetryStore } from '@/lib/wanyrix/build-telemetry-store'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { cn } from '@/lib/utils'
@@ -285,7 +286,7 @@ function BuildModeView({ data }: { data: EngineBuildPayload }) {
         (policy {r.redaction?.policy ?? 'wanyrix.telemetry-redaction/v1'};{' '}
         {r.redaction?.renderedDropped ?? 0} messages dropped, {r.redaction?.secretsScrubbed ?? 0}{' '}
         secrets scrubbed). The demo labels cacheHitRate not-measured — THIS number is measured by
-        the real binary.
+        the real binary{measuredRate ? ' and now feeds the sccache simulator as its current rate' : ''}.
       </p>
     </motion.div>
   )
@@ -296,6 +297,7 @@ export function EngineExecPanel() {
   const exec = useEngineDoctor()
   const build = useEngineBuild()
   const recordScanRun = useRecordScanRun()
+  const recordBuildTelemetry = useBuildTelemetryStore((s) => s.recordBuild)
   const addScanEntry = useScanStore((s) => s.addEntry)
   const activeWs = useWorkspaceStore((s) => s.active)
   const { toast } = useToast()
@@ -371,9 +373,29 @@ export function EngineExecPanel() {
     build.mutate(undefined, {
       onSuccess: (d) => {
         const s = d.report.summary
+        // R9: the REAL measured rate becomes the sccache simulator's "current"
+        // (persisted wanyrix.build-telemetry). Only actually-measured rates
+        // are recorded — an unmeasured run feeds nothing (Gate 21). A FAILED
+        // build is recorded too (it's data); the resolver refuses to model
+        // economics from a broken compile and says so in the simulator.
+        const measured = s?.cacheHitRateStatus?.startsWith('measured') ?? false
+        if (measured) {
+          recordBuildTelemetry({
+            cacheHitRate: s?.cacheHitRate ?? 0,
+            artifactsFresh: s?.artifactsFresh ?? 0,
+            artifactsTotal: s?.artifactsTotal ?? 0,
+            wallClockMs: d.report.wallClockMs ?? null,
+            buildSuccess: d.report.buildSuccess ?? true,
+            measuredAt: Date.now(),
+            binaryVersion: d.binary.version,
+            workspace: d.report.workspace ?? null,
+          })
+        }
         toast({
           title: `Real instrumented build — ${d.binary.version}`,
-          description: `${d.report.wallClockMs ?? '—'}ms wall clock · ${s?.cacheHitRate ?? 0}/100 cache hit (${s?.artifactsFresh ?? 0}/${s?.artifactsTotal ?? 0} fresh) · measured, not estimated`,
+          description: measured
+            ? `${d.report.wallClockMs ?? '—'}ms wall clock · ${s?.cacheHitRate ?? 0}/100 cache hit (${s?.artifactsFresh ?? 0}/${s?.artifactsTotal ?? 0} fresh) · measured — now the simulator's current rate`
+            : `${d.report.wallClockMs ?? '—'}ms wall clock · cache-hit rate not measured this run`,
         })
       },
     })

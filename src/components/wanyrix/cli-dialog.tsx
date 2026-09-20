@@ -12,16 +12,19 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
 
 /**
- * CLI contract quick reference — the engine-backed web surfaces mirror the real
- * `wanyrix` binary (engine v0.3.0): same payloads, versioned envelopes, same
- * `--json` switch, same exit codes (0 success / 2 error). Every command row is
- * copyable (Gate 19 toast on copy). Web-only platform tools are labeled as such.
+ * CLI contract quick reference — the engine-backed web surfaces mirror the
+ * real `wanyrix` binary (version shown from ENGINE_VERSION, engine-meta.ts):
+ * same payloads, versioned envelopes, same `--json` switch, same exit codes
+ * (0 success / 2 error). Every command row is copyable (Gate 19 toast on
+ * copy). Web-only platform tools are labeled as such.
  */
 
 const COMMANDS: { cmd: string; maps: string }[] = [
   { cmd: 'wanyrix doctor --json', maps: 'Build Doctor view — findings + evidence (wanyrix.doctor/v1)' },
+  { cmd: 'wanyrix build --path <dir> --json', maps: 'Real engine binary panel → build — instrumented cargo build, measured wall clock + cache-hit rate (wanyrix.build/v1)' },
   { cmd: 'wanyrix graph --json', maps: 'Engineering Graph — measured edge list (wanyrix.graph/v1)' },
   { cmd: 'wanyrix health --json', maps: 'Scorecard view — KPI summary (wanyrix.health/v1)' },
   { cmd: 'wanyrix store list', maps: 'History view — persisted scan runs (SQLite + WAL)' },
@@ -79,7 +82,7 @@ export function CliContractDialog({
             wanyrix CLI contract
           </DialogTitle>
           <DialogDescription id="cli-dialog-desc">
-            The engine-backed surfaces mirror the real binary (engine v0.3.0) —
+            The engine-backed surfaces mirror the real binary (engine v{ENGINE_VERSION}) —
             same payloads, same exit codes (0 / 2), and{' '}
             <span className="font-mono text-foreground/85">--json</span> with a
             versioned envelope on every read command (Gate 18). Simulator,

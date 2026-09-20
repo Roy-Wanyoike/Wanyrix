@@ -1,31 +1,39 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Database, FlaskConical, Info } from 'lucide-react'
+import { Database, FlaskConical, Hammer, Info, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
+import { useBuildTelemetryStore } from '@/lib/wanyrix/build-telemetry-store'
+import { resolveCacheHit } from '@/lib/wanyrix/cache-rate'
 import type { DoctorReport } from '@/lib/wanyrix/types'
 import { CountUp, MeasurementBadge } from './shared'
 
 /**
- * sccache build-economics simulator (issue #26).
+ * sccache build-economics simulator (issue #26, R9 feed).
  *
  * Grounded in the doctor payload: the critical path sums to the measured
  * build time, so the model scales every cacheable segment by (1 − hit)
  * and keeps linking + codegen (never cached) intact.
  * Baseline keeps `measured`; every simulated output is `estimated` (Gate 21).
+ *
+ * R9: the "current" rate is no longer only the demo fixture's CI-telemetry
+ * figure — when a REAL instrumented `wanyrix build` has run (engine exec
+ * panel), its MEASURED cache-hit rate (persisted in wanyrix.build-telemetry)
+ * becomes the current rate and is labeled as such. A failed build never
+ * feeds the model — the fallback is explained, never silent.
  */
 
 const CI_JOBS_PER_DAY = 50 // doctor telemetry phase: "50 jobs · 68% cache miss"
 const CI_DAYS_PER_WEEK = 5
 
-function currentCacheHitRate(report: DoctorReport): number {
-  const phase = report.phases.find((p) => /cache miss/i.test(p.detail))
-  if (!phase) return 32
-  const m = phase.detail.match(/(\d+)% cache miss/i)
-  return m ? 100 - Number(m[1]) : 32
-}
+const WHEN_FMT = new Intl.DateTimeFormat('en-GB', {
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
 
 export function SccacheSimulator({
   report,
@@ -34,8 +42,21 @@ export function SccacheSimulator({
   report: DoctorReport
   onNavigate?: () => void
 }) {
-  const current = useMemo(() => currentCacheHitRate(report), [report])
+  const telemetry = useBuildTelemetryStore((s) => s.latest)
+  /* R9: resolve the current rate — real exec measurement first, demo
+     derivation as the labeled fallback */
+  const resolved = useMemo(() => resolveCacheHit(report, telemetry), [report, telemetry])
+  const current = resolved.rate
   const [hitRate, setHitRate] = useState(current)
+  /* the 90% "realistic ceiling" caps SIMULATION — but the measured current is
+     real data and must stay reachable, so the max raises to include it */
+  const sliderMax = Math.max(90, current)
+
+  /* re-anchor the slider when a fresh measurement arrives (dragging only
+     changes hitRate, never `current`, so this never yanks mid-drag) */
+  useEffect(() => {
+    setHitRate(current)
+  }, [current])
 
   const model = useMemo(() => {
     const linker = report.criticalPath
@@ -97,12 +118,26 @@ export function SccacheSimulator({
                 <span className="text-lg font-semibold text-emerald-300">{hitRate}%</span>
                 {hitRate !== current && (
                   <span className="ml-2 text-[10px] text-muted-foreground">
-                    current: {current}% (measured · CI telemetry)
+                    {resolved.source === 'engine-build-exec' ? (
+                      <>
+                        current: {current}% (measured · wanyrix build exec ·{' '}
+                        {resolved.measuredAt !== undefined && WHEN_FMT.format(resolved.measuredAt)})
+                      </>
+                    ) : (
+                      <>current: {current}% (measured · CI telemetry)</>
+                    )}
                   </span>
                 )}
                 {hitRate === current && (
                   <span className="ml-2 text-[10px] text-muted-foreground">
-                    = current (measured)
+                    {resolved.source === 'engine-build-exec' ? (
+                      <>
+                        = current (measured · wanyrix build exec ·{' '}
+                        {resolved.measuredAt !== undefined && WHEN_FMT.format(resolved.measuredAt)})
+                      </>
+                    ) : (
+                      <>= current (measured)</>
+                    )}
                   </span>
                 )}
               </p>
@@ -111,7 +146,7 @@ export function SccacheSimulator({
               id="sccache-hit"
               value={[hitRate]}
               min={0}
-              max={90}
+              max={sliderMax}
               step={1}
               onValueChange={(v) => setHitRate(v[0] ?? hitRate)}
               className="mt-3"
@@ -119,8 +154,12 @@ export function SccacheSimulator({
             />
             <div className="mt-1 flex justify-between font-mono text-[9.5px] text-muted-foreground/70">
               <span>0%</span>
-              <span>sccache realistic ceiling 90%</span>
-              <span>90%</span>
+              <span>
+                {sliderMax === 90
+                  ? 'sccache realistic ceiling 90%'
+                  : `raised to include the measured current (${current}%)`}
+              </span>
+              <span>{sliderMax}%</span>
             </div>
           </div>
 
@@ -159,10 +198,62 @@ export function SccacheSimulator({
 
           <p className="flex items-start gap-1.5 rounded-lg border border-border/60 bg-background/40 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0 text-primary/70" aria-hidden />
-            Model: linking + codegen is never cached; every other critical-path segment scales by
-            (1 − hit rate). Baseline 87.4s is measured (cargo build --timings); all simulated
-            outputs are estimates until a wanyrix experiment verifies them (Gate 21).
+            {resolved.source === 'engine-build-exec' ? (
+              <span>
+                Current rate measured by the REAL binary&apos;s last instrumented build (not the demo
+                fixture). Model: linking + codegen is never cached; every other critical-path
+                segment scales by (1 − hit rate). Baseline {report.buildTime}s is measured (cargo
+                build --timings); all simulated outputs are estimates until a wanyrix experiment
+                verifies them (Gate 21).
+              </span>
+            ) : (
+              <span>
+                Model: linking + codegen is never cached; every other critical-path segment scales by
+                (1 − hit rate). Baseline {report.buildTime}s is measured (cargo build --timings);
+                all simulated outputs are estimates until a wanyrix experiment verifies them
+                (Gate 21).
+              </span>
+            )}
           </p>
+
+          {/* R9 — the measurement strip: what the real binary last measured */}
+          {telemetry && (
+            <div
+              className={
+                resolved.source === 'engine-build-exec'
+                  ? 'rounded-lg border border-teal-400/25 bg-teal-400/[0.06] p-2.5'
+                  : 'rounded-lg border border-amber-400/30 bg-amber-400/[0.06] p-2.5'
+              }
+            >
+              <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+                {telemetry.buildSuccess ? (
+                  <Hammer className="size-3 text-teal-300" aria-hidden />
+                ) : (
+                  <TriangleAlert className="size-3 text-amber-300" aria-hidden />
+                )}
+                latest measured build (wanyrix build exec)
+              </p>
+              <p className="mt-1 font-mono text-[11px] tabular-nums text-foreground/90">
+                {telemetry.wallClockMs !== null ? `${telemetry.wallClockMs}ms` : '—'} ·{' '}
+                {telemetry.artifactsFresh}/{telemetry.artifactsTotal} artifacts fresh · rate{' '}
+                {telemetry.cacheHitRate}/100 · {telemetry.binaryVersion}
+              </p>
+              <p className="mt-0.5 font-mono text-[9.5px] text-muted-foreground/75">
+                {telemetry.buildSuccess ? (
+                  <>
+                    build succeeded · measured {WHEN_FMT.format(telemetry.measuredAt)} · workspace “
+                    {telemetry.workspace ?? '—'}”
+                  </>
+                ) : (
+                  <>
+                    build FAILED · measured {WHEN_FMT.format(telemetry.measuredAt)} — a failed
+                    compile doesn&apos;t feed the economics model; showing the demo CI-telemetry rate
+                    instead
+                  </>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ---------------------------------------- right: metric tiles */}

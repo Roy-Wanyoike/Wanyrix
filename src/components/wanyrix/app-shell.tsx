@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useReportExport, useWorkspaces } from '@/lib/wanyrix/hooks'
+import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
 import type { ReportFormat } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
@@ -253,7 +254,7 @@ export function AppShell({
             aria-label="Open the wanyrix CLI contract reference"
             title="CLI contract — commands, --json, exit codes"
           >
-            wanyrix engine v0.3.0
+            wanyrix engine v{ENGINE_VERSION}
             <br />
             local-first · AI optional
             <span className="mt-1 flex items-center gap-1 text-primary/80">
@@ -443,7 +444,7 @@ export function AppShell({
         {/* sticky status footer */}
         <footer className="footer-hairline mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 bg-sidebar/60 px-4 py-2 font-mono text-[10.5px] text-muted-foreground sm:px-6">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span className="text-foreground/80">WANYRIX ENGINE v0.3.0</span>
+            <span className="text-foreground/80">WANYRIX ENGINE v{ENGINE_VERSION}</span>
             <span>{activeSummary ? `${activeSummary.crates} crates indexed` : 'indexing…'}</span>
             {activeSummary && <span>{activeSummary.edges} edges</span>}
             <span>graph updated 2m ago</span>

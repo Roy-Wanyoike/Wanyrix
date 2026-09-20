@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   Boxes,
@@ -7,6 +8,7 @@ import {
   FileDiff,
   FlaskConical,
   GitBranch,
+  History,
   Network,
   Settings,
   Terminal as TerminalIcon,
@@ -26,6 +28,12 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useDiffQueueStore } from '@/lib/wanyrix/diff-store'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+import { useScanStore } from '@/lib/wanyrix/scan-store'
+import {
+  findingPresence,
+  presenceLabel,
+  type PresenceState,
+} from '@/lib/wanyrix/finding-history'
 import type { Finding, RemediationKind } from '@/lib/wanyrix/types'
 import { ConfidenceBadge, CountUp, MeasurementBadge, SeverityBadge } from './shared'
 import { ExplainDialog } from './explain-dialog'
@@ -36,6 +44,133 @@ const REMEDIATION_META: Record<RemediationKind, { icon: LucideIcon; label: strin
   architecture: { icon: Boxes, label: 'architecture' },
   experiment: { icon: FlaskConical, label: 'experiment' },
   patch: { icon: FileDiff, label: 'patch' },
+}
+
+/* ------------------------------------------------------- presence timeline */
+
+const WHEN_FMT = new Intl.DateTimeFormat('en-GB', {
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const TRIGGER_LABEL: Record<string, string> = {
+  manual: 'doctor view',
+  topbar: 'topbar',
+  palette: 'palette',
+  'engine-exec': 'engine exec',
+}
+
+const DOT_CLS: Record<PresenceState, string> = {
+  observed: 'bg-primary',
+  absent: 'border border-muted-foreground/60 bg-transparent',
+  unknown: 'bg-muted-foreground/25',
+}
+
+/**
+ * R9 — per-finding presence sparkline ("when was this first seen / is it
+ * resolved?"). Reads ONLY the persisted scan-history fingerprints (R7);
+ * legacy runs and cross-registry fingerprints (e.g. a real engine-exec run
+ * vs a WAN-* demo finding) render as "no comparable fingerprint" dots —
+ * never as absences, and they can never fabricate a resolution (Gate 21).
+ */
+function FindingHistorySection({ findingId }: { findingId: string }) {
+  const activeWs = useWorkspaceStore((s) => s.active)
+  /* select the raw record (stable ref); derive the per-ws list in useMemo so
+     the zustand getSnapshot cache never sees a fresh `?? []` allocation */
+  const historyRecord = useScanStore((s) => s.history)
+  const wsEntries = useMemo(() => historyRecord?.[activeWs] ?? [], [historyRecord, activeWs])
+  const presence = useMemo(
+    () => findingPresence(wsEntries, findingId),
+    [wsEntries, findingId],
+  )
+
+  if (presence.totalScanned === 0) {
+    return (
+      <Section title="Scan history">
+        <p className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
+          No scans recorded in this workspace yet — run{' '}
+          <span className="font-mono text-foreground/80">wanyrix doctor</span> to start building
+          this finding&apos;s presence timeline.
+        </p>
+      </Section>
+    )
+  }
+
+  const unknownCount = presence.totalScanned - presence.comparableCount
+  const aria = `${findingId} across the last ${presence.totalScanned} scan${presence.totalScanned === 1 ? '' : 's'}: ${presence.observedCount} observed, ${presence.absentCount} not observed, ${unknownCount} without a comparable fingerprint.`
+
+  return (
+    <Section title={`Scan history · last ${presence.totalScanned} scan${presence.totalScanned === 1 ? '' : 's'}`}>
+      {/* sparkline — oldest → newest, one dot per recorded run */}
+      <div className="flex items-center gap-1.5" role="img" aria-label={aria}>
+        {presence.points.map((pt, i) => (
+          <span
+            key={`${pt.at}-${i}`}
+            title={`${WHEN_FMT.format(pt.at)} · ${TRIGGER_LABEL[pt.trigger] ?? pt.trigger} · ${presenceLabel(pt.state)}`}
+            className={`size-2.5 shrink-0 rounded-full ${DOT_CLS[pt.state]}`}
+          />
+        ))}
+      </div>
+
+      {/* legend */}
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1" aria-hidden>
+        {(
+          [
+            ['observed', 'observed'],
+            ['absent', 'not observed'],
+            ['unknown', 'no fingerprint'],
+          ] as const
+        ).map(([state, label]) => (
+          <span key={state} className="flex items-center gap-1 font-mono text-[9.5px] text-muted-foreground">
+            <span className={`size-2 rounded-full ${DOT_CLS[state]}`} />
+            {label}
+          </span>
+        ))}
+      </div>
+
+      {/* measured facts */}
+      {presence.comparableCount > 0 ? (
+        <div className="mt-2.5 space-y-1 border-t border-border/50 pt-2.5 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
+          <p>
+            present in{' '}
+            <span className="tabular-nums text-foreground/85">
+              {presence.observedCount}/{presence.comparableCount}
+            </span>{' '}
+            comparable scans
+          </p>
+          {presence.firstSeenAt !== null && (
+            <p>
+              first seen {WHEN_FMT.format(presence.firstSeenAt)}
+              {presence.lastSeenAt !== null && presence.lastSeenAt !== presence.firstSeenAt && (
+                <> · last seen {WHEN_FMT.format(presence.lastSeenAt)}</>
+              )}
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="mt-2.5 border-t border-border/50 pt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+          No comparable fingerprints in this window (legacy runs or different scan targets) —
+          run a scan to anchor this timeline.
+        </p>
+      )}
+
+      {/* resolution verdict — only comparable runs decide, never cross-registry noise */}
+      {presence.resolvedInLatest === true && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+          <History className="size-3" aria-hidden />
+          resolved in latest comparable scan
+        </p>
+      )}
+      {presence.resolvedInLatest === false && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+          <History className="size-3" aria-hidden />
+          present in latest comparable scan
+        </p>
+      )}
+    </Section>
+  )
 }
 
 // experiment eligibility comes from the Finding payload (issue #34)
@@ -179,6 +314,9 @@ export function FindingSheet({
                   {finding.verificationPath}
                 </pre>
               </Section>
+
+              {/* R9 — presence timeline across the workspace's scan history */}
+              <FindingHistorySection findingId={finding.id} />
 
               {/* confidence meter */}
               <div>
