@@ -1,13 +1,13 @@
 # Wanyrix CLI — contract reference
 
-Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.5.0
+Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.6.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
 store · synth · daemon · telemetry · build · init · status · analyze · dependencies ·
-experiment`. Every engine command emits a versioned JSON
+experiment · events`. Every engine command emits a versioned JSON
 envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
 `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`, `wanyrix.init/v1`,
 `wanyrix.status/v1`, `wanyrix.analyze/v1`, `wanyrix.dependencies/v1`,
-`wanyrix.experiment/v1`) behind a `--json` switch, plus
+`wanyrix.experiment/v1`, `wanyrix.events/v1`) behind a `--json` switch, plus
 human-readable output by default. The web platform mirrors the same payloads over
 HTTP; the in-app **CLI contract** dialog
 (`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)
@@ -44,6 +44,7 @@ pins the command set, the flags, and the exit codes shown here.
 | 10 | `wanyrix analyze [--path <dir>] [--json]` | `wanyrix.analyze/v1` — doctor + graph + health envelopes embedded verbatim under one schema (zero re-shaping drift) | one call serving the whole dashboard |
 | 11 | `wanyrix dependencies [--path <dir>] [--json]` | `wanyrix.dependencies/v1` — per-crate direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies, measured cycles | Dependencies view (`GET /api/wanyrix/graph?ws=…`) |
 | 12 | `wanyrix experiment record|measure|verify|list` | `wanyrix.experiment/v1` ledger (`.wanyrix/experiments.jsonl`) — estimated → measured (2 REAL builds) → verified (measured improvement ONLY) | Experiments view (honesty gates 19/21) |
+| 13 | `wanyrix events [--path <dir>] [--json]` | `wanyrix.events/v1` — the durable event log (`.wanyrix/events.jsonl`): one append-only `wanyrix.event/v1` mirror of every real ledger transition; corrupt lines are skipped and named, never a silent drop | event receipt trail (issue #63 first slice) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
 (pretty has no effect without `--json`), and per-subcommand options documented by
@@ -101,6 +102,7 @@ severity ladder lives inside the payload (`critical` / `warning` / `info`).
 ## Roadmap
 
 - ~~`wanyrix init`, repository discovery~~ — shipped in v0.5.0 (`init`, `status`, `analyze`, `dependencies`, `experiment` ledger + `verify` gate).
+- ~~durable event log~~ — shipped in v0.6.0 (`events`, `wanyrix.event/v1`); the out-of-process plugin contract follows [`docs/PLUGIN_AND_EVENTS.md`](PLUGIN_AND_EVENTS.md)'s decision points.
 - An `impact`/`report` engine subcommand to absorb the web-only surfaces above is
   intentionally not faked in the binary; the web platform serves them today.
 - Anything that would fake engine evidence in this repo is forbidden by the honesty

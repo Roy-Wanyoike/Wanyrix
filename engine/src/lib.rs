@@ -64,6 +64,7 @@ pub mod analysis;
 pub mod build;
 pub mod cli;
 pub mod daemon;
+pub mod events;
 pub mod graph;
 pub mod health;
 pub mod manifest;

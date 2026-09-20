@@ -1,9 +1,14 @@
 # Plugin & event architecture — design direction (issue #63)
 
-Status: **design only — nothing beyond the listed shipped surfaces is
-implemented.** This document records the extension-surface direction so the
-future plugin layer is built *on top of* the honesty architecture instead of
-around it. The maintainer decision points at the end gate any implementation.
+Status: **the event log is shipped (engine v0.6.0); the out-of-process plugin
+contract is design-only.** Every real experiment-ledger transition appends an
+append-only `wanyrix.event/v1` line to `.wanyrix/events.jsonl` (deterministic
+monotonic ids, corrupt lines skipped and named, refusals mint no events), and
+`wanyrix events` reads the trail (`wanyrix.events/v1`). This document records
+the direction for the rest — durable bus transports, webhook delivery, and
+the plugin manifest model — so the future plugin layer is built *on top of*
+the honesty architecture instead of around it. The maintainer decision points
+at the end gate any further implementation.
 
 ## Non-negotiables carried over from the local product
 

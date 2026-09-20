@@ -88,5 +88,6 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             cli::product_dependencies_run(&path, json, pretty)
         }
         Command::Experiment { cmd } => cli::product_experiment_run(cmd),
+        Command::Events { path, json, pretty } => cli::events_run(&path, json, pretty),
     }
 }

@@ -32,6 +32,7 @@ const COMMANDS: { cmd: string; maps: string }[] = [
   { cmd: 'wanyrix init --db scans.db', maps: 'workspace onboarding — measured identity recorded in .wanyrix/state.json, idempotent (wanyrix.init/v1)' },
   { cmd: 'wanyrix status --db scans.db --socket daemon.sock', maps: 'fresh measured snapshot + drift vs init + newest stored scan + daemon liveness (wanyrix.status/v1)' },
   { cmd: 'wanyrix experiment record --name fix --claim "halve build"', maps: 'Experiments view — hypothesis ledger; record → measure (2 real builds) → verify (measured improvement only) (wanyrix.experiment/v1)' },
+  { cmd: 'wanyrix events --json', maps: 'durable event log — one append-only mirror of every real ledger transition; corrupt lines skipped and named (wanyrix.events/v1)' },
   { cmd: 'wanyrix store list', maps: 'History view — persisted scan runs (SQLite + WAL)' },
   { cmd: 'wanyrix daemon start', maps: 'Runtime view — cached measured scan over a local Unix socket' },
   { cmd: 'wanyrix telemetry ingest -', maps: 'Diagnostics view — redacted rustc JSON diagnostics (wanyrix.telemetry/v1)' },

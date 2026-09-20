@@ -6,7 +6,7 @@ the web dashboard's honesty-first product identity (AUDIT-I8): every number
 it reports is **measured**, and anything it cannot measure is labeled, never
 simulated.
 
-## Status — engine v0.5.0
+## Status — engine v0.6.0
 
 **Built:** filesystem manifest analysis, local persistence, an incremental
 analysis daemon, redacted rustc-telemetry ingestion, an INSTRUMENTED BUILD
@@ -173,7 +173,7 @@ field-for-field to the shapes in `src/lib/wanyrix/types.ts` (pinned by
 
 ```sh
 cargo build            # clean, zero warnings
-cargo test             # 120 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
+cargo test             # 128 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
 cargo clippy --all-targets -- -D warnings   # zero warnings
 ./target/debug/wanyrix doctor --path tests/fixtures/tiny-ws --json | python3 -m json.tool
 ```
@@ -218,12 +218,15 @@ silent `{}`.
   build` runs make it `measured`; only a real measured improvement between two
   successful builds grants `verified`. Verification cannot be faked, bought,
   or retro-fitted.
+- **Durable event log (v0.6.0)** — every real ledger transition (recorded →
+  measured → verified) appends one append-only `wanyrix.event/v1` line to
+  `.wanyrix/events.jsonl`; ids are monotonic, corrupt lines are skipped and
+  named, refusals mint no events, and `wanyrix events` reads the trail
+  (`wanyrix.events/v1`). The first shipped extension surface (issue #63).
 
 **Explicitly NOT built yet:**
 - **Full build-time attribution** — per-crate build seconds that survive
   cargo's parallel jobs (requires the experimental `cargo` parallelism
   model or `--timings` parsing; `wanyrix build` measures the exact wall
   clock and honest per-artifact stream activity, and says so).
-- **Experiment runner** — before/after benchmark verification (the only
-  path by which a claim may ever become `verified`).
 - **PR regression analysis, runtime telemetry, AI explain integration.**

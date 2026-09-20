@@ -1,0 +1,25 @@
+Wanyrix — dual license: MIT OR Apache-2.0
+==========================================
+
+Copyright (c) 2026 Roy Wanyoike (Wanyrix)
+
+This repository — the Wanyrix engine (`engine/`) and the Wanyrix web
+platform (`src/`, `tests/`, and supporting files) — is dual-licensed under
+the MIT license and the Apache License, Version 2.0.
+
+You may use, modify, and distribute this software under either license, at
+your option:
+
+  * LICENSE-MIT    — the MIT License
+  * LICENSE-APACHE — the Apache License, Version 2.0
+
+The SPDX expression for the whole tree is:  `MIT OR Apache-2.0`
+(the engine crate's `Cargo.toml` already declared this license; the
+maintainer extended it to the rest of the tree — the resolution of
+GitHub issue #62).
+
+Exception — future commercial distribution: the planned hosted/cloud
+offering ("Wanyrix Cloud") and any commercial packaging may be
+distributed under separate proprietary terms. Code in this repository
+remains available under the dual license above; choosing a license here
+does not grant any trademark rights in "Wanyrix" or the Beacon-W mark.

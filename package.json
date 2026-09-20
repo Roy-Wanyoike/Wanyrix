@@ -1,5 +1,6 @@
 {
   "name": "nextjs_tailwind_shadcn_ts",
+  "license": "MIT OR Apache-2.0",
   "version": "0.2.1",
   "private": true,
   "scripts": {

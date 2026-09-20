@@ -162,6 +162,17 @@ pub enum Command {
         #[command(subcommand)]
         cmd: ExperimentCmd,
     },
+    /// Read the durable event log (.wanyrix/events.jsonl, wanyrix.event/v1):
+    /// one append-only mirror of every real ledger transition. Corrupt lines
+    /// are skipped and named — never a silent drop, never a crash.
+    Events {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
 }
 
 /// Subcommands for `wanyrix experiment` (local ledger, no network).
@@ -673,6 +684,39 @@ pub fn product_experiment_run(cmd: crate::cli::ExperimentCmd) -> Result<String, 
                 Ok(out)
             }
         }
+    }
+}
+
+/// Run `wanyrix events` — the durable event log, read-only.
+pub fn events_run(path: &Path, json: bool, pretty: bool) -> Result<String, EngineError> {
+    let log = crate::events::read_events(path)?;
+    if json {
+        let value = serde_json::json!({
+            "schema": crate::events::EVENTS_SCHEMA,
+            "count": log.events.len(),
+            "corruptCount": log.corrupt.len(),
+            "events": log.events,
+            "corrupt": log.corrupt,
+            "generatedAt": iso8601_now(),
+        });
+        serialize_json(&value, pretty)
+    } else if log.events.is_empty() && log.corrupt.is_empty() {
+        Ok(format!(
+            "wanyrix events — 0 event(s) in {} (events appear as real ledger transitions happen: experiment record → measure → verify)\n",
+            path.join(".wanyrix/events.jsonl").display()
+        ))
+    } else {
+        let mut out = format!(
+            "wanyrix events — {} event(s){}\n",
+            log.events.len(),
+            if log.corrupt.is_empty() {
+                String::new()
+            } else {
+                format!(", {} corrupt line(s) named below", log.corrupt.len())
+            }
+        );
+        out.push_str(&crate::events::events_human(&log));
+        Ok(out)
     }
 }
 

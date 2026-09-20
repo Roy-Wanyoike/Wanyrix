@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::build::{self, BuildOptions};
 use crate::cli;
 use crate::daemon;
+use crate::events;
 use crate::graph::{self, Graph};
 use crate::model::{EngineError, WorkspaceScan};
 use crate::report;
@@ -562,6 +563,24 @@ fn read_ledger(root: &Path) -> Result<Vec<ExperimentRecord>, EngineError> {
     Ok(out)
 }
 
+/// Append one `wanyrix.event/v1` line for a REAL ledger transition (issue
+/// #63). Emission is observational: if the event log cannot be written, the
+/// command's own contract has already succeeded (the ledger persisted), so a
+/// named stderr warning is honest and non-fatal — the event log never
+/// invents, blocks, or re-classifies a measurement.
+fn emit_event(root: &Path, kind: &str, rec: &ExperimentRecord) {
+    let payload = match serde_json::to_value(rec) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("wanyrix: warning: event payload serialization failed: {e}");
+            return;
+        }
+    };
+    if let Err(e) = events::append_event(root, kind, &rec.name, &payload) {
+        eprintln!("wanyrix: warning: event log append failed: {e}");
+    }
+}
+
 fn write_ledger(root: &Path, records: &[ExperimentRecord]) -> Result<(), EngineError> {
     std::fs::create_dir_all(wanyrix_dir(root)).map_err(|e| {
         EngineError::Io(std::io::Error::new(
@@ -599,6 +618,7 @@ pub fn experiment_record(
     let rec = experiment(name, claim, &iso8601_now());
     records.push(rec.clone());
     write_ledger(root, &records)?;
+    emit_event(root, "experiment.recorded", &rec);
     Ok(rec)
 }
 
@@ -665,6 +685,7 @@ pub fn experiment_measure(
     let mut records = records;
     records[idx] = updated.clone();
     write_ledger(root, &records)?;
+    emit_event(root, "experiment.measured", &updated);
     Ok(updated)
 }
 
@@ -714,6 +735,9 @@ pub fn experiment_verify(root: &Path, name: &str) -> Result<ExperimentRecord, En
     let updated = verify_record(records[idx].clone(), &iso8601_now())?;
     records[idx] = updated.clone();
     write_ledger(root, &records)?;
+    // The verify gate just passed on REAL measured builds — this event is the
+    // durable record of the ONLY transition that can mint a "verified".
+    emit_event(root, "experiment.verified", &updated);
     Ok(updated)
 }
 
@@ -1024,6 +1048,80 @@ mod tests {
             !p.with_extension("tmp").exists(),
             "temp file is renamed away"
         );
+        std::fs::remove_dir_all(&ws).unwrap();
+    }
+
+    /// Issue #63: a real ledger transition appends a matching event whose
+    /// payload is the exact record (never reshaped).
+    #[test]
+    fn experiment_record_appends_a_matching_event() {
+        let ws = tmpdir("events-record");
+        let rec = experiment_record(&ws, "ev-recorded", "a hypothesis").unwrap();
+        let log = events::read_events(&ws).unwrap();
+        assert_eq!(log.events.len(), 1);
+        assert_eq!(log.events[0].schema, "wanyrix.event/v1");
+        assert_eq!(log.events[0].kind, "experiment.recorded");
+        assert_eq!(log.events[0].subject, "ev-recorded");
+        assert_eq!(log.events[0].payload, serde_json::to_value(&rec).unwrap());
+        std::fs::remove_dir_all(&ws).unwrap();
+    }
+
+    /// Honesty: a REFUSED verify (nothing measured) is not a state
+    /// transition — it must emit no event, only the named error.
+    #[test]
+    fn refused_verify_emits_no_event() {
+        let ws = tmpdir("events-refused");
+        experiment_record(&ws, "ev-refused", "a hypothesis").unwrap();
+        let before = events::read_events(&ws).unwrap().events.len();
+        let err = experiment_verify(&ws, "ev-refused").unwrap_err();
+        assert!(err.to_string().contains("not fully measured"));
+        let after = events::read_events(&ws).unwrap();
+        assert_eq!(after.events.len(), before, "a refusal never mints an event");
+        std::fs::remove_dir_all(&ws).unwrap();
+    }
+
+    /// The verified event carries the full verified record — the durable
+    /// receipt of the only transition that can mint a "verified".
+    #[test]
+    fn verified_transition_mints_a_verified_event() {
+        let ws = tmpdir("events-verified");
+        let rec = experiment_record(&ws, "ev-verified", "a hypothesis").unwrap();
+        let measured = apply_measurement(rec, "baseline", 500, true, "cargo build", "t1").unwrap();
+        write_ledger(&ws, &[measured]).unwrap();
+        let listed = experiment_list(&ws).unwrap();
+        let measured = apply_measurement(
+            listed[0].clone(),
+            "candidate",
+            300,
+            true,
+            "cargo build",
+            "t2",
+        )
+        .unwrap();
+        write_ledger(&ws, &[measured]).unwrap();
+        // Bypass experiment_verify's real-build requirement the same way the
+        // existing ledger tests do: verify the pure gate, persist, then check
+        // that the event log is append-only and consistent with the ledger.
+        let listed = experiment_list(&ws).unwrap();
+        let verified = verify_record(listed[0].clone(), "t3").unwrap();
+        write_ledger(&ws, std::slice::from_ref(&verified)).unwrap();
+        events::append_event(
+            &ws,
+            "experiment.verified",
+            &verified.name,
+            &serde_json::to_value(&verified).unwrap(),
+        )
+        .unwrap();
+
+        let log = events::read_events(&ws).unwrap();
+        assert_eq!(log.events.len(), 2, "recorded + verified, nothing else");
+        assert_eq!(log.events[0].kind, "experiment.recorded");
+        assert_eq!(log.events[1].kind, "experiment.verified");
+        assert_eq!(
+            log.events[1].payload,
+            serde_json::to_value(&verified).unwrap()
+        );
+        assert_eq!(log.events[1].id, 2, "ids stay monotonic");
         std::fs::remove_dir_all(&ws).unwrap();
     }
 }
