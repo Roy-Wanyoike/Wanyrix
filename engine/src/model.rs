@@ -196,6 +196,10 @@ pub enum EngineError {
     /// not found / could not spawn. A build that RAN but failed is never
     /// this — it is data in the envelope (`buildSuccess: false`).
     Build(String),
+    /// The local experiment ledger rejected an operation: duplicate or
+    /// unknown name, an incomplete/unsuccessful measurement, or a verify
+    /// attempt without a real measured improvement (the honesty gate).
+    Experiment(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -218,6 +222,7 @@ impl std::fmt::Display for EngineError {
             EngineError::Daemon(e) => write!(f, "daemon error: {e}"),
             EngineError::Telemetry(e) => write!(f, "telemetry error: {e}"),
             EngineError::Build(e) => write!(f, "build telemetry error: {e}"),
+            EngineError::Experiment(e) => write!(f, "experiment ledger error: {e}"),
         }
     }
 }

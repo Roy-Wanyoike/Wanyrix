@@ -1,0 +1,41 @@
+name: Perf & Resilience (manual)
+
+# Performance + resilience gates (issues #64/#65): the opt-in measurement
+# harnesses the regular CI does not run (machine-speed-sensitive, release
+# profile only). Dispatch-only so it never burns CI minutes implicitly.
+#
+# - perf probes: cargo test --release --test perf_probe -- --ignored --nocapture
+# - soak budget: short soak harness (scale up via SOAK_ITERATIONS locally)
+# - flake budget: 3 consecutive full-suite runs, zero failures required
+
+on:
+  workflow_dispatch:
+
+jobs:
+  perf-probes:
+    name: Engine perf probes (release profile)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run opt-in perf probes
+        run: cargo test --locked --release --test perf_probe -- --ignored --nocapture
+
+  resilience-budget:
+    name: Soak + flake budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies (web)
+        run: bun install --frozen-lockfile
+      - name: Soak (10 iterations, integrity-checked)
+        run: bash scripts/soak.sh 10
+      - name: Flake budget (3 consecutive full-suite runs)
+        run: bash scripts/flake-budget.sh 3 all

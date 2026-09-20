@@ -1,0 +1,140 @@
+name: Release
+
+# Release engineering (issue #65): reproducible multi-target engine binaries
+# with SBOM + advisory audit + checksums. Runs on version tags (v*) and on
+# demand. Artifact SIGNING is deliberately absent — it requires maintainer
+# secrets (see the signing checklist at the bottom); the workflow stages
+# everything else so signing is the only remaining step.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # required for the final GitHub Release upload
+
+jobs:
+  binaries:
+    name: ${{ matrix.target }} binary
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+    defaults:
+      run:
+        working-directory: engine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (${{ matrix.target }})
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build (locked, release)
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Stage package contents
+        shell: bash
+        run: |
+          VERSION="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
+          STAGE="wanyrix-${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/$STAGE"
+          cp "target/${{ matrix.target }}/release/wanyrix" "target/${{ matrix.target }}/release/wanyrix.exe" "dist/$STAGE/" 2>/dev/null || true
+          test -f "dist/$STAGE/wanyrix" || test -f "dist/$STAGE/wanyrix.exe"
+          cp README.md ../README.md ../LICENSE* dist/"$STAGE"/ 2>/dev/null || cp README.md dist/"$STAGE"/
+          echo "STAGE=dist/$STAGE" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Checksums (sha256)
+        shell: bash
+        run: |
+          cd "$STAGE"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            find . -type f -not -name "*.sha256" -exec sha256sum {} \; > SHA256SUMS.txt
+          else
+            shasum -a 256 $(find . -type f -not -name "*.sha256") > SHA256SUMS.txt
+          fi
+
+      - name: Package (tar.gz / zip)
+        shell: bash
+        run: |
+          cd dist
+          BASE="$(basename "$STAGE")"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a "$BASE.zip" "$BASE"
+          else
+            tar czf "$BASE.tar.gz" "$BASE"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wanyrix-${{ matrix.target }}
+          path: engine/dist/wanyrix-*.${{ matrix.archive }}
+
+  sbom:
+    name: SBOM (CycloneDX, engine crate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate SBOM
+        run: |
+          cargo install --locked cargo-cyclonedx
+          cargo cyclonedx --locked --all --format json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: engine/*.cdx.json
+
+  audit:
+    name: Advisory audit (cargo-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Audit dependencies
+        run: |
+          cargo install --locked cargo-audit
+          cargo audit --file Cargo.lock
+
+  publish:
+    name: Attach artifacts to the GitHub Release
+    needs: [binaries, sbom]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      # SIGNING CHECKLIST (issue #65 follow-up — requires maintainer secrets):
+      # 1. import the release GPG/cosign key from repository secrets
+      # 2. `cosign sign-blob` / `gpg --detach-sign` every archive + SHA256SUMS
+      # 3. verify signatures in the install docs before any curl|sh story
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

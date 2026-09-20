@@ -70,5 +70,23 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
         Command::Daemon { cmd } => cli::daemon_run(cmd),
         Command::Telemetry { cmd } => cli::telemetry_run(cmd),
         Command::Build { path, json, pretty } => cli::build_run(&path, json, pretty),
+        Command::Init {
+            path,
+            db,
+            json,
+            pretty,
+        } => cli::product_init_run(&path, db.as_deref(), json, pretty),
+        Command::Status {
+            path,
+            db,
+            socket,
+            json,
+            pretty,
+        } => cli::product_status_run(&path, db.as_deref(), socket.as_deref(), json, pretty),
+        Command::Analyze { path, json, pretty } => cli::product_analyze_run(&path, json, pretty),
+        Command::Dependencies { path, json, pretty } => {
+            cli::product_dependencies_run(&path, json, pretty)
+        }
+        Command::Experiment { cmd } => cli::product_experiment_run(cmd),
     }
 }

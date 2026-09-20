@@ -1,6 +1,6 @@
 [package]
 name = "wanyrix-engine"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "Wanyrix engineering-intelligence engine — filesystem-measured doctor/graph/health analysis for Rust workspaces (honesty-first: measured vs estimated is never conflated)."
 license = "MIT OR Apache-2.0"

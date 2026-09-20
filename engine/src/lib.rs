@@ -69,6 +69,7 @@ pub mod health;
 pub mod manifest;
 pub mod model;
 pub mod pathutil;
+pub mod product;
 pub mod report;
 pub mod scan;
 pub mod store;

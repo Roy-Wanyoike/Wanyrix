@@ -10,6 +10,7 @@ use crate::build::{self, BuildOptions};
 use crate::graph::{build_graph, Graph};
 use crate::health::build_health;
 use crate::model::{EngineError, WorkspaceScan};
+use crate::product;
 use crate::scan::scan_workspace;
 use crate::timestamp::iso8601_now;
 use crate::{daemon, store, synth, telemetry};
@@ -102,6 +103,119 @@ pub enum Command {
         #[arg(long)]
         json: bool,
         /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Record the workspace's measured identity under `.wanyrix/state.json`
+    /// (idempotent — an existing state is echoed, never reset).
+    Init {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Also initialize (idempotently) a scan store at this path.
+        #[arg(long)]
+        db: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Fresh measured scan + on-disk state summary: init baseline + drift,
+    /// newest stored scan (with --db), daemon liveness (with --socket).
+    Status {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        db: Option<PathBuf>,
+        /// Unix socket of a running daemon — liveness is probed, honestly.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// One measured pass: doctor + graph + health embedded verbatim under
+    /// wanyrix.analyze/v1 (zero contract re-shaping).
+    Analyze {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Dependency intelligence derived only from the measured edge list:
+    /// direct deps/dependents, fan-in/out, duplicates, path-dep resolution
+    /// tallies and measured cycles.
+    Dependencies {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Local experiment ledger (.wanyrix/experiments.jsonl): a hypothesis is
+    /// `estimated`; two REAL measured builds make it `measured`; a real
+    /// measured improvement makes it `verified`. Nothing else does.
+    Experiment {
+        #[command(subcommand)]
+        cmd: ExperimentCmd,
+    },
+}
+
+/// Subcommands for `wanyrix experiment` (local ledger, no network).
+#[derive(Subcommand)]
+pub enum ExperimentCmd {
+    /// Append a hypothesis with status `estimated` (names are unique; the
+    /// ledger never overwrites).
+    Record {
+        /// Unique experiment name.
+        #[arg(long)]
+        name: String,
+        /// The claim this experiment is expected to verify.
+        #[arg(long)]
+        claim: String,
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Run ONE real instrumented build and attach it as the role's
+    /// measurement (baseline | candidate). Both roles ⇒ `measured`.
+    Measure {
+        #[arg(long)]
+        name: String,
+        /// baseline | candidate
+        #[arg(long)]
+        role: String,
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Grant `verified` — only when baseline and candidate are real,
+    /// successful measurements and the candidate is measurably faster.
+    Verify {
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Print the ledger in append order.
+    List {
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
         #[arg(long)]
         pretty: bool,
     },
@@ -413,6 +527,152 @@ pub fn build_run(path: &Path, json: bool, pretty: bool) -> Result<String, Engine
         serialize_json(&report, pretty)
     } else {
         Ok(build::human_summary(&report))
+    }
+}
+
+/// Run `wanyrix init`.
+pub fn product_init_run(
+    path: &Path,
+    db: Option<&Path>,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let r = product::init(path, db)?;
+    if json {
+        serialize_json(&r, pretty)
+    } else {
+        Ok(product::init_human(&r))
+    }
+}
+
+/// Run `wanyrix status`.
+pub fn product_status_run(
+    path: &Path,
+    db: Option<&Path>,
+    socket: Option<&Path>,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let r = product::status(path, db, socket)?;
+    if json {
+        serialize_json(&r, pretty)
+    } else {
+        Ok(product::status_human(&r))
+    }
+}
+
+/// Run `wanyrix analyze`.
+pub fn product_analyze_run(path: &Path, json: bool, pretty: bool) -> Result<String, EngineError> {
+    let scan = scan_workspace(path)?;
+    let r = product::analyze_report(&scan)?;
+    if json {
+        serialize_json(&r, pretty)
+    } else {
+        let mut out = human_summary("analyze", &scan, &[]);
+        out.push_str(&format!(
+            "  doctor: {} findings | graph: {} nodes/{} edges | health: see `--json` (wanyrix.analyze/v1 embeds all three)\n",
+            r.doctor.summary.total, r.graph.meta.served_nodes, r.graph.meta.served_edges,
+        ));
+        Ok(out)
+    }
+}
+
+/// Run `wanyrix dependencies`.
+pub fn product_dependencies_run(
+    path: &Path,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let scan = scan_workspace(path)?;
+    let g = build_graph(&scan);
+    let r = product::dependencies_report(&scan, &g);
+    if json {
+        serialize_json(&r, pretty)
+    } else {
+        Ok(product::dependencies_human(&r))
+    }
+}
+
+/// Run `wanyrix experiment <sub>`.
+pub fn product_experiment_run(cmd: crate::cli::ExperimentCmd) -> Result<String, EngineError> {
+    use crate::cli::ExperimentCmd;
+    match cmd {
+        ExperimentCmd::Record {
+            name,
+            claim,
+            path,
+            json,
+            pretty,
+        } => {
+            let rec = product::experiment_record(&path, &name, &claim)?;
+            if json {
+                serialize_json(&rec, pretty)
+            } else {
+                Ok(format!(
+                    "recorded (estimated):\n{}",
+                    product::experiment_human(&rec)
+                ))
+            }
+        }
+        ExperimentCmd::Measure {
+            name,
+            role,
+            path,
+            json,
+            pretty,
+        } => {
+            let rec = product::experiment_measure(&path, &name, &role)?;
+            if json {
+                serialize_json(&rec, pretty)
+            } else {
+                Ok(format!(
+                    "measured ({role}):\n{}",
+                    product::experiment_human(&rec)
+                ))
+            }
+        }
+        ExperimentCmd::Verify {
+            name,
+            path,
+            json,
+            pretty,
+        } => {
+            let rec = product::experiment_verify(&path, &name)?;
+            if json {
+                serialize_json(&rec, pretty)
+            } else {
+                Ok(format!("verified:\n{}", product::experiment_human(&rec)))
+            }
+        }
+        ExperimentCmd::List { path, json, pretty } => {
+            let records = product::experiment_list(&path)?;
+            if json {
+                // The workspace name is only knowable via a scan; the ledger
+                // lives under the scanned root, so derive it honestly —
+                // `null` when the root is not a scannable workspace.
+                let workspace = product::read_workspace_name(&path);
+                let value = serde_json::json!({
+                    "schema": product::EXPERIMENTS_SCHEMA,
+                    "workspace": workspace,
+                    "count": records.len(),
+                    "experiments": records,
+                    "generatedAt": iso8601_now(),
+                });
+                serialize_json(&value, pretty)
+            } else if records.is_empty() {
+                Ok(format!(
+                    "wanyrix experiment list — 0 record(s) in {} (record one with `wanyrix experiment record --name … --claim …`)\n",
+                    path.join(".wanyrix/experiments.jsonl").display()
+                ))
+            } else {
+                let mut out = format!("wanyrix experiment list — {} record(s)\n", records.len());
+                for r in &records {
+                    out.push_str(&product::experiment_human(r));
+                    out.push('\n');
+                }
+                Ok(out)
+            }
+        }
     }
 }
 

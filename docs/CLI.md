@@ -1,10 +1,13 @@
 # Wanyrix CLI — contract reference
 
-Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.4.0
+Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.5.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
-store · synth · daemon · telemetry · build`. Every engine command emits a versioned JSON
+store · synth · daemon · telemetry · build · init · status · analyze · dependencies ·
+experiment`. Every engine command emits a versioned JSON
 envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
-`wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`) behind a `--json` switch, plus
+`wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`, `wanyrix.init/v1`,
+`wanyrix.status/v1`, `wanyrix.analyze/v1`, `wanyrix.dependencies/v1`,
+`wanyrix.experiment/v1`) behind a `--json` switch, plus
 human-readable output by default. The web platform mirrors the same payloads over
 HTTP; the in-app **CLI contract** dialog
 (`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)
@@ -36,6 +39,11 @@ pins the command set, the flags, and the exit codes shown here.
 | 5 | `wanyrix daemon start|call` | `wanyrix.daemon/v1` — one measured scan kept in memory, served over a local Unix socket (no TCP, no network) | Runtime view |
 | 6 | `wanyrix telemetry ingest -` | `wanyrix.telemetry/v1` — redacted, aggregated rustc JSON diagnostics (source snippets dropped unconditionally) | Diagnostics view (`GET /api/wanyrix/diagnostics?ws=…`) |
 | 7 | `wanyrix synth --crates <n> --out <dir> [--seed <s>]` | deterministic synthetic Rust workspace (same `(seed, count)` → byte-identical tree) | fixture generator used by tests/benchmarks |
+| 8 | `wanyrix init [--path <dir>] [--db <file>] [--json]` | `wanyrix.init/v1` — measured workspace identity written to `.wanyrix/state.json`; idempotent (`created: false` echoes, never resets) | onboarding step for the CLI journey |
+| 9 | `wanyrix status [--path <dir>] [--db <file>] [--socket <sock>] [--json]` | `wanyrix.status/v1` — fresh measured scan + init baseline drift + newest stored scan + daemon liveness probe | dashboard header status pill |
+| 10 | `wanyrix analyze [--path <dir>] [--json]` | `wanyrix.analyze/v1` — doctor + graph + health envelopes embedded verbatim under one schema (zero re-shaping drift) | one call serving the whole dashboard |
+| 11 | `wanyrix dependencies [--path <dir>] [--json]` | `wanyrix.dependencies/v1` — per-crate direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies, measured cycles | Dependencies view (`GET /api/wanyrix/graph?ws=…`) |
+| 12 | `wanyrix experiment record|measure|verify|list` | `wanyrix.experiment/v1` ledger (`.wanyrix/experiments.jsonl`) — estimated → measured (2 REAL builds) → verified (measured improvement ONLY) | Experiments view (honesty gates 19/21) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
 (pretty has no effect without `--json`), and per-subcommand options documented by
@@ -92,7 +100,7 @@ severity ladder lives inside the payload (`critical` / `warning` / `info`).
 
 ## Roadmap
 
-- `wanyrix init`, repository discovery, and config-file support — engine-repo scope.
+- ~~`wanyrix init`, repository discovery~~ — shipped in v0.5.0 (`init`, `status`, `analyze`, `dependencies`, `experiment` ledger + `verify` gate).
 - An `impact`/`report` engine subcommand to absorb the web-only surfaces above is
   intentionally not faked in the binary; the web platform serves them today.
 - Anything that would fake engine evidence in this repo is forbidden by the honesty

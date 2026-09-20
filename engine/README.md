@@ -6,7 +6,7 @@ the web dashboard's honesty-first product identity (AUDIT-I8): every number
 it reports is **measured**, and anything it cannot measure is labeled, never
 simulated.
 
-## Status — engine v0.4.0
+## Status — engine v0.5.0
 
 **Built:** filesystem manifest analysis, local persistence, an incremental
 analysis daemon, redacted rustc-telemetry ingestion, an INSTRUMENTED BUILD
@@ -173,7 +173,7 @@ field-for-field to the shapes in `src/lib/wanyrix/types.ts` (pinned by
 
 ```sh
 cargo build            # clean, zero warnings
-cargo test             # 102 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
+cargo test             # 120 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
 cargo clippy --all-targets -- -D warnings   # zero warnings
 ./target/debug/wanyrix doctor --path tests/fixtures/tiny-ws --json | python3 -m json.tool
 ```
@@ -208,6 +208,16 @@ silent `{}`.
   (`wanyrix.telemetry/v1`); default-on source/secret redaction. (v0.3.0)
 - `wanyrix build` — instrumented cargo-build runner measuring wall clock,
   fresh/cache-hit rate and redacted diagnostics (`wanyrix.build/v1`). (v0.4.0)
+- **Product contract (v0.5.0)** — `wanyrix init` (measured workspace identity in
+  `.wanyrix/state.json`, idempotent), `wanyrix status` (fresh scan + init drift +
+  newest store row + daemon liveness probe), `wanyrix analyze` (doctor + graph +
+  health embedded verbatim under `wanyrix.analyze/v1`), `wanyrix dependencies`
+  (direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies,
+  measured cycles), and the `wanyrix experiment` ledger
+  (`wanyrix.experiment/v1`): a hypothesis is `estimated`; two REAL `wanyrix
+  build` runs make it `measured`; only a real measured improvement between two
+  successful builds grants `verified`. Verification cannot be faked, bought,
+  or retro-fitted.
 
 **Explicitly NOT built yet:**
 - **Full build-time attribution** — per-crate build seconds that survive
