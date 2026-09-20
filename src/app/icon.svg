@@ -1,13 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
-  <defs>
-    <linearGradient id="wbg" x1="3" y1="2" x2="29" y2="30" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f59e0b"/>
-      <stop offset="0.5" stop-color="#ea580c"/>
-      <stop offset="1" stop-color="#9a3412"/>
-    </linearGradient>
-  </defs>
-  <rect x="0" y="0" width="32" height="32" rx="7.5" fill="url(#wbg)"/>
-  <circle cx="16" cy="6.5" r="2.05" fill="white" fill-opacity="0.97"/>
-  <path d="M7.6 12.2 L11.85 23 L16 10.5 L20.15 23 L24.4 12.2"
-    stroke="white" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 32 32"><defs><linearGradient id="wbg" x1="3" x2="29" y1="2" y2="30" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f59e0b"/><stop offset=".5" stop-color="#ea580c"/><stop offset="1" stop-color="#9a3412"/></linearGradient></defs><rect width="32" height="32" x="0" y="0" fill="url(#wbg)" rx="7.5"/><circle cx="16" cy="6.5" r="2.05" fill="#fff" fill-opacity=".97"/><path fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.1" d="M7.6 12.2 L11.85 23 L16 10.5 L20.15 23 L24.4 12.2"/></svg>
