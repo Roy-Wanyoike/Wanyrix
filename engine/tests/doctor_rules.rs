@@ -112,7 +112,11 @@ fn fer_eng_008_fires_when_the_dep_target_lives_outside_the_analyzed_set() {
 fn fer_eng_007_fires_when_the_dep_target_has_no_manifest() {
     let parent = temp_dir("broken");
     let root = parent.join("scan-root");
-    write_crate(&root.join("alpha"), "alpha", "ghost = { path = \"../../gone\" }");
+    write_crate(
+        &root.join("alpha"),
+        "alpha",
+        "ghost = { path = \"../../gone\" }",
+    );
     // `gone` exists as a DIRECTORY but carries no Cargo.toml → broken, not
     // escaped (the measured distinction in src/scan.rs).
     std::fs::create_dir_all(parent.join("gone")).unwrap();
@@ -137,7 +141,11 @@ fn fer_eng_007_fires_when_the_dep_target_has_no_manifest() {
 fn a_resolved_intra_workspace_path_dep_mints_neither_007_nor_008() {
     let parent = temp_dir("resolved");
     let root = parent.join("scan-root");
-    write_crate(&root.join("alpha"), "alpha", "beta = { path = \"../beta\" }");
+    write_crate(
+        &root.join("alpha"),
+        "alpha",
+        "beta = { path = \"../beta\" }",
+    );
     write_crate(&root.join("beta"), "beta", "");
 
     let scan = scan_workspace(&root).unwrap();

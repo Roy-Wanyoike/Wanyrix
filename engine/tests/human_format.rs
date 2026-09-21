@@ -56,10 +56,16 @@ fn assert_human_summary_shape(cmd: &str, text: &str, ws: &std::path::Path, foote
     let header = lines.next().unwrap_or("");
     assert_eq!(
         header,
-        format!("wanyrix {cmd} — {} (manifest-static-v1)", ws.file_name().unwrap().to_str().unwrap()),
+        format!(
+            "wanyrix {cmd} — {} (manifest-static-v1)",
+            ws.file_name().unwrap().to_str().unwrap()
+        ),
         "{cmd}: header line"
     );
-    assert!(text.contains(&format!("root: {}", ws.display())), "{cmd}: root line");
+    assert!(
+        text.contains(&format!("root: {}", ws.display())),
+        "{cmd}: root line"
+    );
     assert!(text.contains("toolchain: "), "{cmd}: toolchain line");
 
     let crates_line = text
@@ -107,10 +113,7 @@ fn assert_human_summary_shape(cmd: &str, text: &str, ws: &std::path::Path, foote
     );
 
     // Per-finding layout: `  [severity] ID — title` + `    → recommendation`.
-    let finding_lines: Vec<&str> = text
-        .lines()
-        .filter(|l| l.starts_with("  ["))
-        .collect();
+    let finding_lines: Vec<&str> = text.lines().filter(|l| l.starts_with("  [")).collect();
     assert_eq!(
         finding_lines.len(),
         total,
@@ -199,7 +202,9 @@ fn analyze_human_output_appends_the_embedded_envelope_counts() {
     // shared summary body (so the footer is not the last line here).
     assert_human_summary_shape("analyze", &stdout, &ws, false);
     assert!(
-        stdout.trim_end().ends_with("health: see `--json` (wanyrix.analyze/v1 embeds all three)"),
+        stdout
+            .trim_end()
+            .ends_with("health: see `--json` (wanyrix.analyze/v1 embeds all three)"),
         "the analyze-specific line closes the output: {stdout}"
     );
     let tail = stdout
@@ -234,8 +239,7 @@ fn dependencies_human_output_reports_the_measured_tallies() {
         .find(|l| l.starts_with("  c0000"))
         .unwrap_or_else(|| panic!("c0000 line missing: {stdout}"));
     assert_eq!(
-        c0000,
-        "  c0000 → deps [], dependents [c0001] (fanIn 1, fanOut 0)",
+        c0000, "  c0000 → deps [], dependents [c0001] (fanIn 1, fanOut 0)",
         "per-crate human layout: {c0000}"
     );
     std::fs::remove_dir_all(&ws).ok();

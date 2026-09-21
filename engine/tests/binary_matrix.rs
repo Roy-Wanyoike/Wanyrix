@@ -93,9 +93,15 @@ fn init_records_measured_identity_and_echoes_idempotently() {
     assert_eq!(v["workspace"], ws.file_name().unwrap().to_str().unwrap());
     assert_eq!(v["created"], true, "first run creates the state file");
     assert_eq!(v["crates"], 2);
-    assert_eq!(v["edges"], 1, "synth(2,17) wires one backward path-dep edge");
+    assert_eq!(
+        v["edges"], 1,
+        "synth(2,17) wires one backward path-dep edge"
+    );
     assert!(
-        v["stateFile"].as_str().unwrap().ends_with(".wanyrix/state.json"),
+        v["stateFile"]
+            .as_str()
+            .unwrap()
+            .ends_with(".wanyrix/state.json"),
         "state lands in the engine's own .wanyrix dir: {v}"
     );
     assert!(ws.join(".wanyrix/state.json").is_file(), "state on disk");
@@ -175,7 +181,10 @@ fn dependencies_reports_the_measured_edge_intelligence() {
             .clone()
     };
     assert_eq!(by_name("c0000")["dependents"], serde_json::json!(["c0001"]));
-    assert_eq!(by_name("c0001")["dependencies"], serde_json::json!(["c0000"]));
+    assert_eq!(
+        by_name("c0001")["dependencies"],
+        serde_json::json!(["c0000"])
+    );
     assert_eq!(by_name("c0000")["fanIn"], 1);
     assert_eq!(by_name("c0000")["fanOut"], 0);
     std::fs::remove_dir_all(&ws).ok();
@@ -198,7 +207,10 @@ fn experiment_ledger_records_lists_and_refuses_overwrites() {
     let v = json(&out);
     assert_eq!(v["schema"], "wanyrix.experiment/v1");
     assert_eq!(v["name"], "halve-build");
-    assert_eq!(v["status"], "estimated", "a recorded hypothesis is estimated");
+    assert_eq!(
+        v["status"], "estimated",
+        "a recorded hypothesis is estimated"
+    );
     assert!(
         v.get("baseline").is_none() && v.get("candidate").is_none(),
         "no fabricated measurements on an estimated record: {v}"
@@ -225,7 +237,13 @@ fn experiment_ledger_records_lists_and_refuses_overwrites() {
     );
 
     // `list` speaks its own envelope: wanyrix.experiments/v1 (plural).
-    let out = run(&["experiment", "list", "--path", ws.to_str().unwrap(), "--json"]);
+    let out = run(&[
+        "experiment",
+        "list",
+        "--path",
+        ws.to_str().unwrap(),
+        "--json",
+    ]);
     let v = json(&out);
     assert_eq!(
         v["schema"], "wanyrix.experiments/v1",
@@ -245,7 +263,10 @@ fn experiment_ledger_records_lists_and_refuses_overwrites() {
         ws.to_str().unwrap(),
         "--json",
     ]);
-    assert_eq!(verify.code, 2, "verify without measurements must be refused");
+    assert_eq!(
+        verify.code, 2,
+        "verify without measurements must be refused"
+    );
     assert!(
         verify.stderr.contains("not fully measured"),
         "named refusal on stderr, got: {}",
@@ -325,7 +346,10 @@ fn store_lifecycle_init_save_list_fsck_through_the_binary() {
     let out = run(&["store", "fsck", "--db", db.to_str().unwrap()]);
     assert_eq!(out.code, 0, "stderr: {}", out.stderr);
     assert!(
-        out.stdout.contains("1 scans checked") && out.stdout.contains("incomplete scans (missing findings rows): 0"),
+        out.stdout.contains("1 scans checked")
+            && out
+                .stdout
+                .contains("incomplete scans (missing findings rows): 0"),
         "a clean two-phase store fscks clean, got: {}",
         out.stdout
     );

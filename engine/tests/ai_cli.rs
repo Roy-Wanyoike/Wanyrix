@@ -76,13 +76,7 @@ fn the_https_refusal_also_covers_the_env_fallback_endpoint() {
     let ws = temp_dir("https-env");
     synth::synth(&ws, 2, 17).unwrap();
     let (stdout, stderr, code) = run(
-        &[
-            "ai",
-            "--path",
-            ws.to_str().unwrap(),
-            "--timeout-secs",
-            "1",
-        ],
+        &["ai", "--path", ws.to_str().unwrap(), "--timeout-secs", "1"],
         Some("https://model.corp.internal:443"),
     );
     assert_eq!(code, 2, "$WANYRIX_AI_ENDPOINT=https:// must be refused too");
