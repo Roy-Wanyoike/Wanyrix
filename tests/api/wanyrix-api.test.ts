@@ -581,8 +581,9 @@ describeServer('Wanyrix API — REST hygiene (ENG-TCA-6)', () => {
       expect(res.status).toBe(405)
       expect(res.headers.get('allow')).toContain('GET')
     }
-    // POST-only surfaces advertise POST
-    for (const route of ['storage/reclaim', 'storage/rebuild']) {
+    // POST-only surfaces advertise POST (`export` joined with issue #91 —
+    // it writes the artifacts-as-code tree, so it is a mutating surface).
+    for (const route of ['storage/reclaim', 'storage/rebuild', 'export']) {
       const res = await fetch(`${BASE_URL}/api/wanyrix/${route}`, {
         method: 'GET',
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
