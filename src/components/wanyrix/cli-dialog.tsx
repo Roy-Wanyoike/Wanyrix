@@ -18,11 +18,13 @@ import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
  * CLI contract quick reference — the engine-backed web surfaces mirror the
  * real `wanyrix` binary (version shown from ENGINE_VERSION, engine-meta.ts):
  * same payloads, versioned envelopes, same `--json` switch, same exit codes
- * (0 success / 2 error). Every command row is copyable (Gate 19 toast on
- * copy). Web-only platform tools are labeled as such.
+ * (0 success / 2 error / 101 broken pipe — see docs/CLI.md). Every command
+ * row is copyable (Gate 19 toast on copy, wording honest per surface: the
+ * AI row is an AI surface and says so). Web-only platform tools are labeled
+ * as such.
  */
 
-const COMMANDS: { cmd: string; maps: string }[] = [
+const COMMANDS: { cmd: string; maps: string; ai?: boolean }[] = [
   { cmd: 'wanyrix doctor --exclude tests/fixtures --json', maps: 'Build Doctor view — findings + evidence; repeatable --exclude prunes a subtree, echoes it and counts the skip (wanyrix.doctor/v1)' },
   { cmd: 'wanyrix build --path <dir> --json', maps: 'Real engine binary panel → build — instrumented cargo build, measured wall clock + cache-hit rate (wanyrix.build/v1)' },
   { cmd: 'wanyrix graph --json', maps: 'Engineering Graph — measured edge list (wanyrix.graph/v1)' },
@@ -33,7 +35,7 @@ const COMMANDS: { cmd: string; maps: string }[] = [
   { cmd: 'wanyrix status --db scans.db --socket daemon.sock', maps: 'fresh measured snapshot + drift vs init + newest stored scan + daemon liveness (wanyrix.status/v1)' },
   { cmd: 'wanyrix experiment record --name fix --claim "halve build"', maps: 'Experiments view — hypothesis ledger; record → measure (2 real builds) → verify (measured improvement only) (wanyrix.experiment/v1)' },
   { cmd: 'wanyrix events --json', maps: 'durable event log — one append-only mirror of every real ledger transition; corrupt lines skipped and named (wanyrix.events/v1)' },
-  { cmd: 'wanyrix ai --question "…"', maps: 'local AI (Ollama-class) — grounded on the measured evidence digest only; never source code, never a measurement (wanyrix.ai/v1)' },
+  { cmd: 'wanyrix ai --question "…"', maps: 'local AI (Ollama-class) — grounded on the measured evidence digest only; never source code, never a measurement (wanyrix.ai/v1)', ai: true },
   { cmd: 'wanyrix git --json', maps: 'Change Intelligence — measured git state: branch, dirty/changed/untracked files, changed crates, recent commits (wanyrix.git/v1)' },
   { cmd: 'wanyrix impact --crate <name> --json', maps: 'Impact & changes panel — measured dependents by kind, transitive reach, blast radius per mille (wanyrix.impact/v1)' },
   { cmd: 'wanyrix what-changed --db <store> --json', maps: 'Impact & changes panel — added/resolved/changed findings vs the stored baseline (wanyrix.what-changed/v1)' },
@@ -47,9 +49,10 @@ const COMMANDS: { cmd: string; maps: string }[] = [
 const EXIT_CODES: { code: string; label: string; cls: string }[] = [
   { code: '0', label: 'success — findings are data, not failure', cls: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   { code: '2', label: 'error — bad usage, IO failure, or ok:false daemon frame', cls: 'text-orange-300 border-orange-500/30 bg-orange-500/10' },
+  { code: '101', label: 'broken pipe — stdout closed early (Rust EPIPE panic, not a mapped code)', cls: 'text-muted-foreground border-border bg-muted/40' },
 ]
 
-function CommandRow({ cmd, maps }: { cmd: string; maps: string }) {
+function CommandRow({ cmd, maps, ai }: { cmd: string; maps: string; ai?: boolean }) {
   const [copied, setCopied] = useState(false)
   const { toast } = useToast()
   return (
@@ -65,7 +68,7 @@ function CommandRow({ cmd, maps }: { cmd: string; maps: string }) {
           navigator.clipboard?.writeText(cmd).catch(() => {})
           setCopied(true)
           window.setTimeout(() => setCopied(false), 1400)
-          toast({ title: 'Command copied', description: `${cmd} — deterministic surface, no AI in the path` })
+          toast({ title: 'Command copied', description: `${cmd} — ${ai ? 'local AI surface — labeled inference, never a measurement' : 'deterministic surface, no AI in the path'}` })
         }}
       >
         {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
@@ -94,7 +97,7 @@ export function CliContractDialog({
           </DialogTitle>
           <DialogDescription>
             The engine-backed surfaces mirror the real binary (engine v{ENGINE_VERSION}) —
-            same payloads, same exit codes (0 / 2), and{' '}
+            same payloads, same exit codes (0 / 2 / 101), and{' '}
             <span className="font-mono text-foreground/85">--json</span> with a
             versioned envelope on every read command (Gate 18). Simulator,
             report export, and experiments are web-only platform tools.

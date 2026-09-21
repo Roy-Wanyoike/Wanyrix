@@ -56,6 +56,7 @@ pub enum Command {
         excludes: Vec<String>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -68,6 +69,7 @@ pub enum Command {
         excludes: Vec<String>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -128,6 +130,7 @@ pub enum Command {
         db: Option<PathBuf>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -143,6 +146,7 @@ pub enum Command {
         socket: Option<PathBuf>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -156,6 +160,7 @@ pub enum Command {
         excludes: Vec<String>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -170,6 +175,7 @@ pub enum Command {
         excludes: Vec<String>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -188,6 +194,7 @@ pub enum Command {
         path: PathBuf,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -207,6 +214,8 @@ pub enum Command {
         question: String,
         /// Local model server address (host:port or http://host:port).
         /// Falls back to $WANYRIX_AI_ENDPOINT, then the Ollama default.
+        /// https:// is refused with a named error — the client speaks plain
+        /// HTTP only (no TLS; local model servers do not need it).
         #[arg(long)]
         endpoint: Option<String>,
         /// Model name (falls back to $WANYRIX_AI_MODEL, then the default).
@@ -217,6 +226,7 @@ pub enum Command {
         timeout_secs: u64,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -232,6 +242,7 @@ pub enum Command {
         excludes: Vec<String>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -249,6 +260,7 @@ pub enum Command {
         excludes: Vec<String>,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -266,6 +278,7 @@ pub enum Command {
         db: PathBuf,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -316,6 +329,7 @@ pub enum ExperimentCmd {
         path: PathBuf,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -331,6 +345,7 @@ pub enum ExperimentCmd {
         path: PathBuf,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -343,6 +358,7 @@ pub enum ExperimentCmd {
         path: PathBuf,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },
@@ -352,6 +368,7 @@ pub enum ExperimentCmd {
         path: PathBuf,
         #[arg(long)]
         json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
         #[arg(long)]
         pretty: bool,
     },

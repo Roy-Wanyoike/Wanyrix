@@ -25,9 +25,12 @@
 //! dependencies (the engine's dependency policy stays minimal). POST +
 //! `Content-Length` + `Connection: close`, plus chunked-body decoding since
 //! Ollama-class servers may answer `Transfer-Encoding: chunked`. TLS is NOT
-//! spoken: an `https://` prefix is stripped for address convenience, but the
-//! connection is plain TCP to the given port — the honest fit for a local
-//! model server, and a documented strictness limit for anything else.
+//! spoken, and the client is HONEST about it: an `https://` endpoint is
+//! REFUSED up front with a named error (issue #89, A1-F7) instead of being
+//! silently downgraded to plain TCP — an operator who asks for https wants
+//! TLS, and pretending plain HTTP on port 443 is https would be a lie. The
+//! honest fit for a local model server is plain HTTP on the loopback or LAN;
+//! `http://` and bare `host:port` forms are accepted.
 
 use std::io::{Read, Write as _};
 use std::path::Path;
@@ -155,18 +158,23 @@ fn build_evidence(scan: &WorkspaceScan, findings: &[Finding]) -> AiEvidence {
 /// Resolution happens in `ai_explain`; this parses one address.
 ///
 /// Accepts `host:port`, bare `host` (default port 11434), and `http://`
-/// or `https://` prefixed forms. Garbage (empty host, whitespace, a path,
-/// a non-numeric port) is a NAMED error, never a fallback guess.
+/// prefixed forms. An `https://` endpoint is REFUSED with a named error:
+/// the built-in client speaks plain HTTP only (TLS is not implemented), and
+/// silently stripping the scheme would dishonor an operator who explicitly
+/// asked for TLS (issue #89, A1-F7). Garbage (empty host, whitespace, a
+/// path, a non-numeric port) is a NAMED error, never a fallback guess.
 pub fn resolve_endpoint(raw: &str) -> Result<(String, u16), EngineError> {
     let malformed = || {
         EngineError::Ai(format!(
-            "cannot parse AI endpoint {raw:?} — expected host:port or http(s)://host:port (e.g. {DEFAULT_ENDPOINT})"
+            "cannot parse AI endpoint {raw:?} — expected host:port or http://host:port (e.g. {DEFAULT_ENDPOINT})"
         ))
     };
-    let rest = raw
-        .strip_prefix("http://")
-        .or_else(|| raw.strip_prefix("https://"))
-        .unwrap_or(raw);
+    if raw.starts_with("https://") {
+        return Err(EngineError::Ai(format!(
+            "AI endpoint {raw:?} uses https:// — the built-in client speaks plain HTTP only (no TLS support; local model servers do not need it). Pass an http:// or bare host:port endpoint instead."
+        )));
+    }
+    let rest = raw.strip_prefix("http://").unwrap_or(raw);
     let (host, port) = match rest.rsplit_once(':') {
         Some((h, p)) => (h, p),
         None => (rest, ""),
@@ -749,13 +757,26 @@ mod tests {
             "no colon ⇒ Ollama default port"
         );
         assert_eq!(
-            resolve_endpoint("https://example.com:8443").unwrap(),
-            ("example.com".to_owned(), 8443)
-        );
-        assert_eq!(
             resolve_endpoint(DEFAULT_ENDPOINT).unwrap(),
             ("127.0.0.1".to_owned(), 11434)
         );
+        // The https honesty refusal (issue #89, A1-F7): the scheme is never
+        // silently stripped — an operator asking for TLS gets a named error.
+        for https in [
+            "https://example.com:8443",
+            "https://127.0.0.1:11434",
+            "https://ollama.local",
+        ] {
+            let err = resolve_endpoint(https).unwrap_err().to_string();
+            assert!(
+                err.contains("https") && err.contains("plain HTTP"),
+                "{https}: refusal must name the scheme and the plain-HTTP truth, got: {err}"
+            );
+            assert!(
+                err.contains("TLS"),
+                "{https}: refusal must name TLS, got: {err}"
+            );
+        }
         for bad in [
             "",
             "host with spaces:1",
@@ -766,7 +787,6 @@ mod tests {
             assert!(resolve_endpoint(bad).is_err(), "must reject {bad:?}");
         }
     }
-
     #[test]
     fn evidence_digest_carries_only_id_severity_title() {
         let ws = tmpdir("privacy");

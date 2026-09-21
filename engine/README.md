@@ -37,6 +37,10 @@ bad store/db, telemetry input error).
 Omitting `--json` prints a human summary (deterministic for the
 static-analysis flavors; the `build` summary contains live measured
 durations by design). `--pretty` only affects JSON output.
+One exit code outside this ladder is observable and honest about it: `101`
+is the Rust runtime's broken-pipe panic (stdout closed early — e.g.
+`wanyrix doctor --json | head -c 10` on a payload larger than the pipe
+buffer), not a mapped contract code.
 
 Determinism: identical input ⇒ byte-identical output except `generatedAt`
 (and `meta.lastScan`, which mirrors it). Every list is sorted and the
