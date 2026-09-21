@@ -1,6 +1,6 @@
 # Wanyrix CLI — contract reference
 
-Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.8.0
+Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.9.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
 store · synth · daemon · telemetry · build · init · status · analyze · dependencies ·
 experiment · events · ai · git · impact · what-changed`. Every engine command emits a versioned JSON
