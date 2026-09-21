@@ -12,7 +12,7 @@ use crate::graph::{build_graph, Graph};
 use crate::health::build_health;
 use crate::model::{EngineError, WorkspaceScan};
 use crate::product;
-use crate::scan::scan_workspace;
+use crate::scan::{scan_workspace, scan_workspace_excluding};
 use crate::timestamp::iso8601_now;
 use crate::{daemon, store, synth, telemetry};
 
@@ -35,6 +35,11 @@ pub enum Command {
         /// Directory to scan (walked recursively for Cargo.toml manifests).
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path; the subtree is
+        /// pruned from the walk, counted in skipped entries and echoed in
+        /// the envelope (never a silent drop).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         /// Emit the JSON flavor instead of a human-readable summary.
         #[arg(long)]
         json: bool,
@@ -46,6 +51,9 @@ pub enum Command {
     Graph {
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path (echoed, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -55,6 +63,9 @@ pub enum Command {
     Health {
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path (echoed, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -140,6 +151,9 @@ pub enum Command {
     Analyze {
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path (echoed, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -151,6 +165,9 @@ pub enum Command {
     Dependencies {
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path (echoed, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -210,6 +227,9 @@ pub enum Command {
     Git {
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path (echoed, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -224,6 +244,9 @@ pub enum Command {
         crate_name: String,
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path (echoed, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -235,6 +258,9 @@ pub enum Command {
     WhatChanged {
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Repeatable directory exclusion relative to --path (echoed, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
         /// SQLite scan store to read the baseline from (wanyrix store init).
         #[arg(long)]
         db: PathBuf,
@@ -394,6 +420,16 @@ pub enum TelemetryCmd {
 /// Scan once — the single source of truth for every report.
 pub fn scan(path: &std::path::Path) -> Result<WorkspaceScan, EngineError> {
     scan_workspace(path)
+}
+
+/// Scan with operator exclusions (`--exclude`, repeatable). Excluded
+/// subtrees are pruned from the walk, counted in `skipped` and echoed on
+/// the scan — never a silent drop.
+pub fn scan_excluding(
+    path: &std::path::Path,
+    excludes: &[String],
+) -> Result<WorkspaceScan, EngineError> {
+    scan_workspace_excluding(path, excludes)
 }
 
 /// `wanyrix doctor` payload: (scan, findings).
@@ -643,8 +679,13 @@ pub fn product_status_run(
 }
 
 /// Run `wanyrix analyze`.
-pub fn product_analyze_run(path: &Path, json: bool, pretty: bool) -> Result<String, EngineError> {
-    let scan = scan_workspace(path)?;
+pub fn product_analyze_run(
+    path: &Path,
+    excludes: &[String],
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let scan = scan_excluding(path, excludes)?;
     let r = product::analyze_report(&scan)?;
     if json {
         serialize_json(&r, pretty)
@@ -661,10 +702,11 @@ pub fn product_analyze_run(path: &Path, json: bool, pretty: bool) -> Result<Stri
 /// Run `wanyrix dependencies`.
 pub fn product_dependencies_run(
     path: &Path,
+    excludes: &[String],
     json: bool,
     pretty: bool,
 ) -> Result<String, EngineError> {
-    let scan = scan_workspace(path)?;
+    let scan = scan_excluding(path, excludes)?;
     let g = build_graph(&scan);
     let r = product::dependencies_report(&scan, &g);
     if json {
@@ -818,8 +860,13 @@ pub fn ai_run(
 
 /// Run `wanyrix git` — measured repository facts, read-only, redacted by
 /// design (paths and subjects only).
-pub fn git_run(path: &Path, json: bool, pretty: bool) -> Result<String, EngineError> {
-    let scan = scan(path)?;
+pub fn git_run(
+    path: &Path,
+    excludes: &[String],
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let scan = scan_excluding(path, excludes)?;
     let report = crate::git::git_facts(&scan)?;
     if json {
         serialize_json(&report, pretty)
@@ -833,10 +880,11 @@ pub fn git_run(path: &Path, json: bool, pretty: bool) -> Result<String, EngineEr
 pub fn impact_run(
     crate_name: &str,
     path: &Path,
+    excludes: &[String],
     json: bool,
     pretty: bool,
 ) -> Result<String, EngineError> {
-    let scan = scan(path)?;
+    let scan = scan_excluding(path, excludes)?;
     let report = crate::change::impact_report(&scan, crate_name)?;
     if json {
         serialize_json(&report, pretty)
@@ -850,10 +898,11 @@ pub fn impact_run(
 pub fn what_changed_run(
     path: &Path,
     db: &Path,
+    excludes: &[String],
     json: bool,
     pretty: bool,
 ) -> Result<String, EngineError> {
-    let scan = scan(path)?;
+    let scan = scan_excluding(path, excludes)?;
     let findings = doctor(&scan);
     let report = crate::change::what_changed(&scan, &findings, db)?;
     if json {
@@ -872,6 +921,12 @@ pub fn human_summary(command: &str, scan: &WorkspaceScan, findings: &[Finding]) 
     ));
     out.push_str(&format!("root: {}\n", scan.root.display()));
     out.push_str(&format!("toolchain: {}\n", scan.toolchain));
+    if !scan.excludes.is_empty() {
+        out.push_str(&format!(
+            "excluded: {} (counted in skipped entries)\n",
+            scan.excludes.join(", ")
+        ));
+    }
     out.push_str(&format!(
         "crates ({}): {}\n",
         scan.crates.len(),

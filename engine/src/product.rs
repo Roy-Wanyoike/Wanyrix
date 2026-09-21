@@ -411,6 +411,10 @@ pub struct DependenciesReport {
     pub escaped: usize,
     /// Measured cycles (SCC paths), lexicographically sorted.
     pub cycles: Vec<String>,
+    /// Normalized operator exclusions (`--exclude`); absent for a default
+    /// scan so the no-flag wire contract stays byte-identical.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub excludes: Vec<String>,
     /// LAST key.
     pub generated_at: String,
 }
@@ -480,6 +484,7 @@ pub fn dependencies_report(scan: &WorkspaceScan, g: &Graph) -> DependenciesRepor
         broken,
         escaped,
         cycles,
+        excludes: scan.excludes.clone(),
         generated_at: iso8601_now(),
     }
 }

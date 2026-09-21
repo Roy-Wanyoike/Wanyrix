@@ -65,6 +65,10 @@ pub struct ImpactReport {
     /// `(1 + transitive_count) * 1000 / workspace_crate_count`). No floats
     /// by honesty contract.
     pub blast_radius_per_mille: u64,
+    /// Normalized operator exclusions (`--exclude`); absent for a default
+    /// scan so the no-flag wire contract stays byte-identical.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub excludes: Vec<String>,
     /// The documented estimation rule (quoted, not hidden).
     pub note: String,
     /// LAST field (honesty rule: timestamps last).
@@ -134,6 +138,7 @@ pub fn impact_report(scan: &WorkspaceScan, crate_name: &str) -> Result<ImpactRep
         transitive_count,
         workspace_crate_count,
         blast_radius_per_mille,
+        excludes: scan.excludes.clone(),
         note: IMPACT_NOTE.to_string(),
         generated_at: iso8601_now(),
     })
@@ -267,6 +272,10 @@ pub struct WhatChangedReport {
     pub baseline_note: Option<String>,
     pub findings: FindingsDiff,
     pub severity_delta: SeverityDelta,
+    /// Normalized operator exclusions (`--exclude`); absent for a default
+    /// scan so the no-flag wire contract stays byte-identical.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub excludes: Vec<String>,
     /// LAST field (honesty rule: timestamps last).
     pub generated_at: String,
 }
@@ -424,6 +433,7 @@ pub fn what_changed(
             changed,
         },
         severity_delta,
+        excludes: scan.excludes.clone(),
         generated_at: iso8601_now(),
     })
 }

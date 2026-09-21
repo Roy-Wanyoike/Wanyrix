@@ -23,7 +23,7 @@ import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
  */
 
 const COMMANDS: { cmd: string; maps: string }[] = [
-  { cmd: 'wanyrix doctor --json', maps: 'Build Doctor view — findings + evidence (wanyrix.doctor/v1)' },
+  { cmd: 'wanyrix doctor --exclude tests/fixtures --json', maps: 'Build Doctor view — findings + evidence; repeatable --exclude prunes a subtree, echoes it and counts the skip (wanyrix.doctor/v1)' },
   { cmd: 'wanyrix build --path <dir> --json', maps: 'Real engine binary panel → build — instrumented cargo build, measured wall clock + cache-hit rate (wanyrix.build/v1)' },
   { cmd: 'wanyrix graph --json', maps: 'Engineering Graph — measured edge list (wanyrix.graph/v1)' },
   { cmd: 'wanyrix health --json', maps: 'Scorecard view — KPI summary (wanyrix.health/v1)' },

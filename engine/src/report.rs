@@ -121,6 +121,10 @@ pub struct ScanProvenance {
     pub manifests_found: usize,
     pub parse_failures: usize,
     pub skipped_entries: usize,
+    /// Normalized operator exclusions (`--exclude`); absent for a default
+    /// scan so the no-flag wire contract stays byte-identical.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub excludes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -165,6 +169,10 @@ pub struct GraphMeta {
     pub served_edges: usize,
     pub aggregate_source: String,
     pub note: String,
+    /// Normalized operator exclusions (`--exclude`); absent for a default
+    /// scan so the no-flag wire contract stays byte-identical.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub excludes: Vec<String>,
 }
 
 /// `wanyrix.graph/v1`.
@@ -209,6 +217,10 @@ pub struct HealthReport {
     pub finding_counts: Vec<FindingCountJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub insight: Option<Insight>,
+    /// Normalized operator exclusions (`--exclude`); absent for a default
+    /// scan so the no-flag wire contract stays byte-identical.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub excludes: Vec<String>,
     pub measurement: String,
     pub honesty_notes: Vec<String>,
     /// LAST key — the only non-deterministic field.
@@ -267,6 +279,7 @@ pub fn doctor_report(
             manifests_found: scan.manifests_found,
             parse_failures: scan.parse_failures,
             skipped_entries: scan.skipped,
+            excludes: scan.excludes.clone(),
         },
         measurement: MEASUREMENT_NOTE.to_owned(),
         honesty_notes: honesty_notes_vec(),
@@ -285,6 +298,7 @@ pub fn graph_report(scan: &WorkspaceScan, graph: &Graph, generated_at: String) -
         served_edges: graph.edges.len(),
         aggregate_source: "served-edges".to_owned(),
         note: "Every node is a measured crate from the scanned manifests; every edge is a resolved intra-workspace path dependency. Per-node aggregates (fanIn, fanOut, downstream) are derived from this served edge list. buildTime/changeFreq are 0 = not-measured (engine v1 has no build or VCS telemetry).".to_owned(),
+        excludes: scan.excludes.clone(),
     };
     GraphReport {
         schema: GRAPH_SCHEMA.to_owned(),
@@ -333,6 +347,7 @@ pub fn health_report(
             })
             .collect(),
         insight,
+        excludes: scan.excludes.clone(),
         measurement: MEASUREMENT_NOTE.to_owned(),
         honesty_notes: honesty_notes_vec(),
         generated_at,

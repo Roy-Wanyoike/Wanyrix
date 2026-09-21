@@ -24,8 +24,13 @@ fn main() -> ExitCode {
 
 fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
     match command {
-        Command::Doctor { path, json, pretty } => {
-            let scan = cli::scan(&path)?;
+        Command::Doctor {
+            path,
+            excludes,
+            json,
+            pretty,
+        } => {
+            let scan = cli::scan_excluding(&path, &excludes)?;
             let findings = cli::doctor(&scan);
             if json {
                 let r = report::doctor_report(&scan, &findings, cli::now_iso8601());
@@ -34,8 +39,13 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
                 Ok(cli::human_summary("doctor", &scan, &findings))
             }
         }
-        Command::Graph { path, json, pretty } => {
-            let scan = cli::scan(&path)?;
+        Command::Graph {
+            path,
+            excludes,
+            json,
+            pretty,
+        } => {
+            let scan = cli::scan_excluding(&path, &excludes)?;
             let g = cli::graph(&scan);
             if json {
                 let r = report::graph_report(&scan, &g, cli::now_iso8601());
@@ -44,8 +54,13 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
                 Ok(cli::human_summary("graph", &scan, &[]))
             }
         }
-        Command::Health { path, json, pretty } => {
-            let scan = cli::scan(&path)?;
+        Command::Health {
+            path,
+            excludes,
+            json,
+            pretty,
+        } => {
+            let scan = cli::scan_excluding(&path, &excludes)?;
             let findings = cli::doctor(&scan);
             let g = cli::graph(&scan);
             if json {
@@ -83,10 +98,18 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             json,
             pretty,
         } => cli::product_status_run(&path, db.as_deref(), socket.as_deref(), json, pretty),
-        Command::Analyze { path, json, pretty } => cli::product_analyze_run(&path, json, pretty),
-        Command::Dependencies { path, json, pretty } => {
-            cli::product_dependencies_run(&path, json, pretty)
-        }
+        Command::Analyze {
+            path,
+            excludes,
+            json,
+            pretty,
+        } => cli::product_analyze_run(&path, &excludes, json, pretty),
+        Command::Dependencies {
+            path,
+            excludes,
+            json,
+            pretty,
+        } => cli::product_dependencies_run(&path, &excludes, json, pretty),
         Command::Experiment { cmd } => cli::product_experiment_run(cmd),
         Command::Events { path, json, pretty } => cli::events_run(&path, json, pretty),
         Command::Ai {
@@ -106,18 +129,25 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             json,
             pretty,
         ),
-        Command::Git { path, json, pretty } => cli::git_run(&path, json, pretty),
+        Command::Git {
+            path,
+            excludes,
+            json,
+            pretty,
+        } => cli::git_run(&path, &excludes, json, pretty),
         Command::Impact {
             crate_name,
             path,
+            excludes,
             json,
             pretty,
-        } => cli::impact_run(&crate_name, &path, json, pretty),
+        } => cli::impact_run(&crate_name, &path, &excludes, json, pretty),
         Command::WhatChanged {
             path,
             db,
+            excludes,
             json,
             pretty,
-        } => cli::what_changed_run(&path, &db, json, pretty),
+        } => cli::what_changed_run(&path, &db, &excludes, json, pretty),
     }
 }

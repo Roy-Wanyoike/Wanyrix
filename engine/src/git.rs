@@ -91,6 +91,10 @@ pub struct GitReport {
     pub commit_count: u64,
     /// Up to 10 most recent commits, newest first.
     pub recent_commits: Vec<CommitFact>,
+    /// Normalized operator exclusions (`--exclude`); absent for a default
+    /// scan so the no-flag wire contract stays byte-identical.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub excludes: Vec<String>,
     /// LAST field (honesty rule: timestamps last).
     pub generated_at: String,
 }
@@ -318,6 +322,7 @@ pub fn git_facts(scan: &WorkspaceScan) -> Result<GitReport, EngineError> {
         changed_crates: crate_changes,
         commit_count,
         recent_commits,
+        excludes: scan.excludes.clone(),
         generated_at: iso8601_now(),
     })
 }
