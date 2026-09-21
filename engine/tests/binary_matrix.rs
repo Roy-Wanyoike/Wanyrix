@@ -147,9 +147,8 @@ fn analyze_embeds_doctor_graph_health_verbatim() {
     assert_eq!(v["doctor"]["schema"], "wanyrix.doctor/v1");
     assert_eq!(v["graph"]["schema"], "wanyrix.graph/v1");
     assert_eq!(v["health"]["schema"], "wanyrix.health/v1");
-    assert_eq!(
+    assert!(
         v["doctor"]["summary"]["total"].as_u64().unwrap() > 0,
-        true,
         "synth fixture gives doctor something to say"
     );
     std::fs::remove_dir_all(&ws).ok();
