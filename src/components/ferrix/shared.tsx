@@ -1,0 +1,359 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { cn } from '@/lib/utils'
+import type { ConfidenceClass, MeasurementStatus, Severity } from '@/lib/ferrix/types'
+
+/* ------------------------------------------------------------------ badges */
+
+const SEVERITY_STYLES: Record<Severity, string> = {
+  critical: 'text-red-400 bg-red-500/10 border-red-500/25',
+  warning: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
+  info: 'text-teal-300 bg-teal-500/10 border-teal-500/25',
+}
+
+const SEVERITY_DOT: Record<Severity, string> = {
+  critical: 'bg-red-400',
+  warning: 'bg-amber-400',
+  info: 'bg-teal-300',
+}
+
+export function SeverityBadge({ severity, className }: { severity: Severity; className?: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+        SEVERITY_STYLES[severity],
+        className,
+      )}
+    >
+      <span className={cn('size-1.5 rounded-full', SEVERITY_DOT[severity])} />
+      {severity}
+    </span>
+  )
+}
+
+const CONFIDENCE_STYLES: Record<ConfidenceClass, string> = {
+  deterministic: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+  high: 'text-teal-300 bg-teal-500/10 border-teal-500/25',
+  medium: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
+  estimated: 'text-orange-300 bg-orange-500/10 border-orange-500/25',
+}
+
+export function ConfidenceBadge({ level }: { level: ConfidenceClass }) {
+  return (
+    <span
+      title="Confidence calibration (Gate 13)"
+      className={cn(
+        'inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+        CONFIDENCE_STYLES[level],
+      )}
+    >
+      {level}
+    </span>
+  )
+}
+
+const MEASUREMENT_STYLES: Record<MeasurementStatus, string> = {
+  measured: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+  verified: 'text-emerald-200 bg-emerald-500/20 border-emerald-400/40',
+  estimated: 'text-orange-300 bg-orange-500/10 border-orange-500/25',
+}
+
+export function MeasurementBadge({ status }: { status: MeasurementStatus }) {
+  return (
+    <span
+      title="Measurement status — estimates are never presented as measurements (Gate 21)"
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide',
+        MEASUREMENT_STYLES[status],
+      )}
+    >
+      {status === 'verified' ? '✓ verified' : status}
+    </span>
+  )
+}
+
+export function DeltaBadge({
+  delta,
+  suffix = '%',
+  goodWhenDown = true,
+}: {
+  delta: number
+  suffix?: string
+  goodWhenDown?: boolean
+}) {
+  const down = delta < 0
+  const good = goodWhenDown ? down : !down
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[11px]',
+        good ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-red-500/25 bg-red-500/10 text-red-300',
+      )}
+    >
+      {down ? '↓' : '↑'}
+      {Math.abs(delta)}
+      {suffix}
+    </span>
+  )
+}
+
+export function StatusDot({ status }: { status: 'pass' | 'fail' | 'running' | 'pending' }) {
+  const cls =
+    status === 'pass'
+      ? 'bg-emerald-400'
+      : status === 'fail'
+        ? 'bg-red-400'
+        : status === 'running'
+          ? 'bg-amber-400 animate-pulse'
+          : 'bg-zinc-500'
+  return <span className={cn('inline-block size-2 rounded-full', cls)} aria-label={status} />
+}
+
+/* ------------------------------------------------------------------ layout */
+
+export function Panel({
+  title,
+  subtitle,
+  actions,
+  children,
+  className,
+  bodyClassName,
+}: {
+  title?: React.ReactNode
+  subtitle?: React.ReactNode
+  actions?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+  bodyClassName?: string
+}) {
+  return (
+    <section
+      className={cn(
+        'rounded-xl border border-border/80 bg-card shadow-[0_1px_0_0_oklch(1_0_0/4%)_inset]',
+        className,
+      )}
+    >
+      {(title || actions) && (
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+          <div className="min-w-0">
+            {title && <h2 className="text-sm font-semibold tracking-tight">{title}</h2>}
+            {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
+          </div>
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        </header>
+      )}
+      <div className={cn('p-4', bodyClassName)}>{children}</div>
+    </section>
+  )
+}
+
+export function KpiCard({
+  label,
+  value,
+  delta,
+  deltaSuffix,
+  goodWhenDown = true,
+  hint,
+  icon,
+  accent = 'primary',
+}: {
+  label: string
+  value: React.ReactNode
+  delta?: number
+  deltaSuffix?: string
+  goodWhenDown?: boolean
+  hint?: string
+  icon?: React.ReactNode
+  accent?: 'primary' | 'amber' | 'teal' | 'red'
+}) {
+  const accents: Record<string, string> = {
+    primary: 'text-primary',
+    amber: 'text-amber-400',
+    teal: 'text-teal-300',
+    red: 'text-red-400',
+  }
+  return (
+    <div className="group corner-ticks relative overflow-hidden rounded-xl border border-border/80 bg-card p-4 transition-all duration-200 hover:border-primary/30 hover:shadow-[0_0_24px_-8px_oklch(0.72_0.16_45/30%)]">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        {icon && <span className={cn('opacity-80', accents[accent])}>{icon}</span>}
+      </div>
+      <div className="mt-2 flex items-baseline gap-2">
+        <span className="font-mono text-2xl font-semibold tabular-nums tracking-tight">{value}</span>
+        {delta !== undefined && <DeltaBadge delta={delta} suffix={deltaSuffix} goodWhenDown={goodWhenDown} />}
+      </div>
+      {hint && <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{hint}</p>}
+      <div className="pointer-events-none absolute -right-8 -top-8 size-24 rounded-full bg-primary/5 blur-2xl transition-opacity group-hover:opacity-100" />
+    </div>
+  )
+}
+
+export function CountUp({
+  value,
+  decimals = 0,
+  suffix = '',
+  prefix = '',
+  duration = 900,
+  className,
+}: {
+  value: number
+  decimals?: number
+  suffix?: string
+  prefix?: string
+  duration?: number
+  className?: string
+}) {
+  const [display, setDisplay] = useState(0)
+  const prev = useRef(0)
+  useEffect(() => {
+    const from = prev.current
+    const to = value
+    const start = performance.now()
+    let raf = 0
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setDisplay(from + (to - from) * eased)
+      if (p < 1) raf = requestAnimationFrame(tick)
+      else prev.current = to
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value, duration])
+  return (
+    <span className={cn('tabular-nums', className)}>
+      {prefix}
+      {display.toFixed(decimals)}
+      {suffix}
+    </span>
+  )
+}
+
+export function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: string
+  title: string
+  description?: string
+  actions?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        {eyebrow && (
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-primary/90">{eyebrow}</p>
+        )}
+        <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+        {description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    </div>
+  )
+}
+
+export function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+      {label}
+    </div>
+  )
+}
+
+/**
+ * Reveal (round 10) — one-shot entrance: subtle rise + fade with an optional
+ * stagger delay. Respects prefers-reduced-motion (renders a plain div), so
+ * the global reduced-motion kill-switch and framer-motion agree.
+ */
+export function Reveal({
+  children,
+  delay = 0,
+  className,
+}: {
+  children: React.ReactNode
+  delay?: number
+  className?: string
+}) {
+  const reduce = useReducedMotion()
+  if (reduce) return <div className={className}>{children}</div>
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+/* ---------------------------------------------------------------- terminal */
+
+export type TerminalTone = 'cmd' | 'ok' | 'warn' | 'err' | 'dim' | 'plain' | 'accent'
+
+const TONE_CLASS: Record<TerminalTone, string> = {
+  cmd: 'text-primary font-semibold',
+  ok: 'text-emerald-300',
+  warn: 'text-amber-300',
+  err: 'text-red-300',
+  dim: 'text-muted-foreground',
+  plain: 'text-foreground/90',
+  accent: 'text-orange-300',
+}
+
+export function Terminal({
+  title = 'ferrix — zsh',
+  lines,
+  step = 420,
+  className,
+  running = false,
+  footer,
+}: {
+  title?: string
+  lines: { text: string; tone?: TerminalTone }[]
+  step?: number
+  className?: string
+  running?: boolean
+  footer?: React.ReactNode
+}) {
+  return (
+    <div className={cn('terminal-glow scanlines overflow-hidden rounded-xl border border-border bg-[oklch(0.12_0.004_60)]', className)}>
+      <div className="relative z-10 flex items-center gap-2 border-b border-border/60 bg-black/30 px-3 py-2">
+        <span className="size-2.5 rounded-full bg-red-500/70" />
+        <span className="size-2.5 rounded-full bg-amber-500/70" />
+        <span className="size-2.5 rounded-full bg-emerald-500/70" />
+        <span className="ml-2 font-mono text-[11px] text-muted-foreground">{title}</span>
+        {running && (
+          <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-primary">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+            scanning
+          </span>
+        )}
+      </div>
+      <div className="relative z-10 space-y-1 px-4 py-3 font-mono text-[12px] leading-relaxed">
+        {lines.map((line, i) => (
+          <motion.p
+            key={i}
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * (step / 1000), duration: 0.25 }}
+            className={cn('whitespace-pre-wrap break-words', TONE_CLASS[line.tone ?? 'plain'])}
+          >
+            {line.tone === 'cmd' ? <span className="mr-2 text-muted-foreground">$</span> : null}
+            {line.text}
+          </motion.p>
+        ))}
+        {footer}
+        <p className="flex items-center gap-1 text-primary" aria-hidden="true">
+          <span className="inline-block h-3.5 w-2 animate-pulse bg-primary/80" />
+        </p>
+      </div>
+    </div>
+  )
+}
