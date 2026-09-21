@@ -214,6 +214,8 @@ pub enum Command {
         question: String,
         /// Local model server address (host:port or http://host:port).
         /// Falls back to $WANYRIX_AI_ENDPOINT, then the Ollama default.
+        /// https:// is refused with a named error — the client speaks plain
+        /// HTTP only (no TLS; local model servers do not need it).
         #[arg(long)]
         endpoint: Option<String>,
         /// Model name (falls back to $WANYRIX_AI_MODEL, then the default).
