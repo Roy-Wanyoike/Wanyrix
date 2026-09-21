@@ -269,6 +269,35 @@ pub enum Command {
         #[arg(long)]
         pretty: bool,
     },
+    /// Export the freshly measured doctor/graph/health envelopes as
+    /// deterministic JSON artifacts (artifacts-as-code, wanyrix.export/v1):
+    /// one file per envelope plus an index.json manifest binding each
+    /// artifact to its exact bytes with a sha256 digest. No wall-clock
+    /// timestamps and no absolute paths in any artifact — repeat exports of
+    /// unchanged input are byte-identical, so teams can diff evidence in
+    /// PRs. Unwritable targets and absolute paths are NAMED refusals.
+    Export {
+        /// Directory to scan (walked recursively for Cargo.toml manifests);
+        /// must be RELATIVE so artifacts never embed absolute paths.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Output directory for the artifacts (created; RELATIVE to the
+        /// launch directory). Defaults to <path>/.wanyrix/exports — the
+        /// engine's own .wanyrix state-dir convention.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Repeatable directory exclusion relative to --path (echoed in the
+        /// manifest and the envelopes, never silent).
+        #[arg(long = "exclude")]
+        excludes: Vec<String>,
+        /// Emit the manifest envelope instead of a human-readable summary.
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json; also applies
+        /// to the artifact files so a fixed command re-runs byte-identical).
+        #[arg(long)]
+        pretty: bool,
+    },
 }
 
 /// Subcommands for `wanyrix experiment` (local ledger, no network).
@@ -909,6 +938,25 @@ pub fn what_changed_run(
         serialize_json(&report, pretty)
     } else {
         Ok(crate::change::what_changed_human(&report))
+    }
+}
+
+/// Run `wanyrix export` — artifacts-as-code: one measured pass (the same
+/// pipeline as `analyze`, zero re-shaping drift) written verbatim as
+/// clock-free, path-relative JSON artifacts plus a sha256-bound manifest
+/// (wanyrix.export/v1). The manifest is the `--json` stdout payload.
+pub fn product_export_run(
+    path: &Path,
+    out: Option<&Path>,
+    excludes: &[String],
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let (manifest, out_dir) = crate::export::export_run(path, out, excludes, pretty)?;
+    if json {
+        serialize_json(&manifest, pretty)
+    } else {
+        Ok(crate::export::export_human(&manifest, &out_dir))
     }
 }
 

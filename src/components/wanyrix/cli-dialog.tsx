@@ -37,6 +37,7 @@ const COMMANDS: { cmd: string; maps: string }[] = [
   { cmd: 'wanyrix git --json', maps: 'Change Intelligence — measured git state: branch, dirty/changed/untracked files, changed crates, recent commits (wanyrix.git/v1)' },
   { cmd: 'wanyrix impact --crate <name> --json', maps: 'Impact & changes panel — measured dependents by kind, transitive reach, blast radius per mille (wanyrix.impact/v1)' },
   { cmd: 'wanyrix what-changed --db <store> --json', maps: 'Impact & changes panel — added/resolved/changed findings vs the stored baseline (wanyrix.what-changed/v1)' },
+  { cmd: 'wanyrix export --path <dir> --json', maps: 'Exports view — artifacts-as-code: doctor/graph/health envelopes verbatim + a sha256-bound index.json; clock-free, relative paths, byte-identical re-runs (wanyrix.export/v1)' },
   { cmd: 'wanyrix store list', maps: 'History view — persisted scan runs (SQLite + WAL)' },
   { cmd: 'wanyrix daemon start', maps: 'Runtime view — cached measured scan over a local Unix socket' },
   { cmd: 'wanyrix telemetry ingest -', maps: 'Diagnostics view — redacted rustc JSON diagnostics (wanyrix.telemetry/v1)' },

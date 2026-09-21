@@ -149,5 +149,12 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             json,
             pretty,
         } => cli::what_changed_run(&path, &db, &excludes, json, pretty),
+        Command::Export {
+            path,
+            out,
+            excludes,
+            json,
+            pretty,
+        } => cli::product_export_run(&path, out.as_deref(), &excludes, json, pretty),
     }
 }

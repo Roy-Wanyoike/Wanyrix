@@ -22,6 +22,14 @@ use crate::pathutil::{read_regular_file, rel_forward};
 /// trees (we never follow symlinked directories anyway).
 const MAX_DEPTH: usize = 48;
 
+/// The engine's own state directory (state.json, store.db, the experiment
+/// ledger, the event log and `export` artifacts). It is the tool's
+/// notebook, not workspace content: the walk never enters it and — unlike
+/// every other hidden dir — never counts it in `skipped`, so measuring a
+/// workspace can never perturb a later re-measurement of the same tree
+/// (byte-identical re-export, issue #91).
+const ENGINE_STATE_DIR: &str = ".wanyrix";
+
 /// Scan `root`, parsing every `Cargo.toml` found under it (skipping `target/`,
 /// `.git`, hidden dirs and symlinked dirs — without following symlinks).
 /// No operator exclusions (the historical default; byte-identical behavior).
@@ -132,6 +140,13 @@ fn scan_validated(root: &Path, excludes: Vec<String>) -> Result<WorkspaceScan, E
                 continue;
             }
             if ft.is_dir() {
+                // The engine's own state dir is invisible to measurement —
+                // never walked, never counted (issue #91: re-export of the
+                // default `<path>/.wanyrix/exports` target must not change
+                // the next scan's skipped count).
+                if name == ENGINE_STATE_DIR {
+                    continue;
+                }
                 if is_skipped_dir(&name) {
                     skipped += 1;
                     continue;
@@ -978,6 +993,41 @@ mod tests {
         assert!(
             plain_value["scan"].get("excludes").is_none(),
             "default envelope must stay byte-identical: {plain_value:?}"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_engine_state_dir_is_invisible_to_measurement() {
+        // Issue #91: `.wanyrix` is the engine's own notebook. Creating it
+        // (init, store, exports — anything) must not change a later scan:
+        // never walked, never counted, unlike every other hidden dir.
+        let dir = exclusion_fixture("state-dir");
+        let before = scan_workspace(&dir).expect("baseline scan ok");
+
+        let state = dir.join(".wanyrix");
+        std::fs::create_dir_all(state.join("exports")).unwrap();
+        std::fs::write(state.join("state.json"), "{\"schema\":\"x\"}").unwrap();
+        std::fs::write(state.join("exports").join("doctor.json"), "{}\n").unwrap();
+
+        let after = scan_workspace(&dir).expect("scan with engine state ok");
+        assert_eq!(before.manifests_found, after.manifests_found);
+        assert_eq!(
+            before.skipped, after.skipped,
+            "the engine's own state dir must not count as a skipped entry ({} → {})",
+            before.skipped, after.skipped
+        );
+        assert_eq!(before.workspace_name, after.workspace_name);
+
+        // A sibling hidden dir is still counted — only .wanyrix is invisible.
+        std::fs::create_dir_all(dir.join(".other-hidden")).unwrap();
+        let with_hidden = scan_workspace(&dir).unwrap();
+        assert!(
+            with_hidden.skipped > after.skipped,
+            "non-engine hidden dirs stay counted ({} → {})",
+            after.skipped,
+            with_hidden.skipped
         );
 
         std::fs::remove_dir_all(&dir).ok();

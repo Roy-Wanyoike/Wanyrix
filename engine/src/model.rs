@@ -151,6 +151,11 @@ pub struct WorkspaceScan {
     /// upstream; they are not crates and not graph nodes).
     pub parse_failures: usize,
     /// Directories/files skipped during the walk (target/, .git, hidden).
+    /// The engine's OWN `.wanyrix` state dir is invisible to measurement:
+    /// it is never walked and never counted, so the tool's own artifacts
+    /// (store, ledger, exports) cannot perturb a re-measurement (issue #91
+    /// byte-identical re-export). Everything else the walk refuses is
+    /// counted — never a silent drop.
     pub skipped: usize,
     /// Normalized operator-requested directory exclusions (`--exclude`),
     /// relative to the scan root, sorted and deduped. Empty for a default
@@ -219,6 +224,12 @@ pub enum EngineError {
     /// `..` traversal, `.`, or an empty/whitespace value. Exclusions are
     /// operator input and are validated like every other path input.
     InvalidExclude(String),
+    /// The export surface (artifacts-as-code, issue #91) refused: an
+    /// absolute `--path`/`--out` (artifacts must never embed absolute
+    /// paths), an `<out>` that exists as a FILE, or an unwritable target.
+    /// Named refusals only — export never silently rewrites an operator
+    /// path, and the transport detail is preserved verbatim.
+    Export(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -246,6 +257,7 @@ impl std::fmt::Display for EngineError {
             EngineError::Git(e) => write!(f, "git error: {e}"),
             EngineError::Impact(e) => write!(f, "impact error: {e}"),
             EngineError::InvalidExclude(e) => write!(f, "invalid --exclude value: {e}"),
+            EngineError::Export(e) => write!(f, "export error: {e}"),
         }
     }
 }

@@ -3,12 +3,12 @@
 Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.9.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
 store · synth · daemon · telemetry · build · init · status · analyze · dependencies ·
-experiment · events · ai · git · impact · what-changed`. Every engine command emits a versioned JSON
+experiment · events · ai · git · impact · what-changed · export`. Every engine command emits a versioned JSON
 envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
 `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`, `wanyrix.init/v1`,
 `wanyrix.status/v1`, `wanyrix.analyze/v1`, `wanyrix.dependencies/v1`,
 `wanyrix.experiment/v1`, `wanyrix.events/v1`, `wanyrix.ai/v1`, `wanyrix.git/v1`,
-`wanyrix.impact/v1`, `wanyrix.what-changed/v1`) behind a `--json` switch, plus
+`wanyrix.impact/v1`, `wanyrix.what-changed/v1`, `wanyrix.export/v1`) behind a `--json` switch, plus
 human-readable output by default. The web platform mirrors the same payloads over
 HTTP; the in-app **CLI contract** dialog
 (`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)
@@ -53,19 +53,25 @@ pins the command set, the flags, and the exit codes shown here.
 | 15 | `wanyrix git [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.git/v1` — measured repository facts: branch, HEAD, dirty state, changed files (porcelain v1, renames contribute both paths, cap 500 with exact counts), changed files mapped onto scanned crate roots, commit count, 10 newest commits. Redacted by design: paths and subjects only — never diffs, contents, or author identities (issue #67) | Git facts panel (`GET /api/wanyrix/git?ws=…`) |
 | 16 | `wanyrix impact --crate <name> [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.impact/v1` — reverse-dependency blast radius from the measured edge list: direct dependents by kind, transitive closure over normal+build edges only (dev edges never propagate — documented rule), blast radius in per-mille (integer math); unknown crates are a NAMED refusal (issue #68) | Impact panel (`GET /api/wanyrix/impact?ws=…&crate=…`) |
 | 17 | `wanyrix what-changed [--path <dir>] [--exclude <dir>]… --db <store> [--json]` | `wanyrix.what-changed/v1` — the fresh measured scan diffed against the NEWEST stored scan for the workspace: added/resolved/changed findings (duplicate-safe pairing), measured severity deltas; no baseline yet is a valid envelope with a named remediation note (issue #68) | What-changed panel (`GET /api/wanyrix/what-changed?ws=…`) |
+| 18 | `wanyrix export [--path <dir>] [--out <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.export/v1` — artifacts-as-code (issue #91): one measured pass (the `analyze` pipeline, zero re-shaping) written VERBATIM as `doctor.json` / `graph.json` / `health.json` under `<out>` (default `<path>/.wanyrix/exports`) plus an `index.json` manifest binding each artifact to its exact bytes (file name, `wanyrix.*` schema id, byte count, sha256) with the engine version and the `--exclude` echo. NO wall-clock timestamps (`generatedAt` carries the literal `not-measured`) and relative paths only, so repeat exports of unchanged input are byte-identical and team-diffable in PRs; an `<out>` that exists as a FILE, an unwritable target and absolute `--path`/`--out` are NAMED refusals | Exports view (`POST /api/wanyrix/export`) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
 (pretty has no effect without `--json`), and per-subcommand options documented by
 `wanyrix --help` and `wanyrix <command> --help`.
 
-`--exclude <dir>` (repeatable, scan surfaces #1–3, #10, #11, #15–17): prunes a
+`--exclude <dir>` (repeatable, scan surfaces #1–3, #10, #11, #15–18): prunes a
 directory subtree — relative to `--path`, forward-slash form — from the walk.
 The normalized, deduped, sorted exclusion list is **echoed in the envelope**
 (`scan.excludes` on the doctor envelope; `meta.excludes` on graph; a top-level
-`excludes` where the envelope has no provenance block) and the pruned subtree is
+`excludes` where the envelope has no provenance block — and `excludes` on the
+export manifest) and the pruned subtree is
 counted in the skipped entries — never a silent drop. Absolute paths, `..`, `.`
 and empty values are rejected with a named `invalid --exclude value` error (exit
 2). Without the flag every envelope is byte-identical to its pre-#76 contract.
+One deliberate exception (issue #91): the engine's OWN `.wanyrix` state
+directory is invisible to measurement — never walked, never counted — so the
+tool's own artifacts (state.json, store.db, exports) can never perturb a
+re-measurement of the same tree.
 Example: `wanyrix doctor --path engine --exclude tests/fixtures` reports 0
 fixture findings while the engine's own crates stay measured.
 
