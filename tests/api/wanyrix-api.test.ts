@@ -24,6 +24,10 @@ import path from 'node:path'
 const BASE_URL = process.env.WANYRIX_TEST_BASE_URL ?? 'http://localhost:3000'
 const FETCH_TIMEOUT_MS = 10_000
 
+// CWD-independent repo root (the suite must pass from any invocation dir —
+// e.g. `cd tests && bun test …` while the sandbox root is unhealthy).
+const REPO_ROOT = path.resolve(import.meta.dir, '..', '..')
+
 /* ------------------------------------------------------------- plumbing ---- */
 
 interface JsonResponse {
@@ -791,7 +795,7 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
       const res = await fetchJson('/api/wanyrix/workspaces', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ path: path.resolve(process.cwd(), 'engine') }),
+        body: JSON.stringify({ path: path.resolve(REPO_ROOT, 'engine') }),
       })
       expect(res.status).toBe(503)
       expectJson(res)
@@ -806,7 +810,7 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
     const res = await fetchJson('/api/wanyrix/workspaces', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: path.resolve(process.cwd(), 'engine') }),
+      body: JSON.stringify({ path: path.resolve(REPO_ROOT, 'engine') }),
     })
     expect(res.status).toBe(200)
     expectJson(res)
@@ -1071,7 +1075,7 @@ describeServer('Wanyrix API — engine change intelligence (issue #69)', () => {
     const res = await fetchJson('/api/wanyrix/workspaces', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: path.resolve(process.cwd(), 'engine') }),
+      body: JSON.stringify({ path: path.resolve(REPO_ROOT, 'engine') }),
     })
     expect(res.status).toBe(200)
     expectJson(res)
