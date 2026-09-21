@@ -114,8 +114,12 @@ describe('workspaceIdFor', () => {
 /* -------------------------------------------------------- path validation -- */
 
 describe('validateCandidatePath (real filesystem fixtures)', () => {
+  // CWD-independent: the suite must pass no matter which directory bun is
+  // invoked from (e.g. `cd tests && bun test …` when the sandbox root is unhealthy).
+  const repoRoot = path.resolve(import.meta.dir, '..', '..')
+
   test('repo engine/ dir → ok, canonical abs path', async () => {
-    const check = await validateCandidatePath(process.cwd() + '/engine')
+    const check = await validateCandidatePath(repoRoot + '/engine')
     expect(check.ok).toBe(true)
     expect(check.abs).toBeDefined()
     expect(check.abs!.endsWith('/engine')).toBe(true)

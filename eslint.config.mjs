@@ -44,7 +44,10 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills"]
+  // Sandbox-only and non-product directories: file discovery must never
+  // descend into these. upload/ is a FUSE mount that can hold arbitrary
+  // user files and may be an unhealthy mount (a walk would hang the gate).
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "upload/**", "audit-reports/**", ".audit-a5-tmp/**", "mini-services/**", "engine/**", "db/**", "public/**"]
 }];
 
 export default eslintConfig;
