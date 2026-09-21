@@ -122,7 +122,9 @@ export default function SettingsView() {
     if (id === activeWs) return
     setActiveWs(id)
     queryClient.invalidateQueries()
-    const ws = workspacesQuery.data?.workspaces.find((w) => w.id === id)
+    /* issue #78: error-shaped registry payloads carry no `workspaces` array —
+       guard the lookup so a 503 can never crash the settings view. */
+    const ws = (workspacesQuery.data?.workspaces ?? []).find((w) => w.id === id)
     toast({ title: `Workspace → ${ws?.name ?? id}`, description: 're-querying scoped surfaces' })
   }
 

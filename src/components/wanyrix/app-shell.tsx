@@ -11,6 +11,7 @@ import {
   Loader2,
   Moon,
   RefreshCw,
+  RotateCw,
   Search,
   Sun,
   TerminalSquare,
@@ -44,6 +45,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useReportExport, useWorkspaces } from '@/lib/wanyrix/hooks'
+import { workspaceSelectorState } from '@/lib/wanyrix/workspace-selector'
 import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
 import type { ReportFormat } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
@@ -128,6 +130,16 @@ export function AppShell({
   const activeWs = useWorkspaceStore((s) => s.active)
   const setActiveWs = useWorkspaceStore((s) => s.setActive)
   const activeSummary = workspaces.find((w) => w.id === activeWs)
+
+  /* issue #78: the selector distinguishes honest states — a failed registry
+     request renders "registry unavailable" + a retry control, never a
+     perpetual "loading…". Mapping is unit-pinned in
+     tests/unit/workspace-selector.test.ts. */
+  const selectorState = workspaceSelectorState({
+    isError: workspacesQuery.isError,
+    hasData: workspacesQuery.data !== undefined,
+    isFetching: workspacesQuery.isFetching,
+  })
 
   /* global scan event (issue #37) + reviewable-diff queue (issue #38) */
   const bumpScan = useScanStore((s) => s.bumpScan)
@@ -299,7 +311,7 @@ export function AppShell({
               <Select
                 value={activeWs}
                 onValueChange={switchWorkspace}
-                disabled={workspaces.length === 0}
+                disabled={selectorState.disabled || workspaces.length === 0}
               >
                 <SelectTrigger
                   className="h-8 w-[168px] max-w-[36vw] gap-1.5 text-xs"
@@ -307,10 +319,14 @@ export function AppShell({
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span
-                      className={`size-1.5 shrink-0 rounded-full ${WS_ACCENT[activeSummary?.accent ?? 'primary'] ?? 'bg-primary'}`}
+                      className={`size-1.5 shrink-0 rounded-full ${selectorState.kind === 'error' ? 'bg-destructive' : (WS_ACCENT[activeSummary?.accent ?? 'primary'] ?? 'bg-primary')}`}
                       aria-hidden
                     />
-                    <SelectValue>{activeSummary?.name ?? 'loading…'}</SelectValue>
+                    <SelectValue>
+                      {selectorState.kind === 'error'
+                        ? selectorState.label
+                        : (activeSummary?.name ?? 'loading…')}
+                    </SelectValue>
                   </span>
                 </SelectTrigger>
                 <SelectContent>
@@ -337,6 +353,21 @@ export function AppShell({
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* issue #78: retry affordance when the registry request fails —
+                  refetch() is the only recovery; no fabricated workspaces. */}
+              {selectorState.kind === 'error' && (
+                <button
+                  type="button"
+                  onClick={() => workspacesQuery.refetch()}
+                  disabled={selectorState.retrying}
+                  aria-label="Retry loading the workspace registry"
+                  className="flex h-8 items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
+                >
+                  <RotateCw className={`size-3.5 ${selectorState.retrying ? 'animate-spin' : ''}`} aria-hidden />
+                  {selectorState.retrying ? 'retrying…' : 'Retry'}
+                </button>
+              )}
 
               {/* workspace registration bridge — connects a REAL local project */}
               <ConnectProjectDialog />
