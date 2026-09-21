@@ -36,27 +36,40 @@ pins the command set, the flags, and the exit codes shown here.
 
 | # | Command | Emits | Mirrors (web surface) |
 | --- | --- | --- | --- |
-| 1 | `wanyrix doctor [--path <dir>] [--json] [--pretty]` | `wanyrix.doctor/v1` — crate list + measured findings with evidence | Build Doctor view (`GET /api/wanyrix/doctor?ws=…`) |
-| 2 | `wanyrix graph [--path <dir>] [--json] [--pretty]` | `wanyrix.graph/v1` — dependency graph from the measured edge list | Engineering Graph (`GET /api/wanyrix/graph?ws=…`) |
-| 3 | `wanyrix health [--path <dir>] [--json] [--pretty]` | `wanyrix.health/v1` — KPI summary derived from doctor + graph | Scorecard view (`GET /api/wanyrix/health?ws=…`) |
+| 1 | `wanyrix doctor [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.doctor/v1` — crate list + measured findings with evidence | Build Doctor view (`GET /api/wanyrix/doctor?ws=…`) |
+| 2 | `wanyrix graph [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.graph/v1` — dependency graph from the measured edge list | Engineering Graph (`GET /api/wanyrix/graph?ws=…`) |
+| 3 | `wanyrix health [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.health/v1` — KPI summary derived from doctor + graph | Scorecard view (`GET /api/wanyrix/health?ws=…`) |
 | 4 | `wanyrix store init|save|list|fsck` | SQLite scan store (WAL journal, layout v1) — persists exactly what `doctor --json` measured | History view / scan-run records |
 | 5 | `wanyrix daemon start|call` | `wanyrix.daemon/v1` — one measured scan kept in memory, served over a local Unix socket (no TCP, no network) | Runtime view |
 | 6 | `wanyrix telemetry ingest -` | `wanyrix.telemetry/v1` — redacted, aggregated rustc JSON diagnostics (source snippets dropped unconditionally) | Diagnostics view (`GET /api/wanyrix/diagnostics?ws=…`) |
 | 7 | `wanyrix synth --crates <n> --out <dir> [--seed <s>]` | deterministic synthetic Rust workspace (same `(seed, count)` → byte-identical tree) | fixture generator used by tests/benchmarks |
 | 8 | `wanyrix init [--path <dir>] [--db <file>] [--json]` | `wanyrix.init/v1` — measured workspace identity written to `.wanyrix/state.json`; idempotent (`created: false` echoes, never resets) | onboarding step for the CLI journey |
 | 9 | `wanyrix status [--path <dir>] [--db <file>] [--socket <sock>] [--json]` | `wanyrix.status/v1` — fresh measured scan + init baseline drift + newest stored scan + daemon liveness probe | dashboard header status pill |
-| 10 | `wanyrix analyze [--path <dir>] [--json]` | `wanyrix.analyze/v1` — doctor + graph + health envelopes embedded verbatim under one schema (zero re-shaping drift) | one call serving the whole dashboard |
-| 11 | `wanyrix dependencies [--path <dir>] [--json]` | `wanyrix.dependencies/v1` — per-crate direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies, measured cycles | Dependencies view (`GET /api/wanyrix/graph?ws=…`) |
+| 10 | `wanyrix analyze [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.analyze/v1` — doctor + graph + health envelopes embedded verbatim under one schema (zero re-shaping drift) | one call serving the whole dashboard |
+| 11 | `wanyrix dependencies [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.dependencies/v1` — per-crate direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies, measured cycles | Dependencies view (`GET /api/wanyrix/graph?ws=…`) |
 | 12 | `wanyrix experiment record|measure|verify|list` | `wanyrix.experiment/v1` ledger (`.wanyrix/experiments.jsonl`) — estimated → measured (2 REAL builds) → verified (measured improvement ONLY) | Experiments view (honesty gates 19/21) |
 | 13 | `wanyrix events [--path <dir>] [--json]` | `wanyrix.events/v1` — the durable event log (`.wanyrix/events.jsonl`): one append-only `wanyrix.event/v1` mirror of every real ledger transition; corrupt lines are skipped and named, never a silent drop | event receipt trail (issue #63 first slice) |
 | 14 | `wanyrix ai [--path <dir>] -q "<question>" [--endpoint <host:port>] [--model <name>] [--timeout-secs <n>] [--json]` | `wanyrix.ai/v1` — a LOCAL model (Ollama-class, default `127.0.0.1:11434`) answering over the measured evidence digest ONLY (never source code); named errors when no local server is reachable; AI output is labeled inference, never a measurement | local AI surface (commercial queue #66 item 8) |
-| 15 | `wanyrix git [--path <dir>] [--json]` | `wanyrix.git/v1` — measured repository facts: branch, HEAD, dirty state, changed files (porcelain v1, renames contribute both paths, cap 500 with exact counts), changed files mapped onto scanned crate roots, commit count, 10 newest commits. Redacted by design: paths and subjects only — never diffs, contents, or author identities (issue #67) | Git facts panel (`GET /api/wanyrix/git?ws=…`) |
-| 16 | `wanyrix impact --crate <name> [--path <dir>] [--json]` | `wanyrix.impact/v1` — reverse-dependency blast radius from the measured edge list: direct dependents by kind, transitive closure over normal+build edges only (dev edges never propagate — documented rule), blast radius in per-mille (integer math); unknown crates are a NAMED refusal (issue #68) | Impact panel (`GET /api/wanyrix/impact?ws=…&crate=…`) |
-| 17 | `wanyrix what-changed [--path <dir>] --db <store> [--json]` | `wanyrix.what-changed/v1` — the fresh measured scan diffed against the NEWEST stored scan for the workspace: added/resolved/changed findings (duplicate-safe pairing), measured severity deltas; no baseline yet is a valid envelope with a named remediation note (issue #68) | What-changed panel (`GET /api/wanyrix/what-changed?ws=…`) |
+| 15 | `wanyrix git [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.git/v1` — measured repository facts: branch, HEAD, dirty state, changed files (porcelain v1, renames contribute both paths, cap 500 with exact counts), changed files mapped onto scanned crate roots, commit count, 10 newest commits. Redacted by design: paths and subjects only — never diffs, contents, or author identities (issue #67) | Git facts panel (`GET /api/wanyrix/git?ws=…`) |
+| 16 | `wanyrix impact --crate <name> [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.impact/v1` — reverse-dependency blast radius from the measured edge list: direct dependents by kind, transitive closure over normal+build edges only (dev edges never propagate — documented rule), blast radius in per-mille (integer math); unknown crates are a NAMED refusal (issue #68) | Impact panel (`GET /api/wanyrix/impact?ws=…&crate=…`) |
+| 17 | `wanyrix what-changed [--path <dir>] [--exclude <dir>]… --db <store> [--json]` | `wanyrix.what-changed/v1` — the fresh measured scan diffed against the NEWEST stored scan for the workspace: added/resolved/changed findings (duplicate-safe pairing), measured severity deltas; no baseline yet is a valid envelope with a named remediation note (issue #68) | What-changed panel (`GET /api/wanyrix/what-changed?ws=…`) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
 (pretty has no effect without `--json`), and per-subcommand options documented by
-`wanyrix --help` and `wanyrix <command> --help`. `store save -` reads a
+`wanyrix --help` and `wanyrix <command> --help`.
+
+`--exclude <dir>` (repeatable, scan surfaces #1–3, #10, #11, #15–17): prunes a
+directory subtree — relative to `--path`, forward-slash form — from the walk.
+The normalized, deduped, sorted exclusion list is **echoed in the envelope**
+(`scan.excludes` on the doctor envelope; `meta.excludes` on graph; a top-level
+`excludes` where the envelope has no provenance block) and the pruned subtree is
+counted in the skipped entries — never a silent drop. Absolute paths, `..`, `.`
+and empty values are rejected with a named `invalid --exclude value` error (exit
+2). Without the flag every envelope is byte-identical to its pre-#76 contract.
+Example: `wanyrix doctor --path engine --exclude tests/fixtures` reports 0
+fixture findings while the engine's own crates stay measured.
+
+`store save -` reads a
 `wanyrix doctor --json` payload from stdin; `telemetry ingest -` reads a
 `cargo build --message-format=json` stream from stdin; `daemon call` takes
 `status | doctor | graph | health | shutdown` as the request kind.

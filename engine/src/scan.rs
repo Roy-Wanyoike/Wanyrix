@@ -24,7 +24,78 @@ const MAX_DEPTH: usize = 48;
 
 /// Scan `root`, parsing every `Cargo.toml` found under it (skipping `target/`,
 /// `.git`, hidden dirs and symlinked dirs — without following symlinks).
+/// No operator exclusions (the historical default; byte-identical behavior).
 pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
+    scan_workspace_excluding(root, &[])
+}
+
+/// Normalize + validate one operator `--exclude` value.
+///
+/// Rules (documented in docs/CLI.md): trimmed; must be a RELATIVE directory
+/// path in forward-slash form; components must be plain names — `..`, `.`,
+/// absolute paths and empty values are rejected (operator input, validated
+/// like every other path input). Returns `None` for an empty input so the
+/// caller can name the exact problem.
+fn normalize_exclude(raw: &str) -> Option<Result<String, EngineError>> {
+    let v = raw.trim();
+    if v.is_empty() {
+        return Some(Err(EngineError::InvalidExclude(
+            "value is empty or whitespace".to_owned(),
+        )));
+    }
+    if v.starts_with('/') {
+        return Some(Err(EngineError::InvalidExclude(format!(
+            "{v:?} is absolute; exclusions are relative to the scan root"
+        ))));
+    }
+    // Strip a single leading `./` and trailing slashes for convenience.
+    let v = v.strip_prefix("./").unwrap_or(v);
+    let v = v.trim_end_matches('/');
+    if v.is_empty() {
+        return Some(Err(EngineError::InvalidExclude(
+            "value is empty or whitespace".to_owned(),
+        )));
+    }
+    if v == "." || v.split('/').any(|c| c == "..") {
+        return Some(Err(EngineError::InvalidExclude(format!(
+            "{v:?} must not contain `.`/`..` components or escape the scan root"
+        ))));
+    }
+    Some(Ok(v.to_owned()))
+}
+
+/// Validate + normalize the operator exclusion list: deduped, sorted,
+/// deterministic. Any invalid value aborts the scan with a named error.
+fn normalize_excludes(raw: &[String]) -> Result<Vec<String>, EngineError> {
+    let mut out = Vec::with_capacity(raw.len());
+    for value in raw {
+        match normalize_exclude(value) {
+            Some(Ok(v)) => {
+                if !out.contains(&v) {
+                    out.push(v);
+                }
+            }
+            Some(Err(e)) => return Err(e),
+            None => unreachable!("normalize_exclude always classifies"),
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// Scan `root` with operator-requested directory exclusions (`--exclude`).
+/// An excluded directory subtree is pruned from the walk and counted in
+/// `skipped` like every other skip — never silently: the normalized
+/// exclusion list is echoed on the resulting scan and in the envelopes.
+pub fn scan_workspace_excluding(
+    root: &Path,
+    excludes: &[String],
+) -> Result<WorkspaceScan, EngineError> {
+    let excludes = normalize_excludes(excludes)?;
+    scan_validated(root, excludes)
+}
+
+fn scan_validated(root: &Path, excludes: Vec<String>) -> Result<WorkspaceScan, EngineError> {
     let root = root.canonicalize().map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => EngineError::PathNotFound(root.to_path_buf()),
         _ => EngineError::Io(e),
@@ -37,9 +108,11 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
     let mut found: Vec<(PathBuf, String, Result<Manifest, String>)> = Vec::new();
     let mut skipped = 0usize;
 
-    // Iterative walk (no recursion) with depth + symlink guards.
-    let mut stack: Vec<(PathBuf, usize)> = vec![(root.clone(), 0)];
-    while let Some((dir, depth)) = stack.pop() {
+    // Iterative walk (no recursion) with depth + symlink guards. Each stack
+    // entry carries its forward-slash path relative to the root ("" at the
+    // root) so exclusion pruning is a plain string-prefix check.
+    let mut stack: Vec<(PathBuf, usize, String)> = vec![(root.clone(), 0, String::new())];
+    while let Some((dir, depth, rel)) = stack.pop() {
         let entries = match std::fs::read_dir(&dir) {
             Ok(e) => e,
             Err(_) => {
@@ -67,9 +140,23 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
                     skipped += 1;
                     continue;
                 }
-                stack.push((path, depth + 1));
+                let child_rel = if rel.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{rel}/{name}")
+                };
+                // Operator exclusion: prune the whole subtree, counted.
+                if excludes.iter().any(|x| x == &child_rel) {
+                    skipped += 1;
+                    continue;
+                }
+                stack.push((path, depth + 1, child_rel));
             } else if name == "Cargo.toml" {
-                let rel = rel_forward(&root, &path);
+                let rel_manifest = if rel.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{rel}/{name}")
+                };
                 // read_regular_file: symlinks/FIFOs/devices/oversized files
                 // can never hang or OOM the scan — they degrade to the same
                 // named "unreadable manifest" finding a parse failure does.
@@ -80,7 +167,7 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
                             .map_err(|e| format!("TOML parse error: {e}"))
                     });
                 let canon = path.canonicalize().unwrap_or(path);
-                found.push((canon, rel, parsed));
+                found.push((canon, rel_manifest, parsed));
             }
         }
     }
@@ -288,6 +375,7 @@ pub fn scan_workspace(root: &Path) -> Result<WorkspaceScan, EngineError> {
         manifests_found,
         parse_failures,
         skipped,
+        excludes,
     })
 }
 
@@ -752,6 +840,146 @@ mod tests {
             manifest_fingerprint(&dir),
             Err(EngineError::NoManifests(_))
         ));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Temp workspace: root package `top`, member `kept`, a nested member at
+    /// `a/b`, a sibling at `a/c`, and a `vendor/junk` manifest that fails to
+    /// parse (so exclusion vs. inclusion is measurable via parse failures).
+    fn exclusion_fixture(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("wanyrix-excl-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for sub in ["kept/src", "a/b/src", "a/c/src", "vendor/junk"] {
+            std::fs::create_dir_all(dir.join(sub)).unwrap();
+        }
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"kept\", \"a/b\", \"a/c\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("kept/Cargo.toml"),
+            "[package]\nname = \"kept\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("kept/src/lib.rs"), "pub fn k() {}\n").unwrap();
+        std::fs::write(
+            dir.join("a/b/Cargo.toml"),
+            "[package]\nname = \"deep-b\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("a/b/src/lib.rs"), "pub fn b() {}\n").unwrap();
+        std::fs::write(
+            dir.join("a/c/Cargo.toml"),
+            "[package]\nname = \"deep-c\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("a/c/src/lib.rs"), "pub fn c() {}\n").unwrap();
+        std::fs::write(dir.join("vendor/junk/Cargo.toml"), "not toml {{{").unwrap();
+        dir
+    }
+
+    #[test]
+    fn exclude_prunes_subtree_counts_the_skip_and_echoes() {
+        let dir = exclusion_fixture("prune");
+        let plain = scan_workspace(&dir).expect("plain scan ok");
+        assert_eq!(plain.excludes, Vec::<String>::new());
+        assert_eq!(plain.manifests_found, 5); // root + kept + a/b + a/c + vendor/junk
+        assert_eq!(plain.parse_failures, 1); // vendor/junk measured, never hidden
+        let names: Vec<&str> = plain.crate_names().collect();
+        assert_eq!(names, vec!["deep-b", "deep-c", "kept"]);
+
+        let excluded =
+            scan_workspace_excluding(&dir, &["vendor".to_owned()]).expect("excluded scan ok");
+        assert_eq!(excluded.excludes, vec!["vendor".to_owned()]);
+        assert_eq!(excluded.manifests_found, 4, "vendor/junk is pruned");
+        assert_eq!(excluded.parse_failures, 0, "pruned = not measured");
+        assert!(
+            excluded.skipped > plain.skipped,
+            "the pruned subtree is counted, not silent ({} → {})",
+            plain.skipped,
+            excluded.skipped
+        );
+        let names: Vec<&str> = excluded.crate_names().collect();
+        assert_eq!(names, vec!["deep-b", "deep-c", "kept"], "siblings survive");
+
+        // A deeper exclusion removes only that subtree: a/b out, a/c in.
+        let deep = scan_workspace_excluding(&dir, &["a/b".to_owned()]).expect("deep exclude ok");
+        assert_eq!(deep.manifests_found, 4);
+        let names: Vec<&str> = deep.crate_names().collect();
+        assert_eq!(names, vec!["deep-c", "kept"]);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn exclude_values_are_normalized_deduped_and_sorted() {
+        let dir = exclusion_fixture("norm");
+        let scan = scan_workspace_excluding(
+            &dir,
+            &[
+                "vendor/".to_owned(),
+                "./vendor".to_owned(),
+                " a/c ".to_owned(),
+            ],
+        )
+        .expect("normalized scan ok");
+        assert_eq!(scan.excludes, vec!["a/c".to_owned(), "vendor".to_owned()]);
+        assert_eq!(scan.manifests_found, 3); // root + kept + a/b (vendor + a/c pruned)
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn exclude_rejects_escaping_absolute_and_empty_values() {
+        let dir = exclusion_fixture("reject");
+        for bad in [
+            "/etc".to_owned(),
+            "..".to_owned(),
+            "../escape".to_owned(),
+            "kept/../kept".to_owned(),
+            ".".to_owned(),
+            "".to_owned(),
+            "   ".to_owned(),
+        ] {
+            let err = scan_workspace_excluding(&dir, std::slice::from_ref(&bad))
+                .expect_err("must be rejected");
+            assert!(
+                matches!(err, EngineError::InvalidExclude(_)),
+                "{bad:?} → InvalidExclude, got {err:?}"
+            );
+        }
+        // The scan root itself was never touched by the rejections.
+        assert!(scan_workspace(&dir).is_ok());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn doctor_envelope_echoes_excludes_and_default_stays_absent() {
+        use crate::cli;
+        use crate::report;
+
+        let dir = exclusion_fixture("echo");
+        let excluded = scan_workspace_excluding(&dir, &["vendor".to_owned()]).unwrap();
+        let f = crate::analysis::analyze(&excluded);
+        let report_value =
+            serde_json::to_value(report::doctor_report(&excluded, &f, cli::now_iso8601())).unwrap();
+        assert_eq!(
+            report_value["scan"]["excludes"],
+            serde_json::json!(["vendor"]),
+            "exclusions are named in the envelope"
+        );
+
+        // Default wire contract: no flag → no excludes key anywhere.
+        let plain = scan_workspace(&dir).unwrap();
+        let f = crate::analysis::analyze(&plain);
+        let plain_value =
+            serde_json::to_value(report::doctor_report(&plain, &f, cli::now_iso8601())).unwrap();
+        assert!(
+            plain_value["scan"].get("excludes").is_none(),
+            "default envelope must stay byte-identical: {plain_value:?}"
+        );
+
         std::fs::remove_dir_all(&dir).ok();
     }
 }

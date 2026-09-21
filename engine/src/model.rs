@@ -152,6 +152,10 @@ pub struct WorkspaceScan {
     pub parse_failures: usize,
     /// Directories/files skipped during the walk (target/, .git, hidden).
     pub skipped: usize,
+    /// Normalized operator-requested directory exclusions (`--exclude`),
+    /// relative to the scan root, sorted and deduped. Empty for a default
+    /// scan — exclusion is always echoed, never a silent drop.
+    pub excludes: Vec<String>,
 }
 
 impl WorkspaceScan {
@@ -211,6 +215,10 @@ pub enum EngineError {
     /// The impact surface refused: the requested crate is not a workspace
     /// crate under the scan root (the verify-ledger refusal pattern).
     Impact(String),
+    /// An operator-supplied `--exclude` value was rejected: absolute path,
+    /// `..` traversal, `.`, or an empty/whitespace value. Exclusions are
+    /// operator input and are validated like every other path input.
+    InvalidExclude(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -237,6 +245,7 @@ impl std::fmt::Display for EngineError {
             EngineError::Ai(e) => write!(f, "local AI error: {e}"),
             EngineError::Git(e) => write!(f, "git error: {e}"),
             EngineError::Impact(e) => write!(f, "impact error: {e}"),
+            EngineError::InvalidExclude(e) => write!(f, "invalid --exclude value: {e}"),
         }
     }
 }

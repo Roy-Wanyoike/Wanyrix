@@ -94,7 +94,7 @@ pub use model::{
     Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan,
 };
 pub use report::{DoctorReport, GraphReport, HealthReport};
-pub use scan::scan_workspace;
+pub use scan::{scan_workspace, scan_workspace_excluding};
 pub use store::{SaveOutcome, ScanRow, STORE_SCHEMA_VERSION};
 pub use synth::{SynthOutcome, SynthPlan, DEFAULT_SEED, MAX_CRATES};
 pub use telemetry::{TelemetryReport, TELEMETRY_SCHEMA};
