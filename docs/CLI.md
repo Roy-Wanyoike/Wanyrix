@@ -24,8 +24,13 @@ pins the command set, the flags, and the exit codes shown here.
    on served evidence, and the v0.7.0 `wanyrix ai` subcommand talks ONLY to a local
    model server the user pointed at — over a digest of measured evidence, never source
    code, and its output is never a measurement.
-3. **Same payloads as the web.** An engine JSON payload is the versioned envelope the
-   mirrored web surface renders (see the mapping table below).
+3. **Same payloads as the web — with the doctor envelope a documented subset.** An engine
+   JSON payload is the versioned envelope the mirrored web surface renders (see the mapping
+   table below). The one measured nuance: the web `DoctorReport` carries build-telemetry
+   fields engine v1 cannot measure (`buildTime`, `estimatedRange`, `criticalPath`, `phases`,
+   and the `summary.developerBuild/ciBuild/diskUsage` block) — the engine deliberately does
+   NOT fabricate them; the FINDINGS remain field-for-field conformant and the divergence is
+   pinned in `engine/tests/conformance.rs` (documented intentional divergences 1–4).
 4. **No silent modification.** AI never edits code silently; patches stay reviewable
    diffs behind explicit approval (Gates 9/19).
 5. **Honesty contract.** The engine measures the filesystem and labels what is absent;
@@ -43,16 +48,16 @@ pins the command set, the flags, and the exit codes shown here.
 | 5 | `wanyrix daemon start|call` | `wanyrix.daemon/v1` — one measured scan kept in memory, served over a local Unix socket (no TCP, no network) | Runtime view |
 | 6 | `wanyrix telemetry ingest -` | `wanyrix.telemetry/v1` — redacted, aggregated rustc JSON diagnostics (source snippets dropped unconditionally) | Diagnostics view (`GET /api/wanyrix/diagnostics?ws=…`) |
 | 7 | `wanyrix synth --crates <n> --out <dir> [--seed <s>]` | deterministic synthetic Rust workspace (same `(seed, count)` → byte-identical tree) | fixture generator used by tests/benchmarks |
-| 8 | `wanyrix init [--path <dir>] [--db <file>] [--json]` | `wanyrix.init/v1` — measured workspace identity written to `.wanyrix/state.json`; idempotent (`created: false` echoes, never resets) | onboarding step for the CLI journey |
-| 9 | `wanyrix status [--path <dir>] [--db <file>] [--socket <sock>] [--json]` | `wanyrix.status/v1` — fresh measured scan + init baseline drift + newest stored scan + daemon liveness probe | dashboard header status pill |
-| 10 | `wanyrix analyze [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.analyze/v1` — doctor + graph + health envelopes embedded verbatim under one schema (zero re-shaping drift) | one call serving the whole dashboard |
-| 11 | `wanyrix dependencies [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.dependencies/v1` — per-crate direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies, measured cycles | Dependencies view (`GET /api/wanyrix/graph?ws=…`) |
-| 12 | `wanyrix experiment record|measure|verify|list` | `wanyrix.experiment/v1` ledger (`.wanyrix/experiments.jsonl`) — estimated → measured (2 REAL builds) → verified (measured improvement ONLY) | Experiments view (honesty gates 19/21) |
-| 13 | `wanyrix events [--path <dir>] [--json]` | `wanyrix.events/v1` — the durable event log (`.wanyrix/events.jsonl`): one append-only `wanyrix.event/v1` mirror of every real ledger transition; corrupt lines are skipped and named, never a silent drop | event receipt trail (issue #63 first slice) |
-| 14 | `wanyrix ai [--path <dir>] -q "<question>" [--endpoint <host:port>] [--model <name>] [--timeout-secs <n>] [--json]` | `wanyrix.ai/v1` — a LOCAL model (Ollama-class, default `127.0.0.1:11434`) answering over the measured evidence digest ONLY (never source code); named errors when no local server is reachable; AI output is labeled inference, never a measurement | local AI surface (commercial queue #66 item 8) |
-| 15 | `wanyrix git [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.git/v1` — measured repository facts: branch, HEAD, dirty state, changed files (porcelain v1, renames contribute both paths, cap 500 with exact counts), changed files mapped onto scanned crate roots, commit count, 10 newest commits. Redacted by design: paths and subjects only — never diffs, contents, or author identities (issue #67) | Git facts panel (`GET /api/wanyrix/git?ws=…`) |
-| 16 | `wanyrix impact --crate <name> [--path <dir>] [--exclude <dir>]… [--json]` | `wanyrix.impact/v1` — reverse-dependency blast radius from the measured edge list: direct dependents by kind, transitive closure over normal+build edges only (dev edges never propagate — documented rule), blast radius in per-mille (integer math); unknown crates are a NAMED refusal (issue #68) | Impact panel (`GET /api/wanyrix/impact?ws=…&crate=…`) |
-| 17 | `wanyrix what-changed [--path <dir>] [--exclude <dir>]… --db <store> [--json]` | `wanyrix.what-changed/v1` — the fresh measured scan diffed against the NEWEST stored scan for the workspace: added/resolved/changed findings (duplicate-safe pairing), measured severity deltas; no baseline yet is a valid envelope with a named remediation note (issue #68) | What-changed panel (`GET /api/wanyrix/what-changed?ws=…`) |
+| 8 | `wanyrix init [--path <dir>] [--db <file>] [--json] [--pretty]` | `wanyrix.init/v1` — measured workspace identity written to `.wanyrix/state.json`; idempotent (`created: false` echoes, never resets) | onboarding step for the CLI journey |
+| 9 | `wanyrix status [--path <dir>] [--db <file>] [--socket <sock>] [--json] [--pretty]` | `wanyrix.status/v1` — fresh measured scan + init baseline drift + newest stored scan + daemon liveness probe | dashboard header status pill |
+| 10 | `wanyrix analyze [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.analyze/v1` — doctor + graph + health envelopes embedded verbatim under one schema (zero re-shaping drift) | one call serving the whole dashboard |
+| 11 | `wanyrix dependencies [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.dependencies/v1` — per-crate direct deps/dependents, fan-in/out, duplicates, path-dep resolution tallies, measured cycles | Dependencies view (`GET /api/wanyrix/graph?ws=…`) |
+| 12 | `wanyrix experiment record|measure|verify|list` | `wanyrix.experiment/v1` ledger (`.wanyrix/experiments.jsonl`) — estimated → measured (2 REAL builds) → verified (measured improvement ONLY). The per-record subcommands (`record`/`measure`/`verify`) emit the SINGULAR `wanyrix.experiment/v1`; `experiment list --json` emits the PLURAL `wanyrix.experiments/v1` collection envelope (`schema`, `workspace`, `count`, `experiments`, `generatedAt`) | Experiments view (honesty gates 19/21) |
+| 13 | `wanyrix events [--path <dir>] [--json] [--pretty]` | `wanyrix.events/v1` — the durable event log (`.wanyrix/events.jsonl`): one append-only `wanyrix.event/v1` mirror of every real ledger transition; corrupt lines are skipped and named, never a silent drop | event receipt trail (issue #63 first slice) |
+| 14 | `wanyrix ai [--path <dir>] -q "<question>" [--endpoint <host:port>] [--model <name>] [--timeout-secs <n>] [--json] [--pretty]` | `wanyrix.ai/v1` — a LOCAL model (Ollama-class, default `127.0.0.1:11434`) answering over the measured evidence digest ONLY (never source code); named errors when no local server is reachable; AI output is labeled inference, never a measurement. `--endpoint`/`--model` fall back to `$WANYRIX_AI_ENDPOINT` / `$WANYRIX_AI_MODEL`. The client speaks PLAIN HTTP only: an `https://` endpoint is REFUSED up front with a named error (exit 2, nothing dialed) instead of being silently downgraded to plain TCP — TLS is not implemented, and local model servers do not need it (issue #89) | local AI surface (commercial queue #66 item 8) |
+| 15 | `wanyrix git [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.git/v1` — measured repository facts: branch, HEAD, dirty state, changed files (porcelain v1, renames contribute both paths, cap 500 with exact counts), changed files mapped onto scanned crate roots, commit count, 10 newest commits. Redacted by design: paths and subjects only — never diffs, contents, or author identities (issue #67) | Git facts panel (`GET /api/wanyrix/git?ws=…`) |
+| 16 | `wanyrix impact --crate <name> [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.impact/v1` — reverse-dependency blast radius from the measured edge list: direct dependents by kind, transitive closure over normal+build edges only (dev edges never propagate — documented rule), blast radius in per-mille (integer math); unknown crates are a NAMED refusal (issue #68) | Impact panel (`GET /api/wanyrix/impact?ws=…&crate=…`) |
+| 17 | `wanyrix what-changed [--path <dir>] [--exclude <dir>]… --db <store> [--json] [--pretty]` | `wanyrix.what-changed/v1` — the fresh measured scan diffed against the NEWEST stored scan for the workspace: added/resolved/changed findings (duplicate-safe pairing), measured severity deltas; no baseline yet is a valid envelope with a named remediation note (issue #68) | What-changed panel (`GET /api/wanyrix/what-changed?ws=…`) |
 | 18 | `wanyrix export [--path <dir>] [--out <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.export/v1` — artifacts-as-code (issue #91): one measured pass (the `analyze` pipeline, zero re-shaping) written VERBATIM as `doctor.json` / `graph.json` / `health.json` under `<out>` (default `<path>/.wanyrix/exports`) plus an `index.json` manifest binding each artifact to its exact bytes (file name, `wanyrix.*` schema id, byte count, sha256) with the engine version and the `--exclude` echo. NO wall-clock timestamps (`generatedAt` carries the literal `not-measured`) and relative paths only, so repeat exports of unchanged input are byte-identical and team-diffable in PRs; an `<out>` that exists as a FILE, an unwritable target and absolute `--path`/`--out` are NAMED refusals | Exports view (`POST /api/wanyrix/export`) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
@@ -101,12 +106,14 @@ These surfaces are served by the Next.js API routes directly. They are labeled
 | Code | Meaning | Set when |
 | --- | --- | --- |
 | `0` | success | command completed — for `doctor`, findings do **not** fail the exit code; CI consumers parse the JSON |
-| `2` | error | bad usage/flags, unreadable workspace, store/IO failure, or `daemon call` receiving an `ok:false` frame |
+| `2` | error | bad usage/flags, unreadable workspace, store/IO failure, a named refusal (`export` absolute paths, `ai` https endpoint, …), or `daemon call` receiving an `ok:false` frame |
+| `101` | broken pipe (NOT a mapped exit code) | stdout closed before the payload is fully written — e.g. `wanyrix doctor --json \| head -c 10` on a payload larger than the pipe buffer. Rust's runtime turns the EPIPE write failure into a panic, which exits `101`. Not produced by `main.rs`'s error mapping and not a contract code; listed because pipeline wrappers observe it (measured against the real binary) |
 
-That is the entire ladder: `main.rs` maps any `EngineError` to `2` with a
+The mapped ladder is `0`/`2`: `main.rs` maps any `EngineError` to `2` with a
 `wanyrix: error: …` line on stderr, and success to `0`. There is deliberately no
 "findings present" exit code — presence of findings is data, not failure, and the
-severity ladder lives inside the payload (`critical` / `warning` / `info`).
+severity ladder lives inside the payload (`critical` / `warning` / `info`). `101` is
+the Rust runtime's default broken-pipe panic path, not an exit code the engine chooses.
 
 ## Web error contract (HTTP side)
 

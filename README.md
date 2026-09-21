@@ -91,7 +91,7 @@ cargo build --release
 
 ### 3. The offline CLI journey (the product contract)
 
-Every command works with zero network. Deterministic output for identical input, versioned JSON (`--json`), timestamps last, exit `0`/`2`.
+Every command works with zero network. Deterministic output for identical input, versioned JSON (`--json`), timestamps last, exit `0`/`2` (plus `101` only when stdout is a closed pipe — the Rust runtime's EPIPE panic, not a mapped contract code; see [`docs/CLI.md`](docs/CLI.md)).
 
 ```bash
 cd /path/to/your/rust/workspace
