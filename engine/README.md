@@ -6,7 +6,7 @@ the web dashboard's honesty-first product identity (AUDIT-I8): every number
 it reports is **measured**, and anything it cannot measure is labeled, never
 simulated.
 
-## Status — engine v0.8.0
+## Status — engine v0.9.0
 
 **Built:** filesystem manifest analysis, local persistence, an incremental
 analysis daemon, redacted rustc-telemetry ingestion, an INSTRUMENTED BUILD
@@ -245,6 +245,14 @@ silent `{}`.
   the newest stored baseline (duplicate-safe finding pairing; no baseline
   is a valid envelope with a named remediation note). Both are pure
   deterministic engine surfaces — AI is never in the path.
+- **Scan exclusions (v0.9.0, issue #76)** — every scan surface takes a
+  repeatable `--exclude <dir>` (relative to `--path`). Excluded subtrees are
+  pruned from the walk, counted in the skipped entries and echoed in the
+  envelope (`scan.excludes` / `meta.excludes` / top-level `excludes`,
+  absent without the flag so the no-flag wire contract stays byte-identical).
+  Absolute paths, `..`, `.` and empty values are rejected with a named error.
+  `wanyrix doctor --path engine --exclude tests/fixtures` turns this repo's
+  95 fixture findings into 0 while the engine's own crates stay measured.
 
 **Explicitly NOT built yet:**
 - **Full build-time attribution** — per-crate build seconds that survive
