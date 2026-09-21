@@ -50,7 +50,12 @@ const TONE_TEXT: Record<Signal['tone'], string> = {
 export function NotificationsPopover({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
   const activeWs = useWorkspaceStore((s) => s.active)
   const { data: wsData } = useWorkspaces()
-  const wsName = wsData?.workspaces.find((w) => w.id === activeWs)?.name ?? activeWs
+  /* issue #78: a failed/error-shaped registry response must never crash the
+     shell — `wsData.workspaces` is absent when the API answers an error
+     envelope, so fall back to an empty list instead of reading `.find` off
+     undefined (crashed the whole app on 503). */
+  const wsName =
+    (wsData?.workspaces ?? []).find((w) => w.id === activeWs)?.name ?? activeWs
 
   const doctor = useDoctor()
   const graph = useGraph()
