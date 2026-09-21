@@ -31,14 +31,24 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "next.config.ts",
+    "tailwind.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "examples",
-    "skills"
+    "skills",
+    "upload",
+    "audit-reports",
+    ".audit-a5-tmp",
+    "mini-services",
+    "engine",
+    "db",
+    "public"
   ]
 }
