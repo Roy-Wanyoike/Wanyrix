@@ -1,0 +1,17 @@
+# Bun runtime configuration.
+#
+# [test] timeout — per-test ceiling in ms.
+#
+# Why 15s: the live-API suite (tests/api/wanyrix-api.test.ts) sets its own
+# fetch ceiling at 10s (FETCH_TIMEOUT_MS, AbortSignal.timeout). bun:test's
+# default per-test timeout is 5s — SHORTER than the suite's own fetch budget —
+# so on a cold dev server (Next.js on-demand route compilation) a
+# slow-but-successful request was killed by the runner at 5s and misreported
+# as a hang (issue #80: ENG-TCA-6c flake). 15s = 10s fetch budget + headroom,
+# keeping the ordering "runner ceiling > suite ceiling" so real failures
+# surface as fetch errors, never as runner timeouts.
+#
+# Unit tests unaffected: they complete in milliseconds; a longer ceiling
+# only bounds genuine hangs.
+[test]
+timeout = 15000
