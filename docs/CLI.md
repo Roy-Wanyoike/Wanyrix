@@ -87,9 +87,14 @@ re-measurement of the same tree.
 Example: `wanyrix doctor --path engine --exclude tests/fixtures` reports 0
 fixture findings while the engine's own crates stay measured.
 
-`store save -` reads a
-`wanyrix doctor --json` payload from stdin; `telemetry ingest -` reads a
-`cargo build --message-format=json` stream from stdin; `daemon call` takes
+`store save [<scan>] --db <db>` and
+`telemetry ingest [<input>]` accept the source
+positionally: `store save -` reads a
+`wanyrix doctor --json` payload from stdin and `telemetry ingest -` reads a
+`cargo build --message-format=json` stream from stdin. The equivalent long
+forms `--scan <path|->` and `--input <path|->` are accepted too; giving both
+the positional value and the flag is a named refusal (exit 2), never a silent
+preference. `daemon call` takes
 `status | doctor | graph | health | shutdown` as the request kind.
 
 ## Web-only surfaces (platform features, no engine subcommand)

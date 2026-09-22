@@ -480,13 +480,20 @@ pub enum StoreCmd {
         db: PathBuf,
     },
     /// Persist one doctor-scan JSON result (the exact `wanyrix doctor
-    /// --json` output; pass `-` to read the payload from stdin).
+    /// --json` output). The source is the documented positional `-`
+    /// (stdin) form — `wanyrix store save --db <db> -` — or the equivalent
+    /// long form `--scan <path|->`.
     Save {
         #[arg(long)]
         db: PathBuf,
-        /// Path to the scan JSON, or `-` for stdin.
+        /// Path to the scan JSON, or `-` for stdin (long form).
         #[arg(long)]
-        scan: String,
+        scan: Option<String>,
+        /// Positional scan source (the docs contract form: `-` reads
+        /// stdin; a path reads that file). Exactly one of this and
+        /// `--scan` must be given.
+        #[arg(value_name = "SCAN")]
+        scan_source: Option<String>,
     },
     /// Print stored scan summaries (id, workspace, date, finding counts).
     List {
@@ -543,11 +550,18 @@ pub enum DaemonCmd {
 #[derive(Subcommand)]
 pub enum TelemetryCmd {
     /// Ingest a rustc/cargo JSON diagnostics stream (one JSON object per
-    /// line; `-` reads stdin) and emit the redacted report.
+    /// line) and emit the redacted report. The source is the documented
+    /// positional `-` (stdin) form — `wanyrix telemetry ingest -` — or the
+    /// equivalent long form `--input <path|->`.
     Ingest {
-        /// Input file path, or `-` for stdin.
+        /// Input file path, or `-` for stdin (long form).
         #[arg(long)]
-        input: String,
+        input: Option<String>,
+        /// Positional input source (the docs contract form: `-` reads
+        /// stdin; a path reads that file). Exactly one of this and
+        /// `--input` must be given.
+        #[arg(value_name = "INPUT")]
+        input_source: Option<String>,
         /// Write the report here instead of stdout (parent dirs created).
         #[arg(long)]
         out: Option<PathBuf>,
@@ -617,6 +631,29 @@ pub fn now_iso8601() -> String {
     iso8601_now()
 }
 
+/// Resolve the stdin-shorthand duality (QA-4-B-3): docs/CLI.md documents
+/// the positional forms (`store save -`, `telemetry ingest -`), while the
+/// long forms (`--scan`/`--input`) are the pre-contract flags. Both are
+/// accepted and mean the same thing; giving BOTH is a named refusal (the
+/// ambiguity could silently change which bytes are consumed), and giving
+/// NEITHER is a named refusal (never an empty guess).
+fn resolve_input_source(
+    kind: &str,
+    flag: &str,
+    flagged: Option<String>,
+    positional: Option<String>,
+) -> Result<String, String> {
+    match (flagged, positional) {
+        (Some(v), None) | (None, Some(v)) => Ok(v),
+        (Some(_), Some(_)) => Err(format!(
+            "pass the {kind} source either as {flag} <path|-> or as the positional <{kind}> argument — not both"
+        )),
+        (None, None) => Err(format!(
+            "no {kind} source given — pass {flag} <path|-> or the positional <{kind}> (`-` reads stdin)"
+        )),
+    }
+}
+
 /// Run a `wanyrix store …` subcommand and format its human output.
 /// Deterministic; every count is measured from what the store actually
 /// did (rows written / rows found / rows removed).
@@ -630,8 +667,14 @@ pub fn store_run(cmd: StoreCmd) -> Result<String, EngineError> {
                 store::STORE_SCHEMA_VERSION
             ))
         }
-        StoreCmd::Save { db, scan } => {
-            let payload = read_scan_payload(Path::new(&scan))?;
+        StoreCmd::Save {
+            db,
+            scan,
+            scan_source,
+        } => {
+            let source = resolve_input_source("scan", "--scan", scan, scan_source)
+                .map_err(EngineError::Store)?;
+            let payload = read_scan_payload(Path::new(&source))?;
             let outcome = store::save(&db, &payload)?;
             Ok(format!(
                 "wanyrix store save — persisted scan {} ({})\n  findings rows written: {}\n  db: {} (journal_mode=wal)\n  commit order: scans row committed, then findings rows (two-phase — see src/store.rs; `store fsck` detects a kill between them)\n",
@@ -768,15 +811,18 @@ pub fn telemetry_run(cmd: TelemetryCmd) -> Result<String, EngineError> {
     match cmd {
         TelemetryCmd::Ingest {
             input,
+            input_source,
             out,
             keep_paths,
             summary_only,
         } => {
+            let source = resolve_input_source("input", "--input", input, input_source)
+                .map_err(EngineError::Telemetry)?;
             let opts = telemetry::IngestOptions {
                 keep_paths,
                 summary_only,
             };
-            telemetry::ingest_run(&input, out.as_deref(), &opts)
+            telemetry::ingest_run(&source, out.as_deref(), &opts)
         }
     }
 }
