@@ -178,7 +178,7 @@ export default function RuntimeView({ onNavigate }: ViewProps) {
           {/* warnings */}
           <ul className="mt-4 space-y-1.5">
             {request.warnings.map((w) => (
-              <li key={w} className="flex items-start gap-2 text-[12.5px] leading-snug text-amber-200">
+              <li key={w} className="flex items-start gap-2 text-[12.5px] leading-snug text-amber-800 dark:text-amber-200">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-400" aria-hidden />
                 {w}
               </li>

@@ -345,7 +345,7 @@ export function AppShell({
             wanyrix engine v{ENGINE_VERSION}
             <br />
             local-first · AI optional
-            <span className="mt-1 flex items-center gap-1 text-primary/80">
+            <span className="mt-1 flex items-center gap-1 text-primary">
               <TerminalSquare className="size-3" aria-hidden />
               view CLI contract
             </span>
