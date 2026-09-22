@@ -324,3 +324,60 @@ fn cli_ingest_never_reemits_keyword_assignment_values() {
     std::fs::remove_file(&input).ok();
     std::fs::remove_file(&output).ok();
 }
+
+/// AUD-9: the ingest error-path discipline, pinned end-to-end — a missing
+/// input file is a NAMED exit-2 with stdout EMPTY (errors go to stderr,
+/// JSON to stdout, never both), and a malformed stream is DATA: counted in
+/// `malformedLines` with the exit code pinned at 0, never an error.
+#[test]
+fn cli_ingest_error_paths_pin_exit_codes_and_stream_discipline() {
+    // Missing input file: exit 2, stdout empty, named telemetry error.
+    let missing = "/wanyrix/no/such/stream.jsonl";
+    let status = Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+        .args(["telemetry", "ingest", "--input", missing])
+        .output()
+        .unwrap();
+    assert_eq!(status.status.code(), Some(2), "missing input is exit 2");
+    assert!(
+        status.stdout.is_empty(),
+        "no partial payload on a refusal: {}",
+        String::from_utf8_lossy(&status.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&status.stderr).to_string();
+    assert!(
+        stderr.starts_with("wanyrix: error: telemetry error: "),
+        "named telemetry error on stderr, got: {stderr}"
+    );
+
+    // Malformed-only stream: the run SUCCEEDS (exit 0 — pinned; malformed
+    // lines are never an error) and every line is counted honestly.
+    let input = tmp("malformed-only");
+    let output = tmp("malformed-only-out");
+    std::fs::write(&input, "not json\n{\"truncated\":\n[ still not json ]\n").unwrap();
+    let status = Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+        .args([
+            "telemetry",
+            "ingest",
+            "--input",
+            input.to_str().unwrap(),
+            "--out",
+            output.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        status.status.code(),
+        Some(0),
+        "malformed lines are data, not errors: {}",
+        String::from_utf8_lossy(&status.stderr)
+    );
+    let report: Value = serde_json::from_str(&std::fs::read_to_string(&output).unwrap()).unwrap();
+    assert_eq!(report["schema"], "wanyrix.telemetry/v1");
+    assert_eq!(report["meta"]["linesRead"], 3);
+    assert_eq!(report["summary"]["malformedLines"], 3);
+    assert_eq!(report["summary"]["diagnosticLines"], 0);
+    assert_eq!(report["diagnostics"].as_array().unwrap().len(), 0);
+
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&output).ok();
+}
