@@ -185,7 +185,7 @@ function CatalogCard({
  * in the active workspace's dependency tree. The add-scenario premise ("what
  * enters your tree if you add this crate") would be false for it: adding the
  * crate again builds a second copy of an existing crate — the exact
- * duplicate-version failure mode the doctor reports (FER-BLD-002). The card
+ * duplicate-version failure mode the doctor reports (WAN-BLD-002). The card
  * states the honest premise and hands off to the Upgrade tab; it never renders
  * add-cost figures, so the what-if math stays untouched.
  */
@@ -215,7 +215,7 @@ function GuardedCatalogCard({
       </div>
       <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
         v{version} would build a second copy of a crate this workspace already resolves — a
-        duplicate-version build (see finding FER-BLD-002), not a new addition.
+        duplicate-version build (see finding WAN-BLD-002), not a new addition.
       </p>
       <Button
         size="sm"
