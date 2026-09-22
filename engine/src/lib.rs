@@ -67,6 +67,12 @@
 //! - [`export`] — artifacts-as-code export (issue #91): one measured pass
 //!   written as clock-free, path-relative JSON artifacts + a sha256-bound
 //!   manifest (`wanyrix.export/v1`) so teams can diff evidence in PRs
+//! - [`sync`] — serverless team sync (issue #92): a git REGISTRY BRANCH is
+//!   the shared store; push commits the export bundle as exactly one
+//!   deterministic commit (byte-identical re-pushes are no-ops), pull
+//!   merges by (workspace id, finding id) + content hash with conflicts as
+//!   named findings and evidence tiers that never upgrade
+//!   (`wanyrix.sync/v1`)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
 pub mod ai;
@@ -87,13 +93,14 @@ pub mod product;
 pub mod report;
 pub mod scan;
 pub mod store;
+pub mod sync;
 pub mod synth;
 pub mod telemetry;
 pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
 pub use build::{ArtifactRow, BuildOptions, BuildReport, BUILD_PROFILE, BUILD_SCHEMA};
-pub use export::{ExportArtifact, ExportManifest, EXPORT_SCHEMA};
+pub use export::{sha256_hex, ExportArtifact, ExportBundle, ExportManifest, EXPORT_SCHEMA};
 pub use graph::{Graph, GraphEdge, GraphNode};
 pub use model::{
     Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan,
@@ -101,6 +108,7 @@ pub use model::{
 pub use report::{DoctorReport, GraphReport, HealthReport};
 pub use scan::{scan_workspace, scan_workspace_excluding};
 pub use store::{SaveOutcome, ScanRow, STORE_SCHEMA_VERSION};
+pub use sync::{workspace_id, SyncPullReport, SyncPushReport, SYNC_SCHEMA};
 pub use synth::{SynthOutcome, SynthPlan, DEFAULT_SEED, MAX_CRATES};
 pub use telemetry::{TelemetryReport, TELEMETRY_SCHEMA};
 

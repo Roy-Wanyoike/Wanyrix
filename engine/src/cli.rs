@@ -311,6 +311,70 @@ pub enum Command {
         #[arg(long)]
         pretty: bool,
     },
+    /// Serverless team sync over a git REGISTRY BRANCH (wanyrix.sync/v1,
+    /// issue #92): a git branch IS the shared store. `push` commits the
+    /// measured export bundle as EXACTLY ONE commit (byte-identical
+    /// re-pushes are no-ops); `pull` merges the registry into the local
+    /// mirror by (workspace id, finding id) + content hash — conflicts
+    /// become NAMED findings, never silent overwrites, and evidence tiers
+    /// never upgrade (peer `verified` claims import as
+    /// `peer-reported-verified` until locally re-verified).
+    Sync {
+        #[command(subcommand)]
+        cmd: SyncCmd,
+    },
+}
+
+/// Subcommands for `wanyrix sync` (registry-branch team sync, no server).
+#[derive(Subcommand)]
+pub enum SyncCmd {
+    /// Measure once and commit the wanyrix.export/v1 bundle to the remote's
+    /// registry branch as EXACTLY ONE commit (deterministic message:
+    /// workspace id + sha256 digest range; NO wall-clock anywhere). A
+    /// byte-identical re-push creates ZERO commits (measured no-op).
+    Push {
+        /// Local path or git URL of the shared repository hosting the
+        /// registry branch (local paths are the supported test surface).
+        #[arg(long)]
+        remote: String,
+        /// The branch that IS the shared store.
+        #[arg(long, default_value = "wanyrix-registry")]
+        branch: String,
+        /// Workspace to measure (RELATIVE; same contract as export).
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Emit the wanyrix.sync/v1 envelope instead of a human summary.
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Fetch the registry branch and merge every workspace subtree into the
+    /// local mirror (<path>/.wanyrix/sync/registry): peer-only findings are
+    /// adopted (evidence tiers never upgrade), identical content is kept,
+    /// differing content becomes a NAMED conflict finding — the local
+    /// bytes are never silently overwritten.
+    Pull {
+        /// Local path or git URL of the shared repository hosting the
+        /// registry branch (local paths are the supported test surface).
+        #[arg(long)]
+        remote: String,
+        /// The branch that IS the shared store.
+        #[arg(long, default_value = "wanyrix-registry")]
+        branch: String,
+        /// Workspace the local mirror lives under (RELATIVE; the mirror is
+        /// <path>/.wanyrix/sync/registry — the engine's own state dir,
+        /// invisible to measurement).
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Emit the wanyrix.sync/v1 envelope instead of a human summary.
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
+    },
 }
 
 /// Subcommands for `wanyrix experiment` (local ledger, no network).
@@ -974,6 +1038,40 @@ pub fn product_export_run(
         serialize_json(&manifest, pretty)
     } else {
         Ok(crate::export::export_human(&manifest, &out_dir))
+    }
+}
+
+/// Run `wanyrix sync push|pull` — the registry-branch team sync surface.
+pub fn sync_run(cmd: SyncCmd) -> Result<String, EngineError> {
+    match cmd {
+        SyncCmd::Push {
+            remote,
+            branch,
+            path,
+            json,
+            pretty,
+        } => {
+            let r = crate::sync::sync_push(&path, &remote, &branch)?;
+            if json {
+                serialize_json(&r, pretty)
+            } else {
+                Ok(crate::sync::push_human(&r))
+            }
+        }
+        SyncCmd::Pull {
+            remote,
+            branch,
+            path,
+            json,
+            pretty,
+        } => {
+            let r = crate::sync::sync_pull(&path, &remote, &branch)?;
+            if json {
+                serialize_json(&r, pretty)
+            } else {
+                Ok(crate::sync::pull_human(&r))
+            }
+        }
     }
 }
 
