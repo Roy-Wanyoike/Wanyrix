@@ -3,8 +3,10 @@ import { FINDINGS, ISSUES } from '@/lib/wanyrix/data'
 import {
   EXPLAIN_MAX_BODY_BYTES,
   EXPLAIN_MAX_PROMPT_CONTEXT_CHARS,
+  normalizeGroundedUnits,
   parseModelSections,
   redactViolations,
+  repairRedactedSlots,
   validateModelGrounding,
   type ExplainModelSections,
 } from '@/lib/wanyrix/report'
@@ -36,9 +38,9 @@ import {
  *    resolved against the fixture registry before prompting; an unknown id
  *    yields an explicit 400 `unknown finding '…'`, never empty-evidence prose.
  *  - The response may ADD fields (`grounding`, `provenance`, `ai`,
- *    `disclaimer`, `groundingViolations`, `contextTruncated`) but never
- *    removes or renames the original ones (`ok`, `explanation`, `fallback`,
- *    `grounded`, `error`).
+ *    `disclaimer`, `groundingViolations`, `contextTruncated`, `unitRelabels`)
+ *    but never removes or renames the original ones (`ok`, `explanation`,
+ *    `fallback`, `grounded`, `error`).
  */
 
 /* -------------------------------------------------------------- types ----- */
@@ -568,23 +570,39 @@ export async function POST(req: NextRequest) {
     // server-rendered fact block (grounding.facts) never passes through the
     // model — the model's OBSERVED FACT output is demoted to commentary.
     const sections = parseModelSections(explanation)
-    const violations = validateModelGrounding(sections, evidenceCorpus)
+    // Issue #130: align duration units with the app convention (seconds) BEFORE
+    // validation, so a relabeled "8.2s" is judged as the grounded number it
+    // already was — the unit label follows the app's, never the model's.
+    const unitAligned = normalizeGroundedUnits(sections, evidenceCorpus)
+    const violations = validateModelGrounding(unitAligned.sections, evidenceCorpus)
+    const unitRelabels = unitAligned.relabels.length > 0 ? unitAligned.relabels : undefined
 
     if (violations.length > 0) {
-      const sanitized = redactViolations(sections, violations)
+      const sanitized = redactViolations(unitAligned.sections, violations)
+      // Issue #130: a redaction that landed inside a parenthesized template
+      // slot ("(+⟨removed⟩ms)") is repaired on the wire too — the payload
+      // itself never carries a bare placeholder, only the explicit omission
+      // label or the #99 em-dash for mid-sentence removals.
+      const repaired: ExplainModelSections = {
+        commentary: repairRedactedSlots(sanitized.commentary),
+        inference: repairRedactedSlots(sanitized.inference),
+        recommendation: repairRedactedSlots(sanitized.recommendation),
+        uncertainty: repairRedactedSlots(sanitized.uncertainty),
+      }
       const summary = violations.map((v) => `${v.kind}: ${v.detail}`).join('; ')
       const fallback =
         renderGroundedFallback(kind, grounding) +
         `\n\n_Grounding violation — the model's answer was rejected and replaced with this deterministic answer. Violations: ${summary}_`
       return NextResponse.json({
         ok: false,
-        explanation: Object.values(sanitized).filter(Boolean).join('\n\n'),
+        explanation: Object.values(repaired).filter(Boolean).join('\n\n'),
         fallback,
         grounded: false,
         error: `grounding violations — model output rejected: ${summary}`,
         grounding,
-        ai: sanitized,
+        ai: repaired,
         groundingViolations: violations,
+        ...(unitRelabels ? { unitRelabels } : {}),
         disclaimer: DISCLAIMER,
         contextTruncated,
         provenance: { ...provenance, generatedBy: 'deterministic-fallback' },
@@ -598,7 +616,8 @@ export async function POST(req: NextRequest) {
       explanation,
       grounded: true,
       grounding,
-      ai: sections,
+      ai: unitAligned.sections,
+      ...(unitRelabels ? { unitRelabels } : {}),
       disclaimer: DISCLAIMER,
       contextTruncated,
       provenance: { ...provenance, generatedBy: 'ai-provider' },

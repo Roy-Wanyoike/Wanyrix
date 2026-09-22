@@ -587,6 +587,9 @@ export interface ExplainResponse {
   fallback?: string
   grounded?: boolean
   error?: string
+  /** issue #130 — duration units the server aligned to the app convention
+   *  (model "8.2ms" → app "8.2s"), present only when a relabel happened. */
+  unitRelabels?: { field: string; from: string; to: string }[]
 }
 
 /* ---------------------------------------------------------------------------

@@ -610,6 +610,14 @@ export function validateModelGrounding(
  */
 export const GROUNDING_REDACTED_TOKEN = '⟨removed: not in evidence⟩'
 
+/**
+ * Explicit honest omission label for a redacted *template slot* (issue #130):
+ * when a computed-delta slot like "(+8.7ms)" loses its number to redaction,
+ * the whole slot renders as this label instead of a bare placeholder like
+ * "(+—ms)" — the reader sees an explicit omission, never an unfilled template.
+ */
+export const GROUNDING_OMISSION_LABEL = '(delta unavailable)'
+
 /** Redact violating tokens in place so quarantined model text is safe to inspect. */
 export function redactViolations(sections: ExplainModelSections, violations: GroundingViolation[]): ExplainModelSections {
   const out: ExplainModelSections = { ...sections }
@@ -621,12 +629,83 @@ export function redactViolations(sections: ExplainModelSections, violations: Gro
 }
 
 /**
+ * Repair redacted *template slots* (issue #130). A redaction token that lands
+ * inside a parenthesized numeric slot — "(+⟨removed⟩ms)", "(⟨removed⟩ s)" —
+ * renders as the explicit omission label {@link GROUNDING_OMISSION_LABEL};
+ * mid-sentence redactions keep the #99 em-dash. Pure presentation either way:
+ * the ungrounded claim stays removed, nothing is fabricated in its place.
+ */
+export function repairRedactedSlots(text: string): string {
+  const escaped = GROUNDING_REDACTED_TOKEN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text.replace(
+    new RegExp(`\\(\\s*\\+?\\s*${escaped}\\s*[a-zA-Z%]{0,4}\\s*\\)`, 'g'),
+    GROUNDING_OMISSION_LABEL,
+  )
+}
+
+/**
  * Presentation smoothing for quarantined model prose (issue #99 P4): the raw
  * redaction token is machine-honest but reads terribly inside a sentence —
  * the UI renders an em-dash in its place instead. The claim is still REMOVED
  * (never fabricated, never re-labeled); the prose just stops shouting angle
  * brackets at the reader. The server-side token itself is unchanged.
+ *
+ * Issue #130: a token that landed inside a parenthesized template slot is
+ * repaired to the explicit omission label first, so a computed-delta slot
+ * can never render as a bare "(+—ms)" placeholder.
  */
 export function smoothGroundedProse(text: string): string {
-  return text.split(GROUNDING_REDACTED_TOKEN).join('—')
+  return repairRedactedSlots(text).split(GROUNDING_REDACTED_TOKEN).join('—')
+}
+
+/* ------------------------------------------------------ unit alignment ---- */
+
+/** One model duration-unit relabel, surfaced verbatim in the response. */
+export interface UnitRelabel {
+  /** which model-owned field carried the token */
+  field: keyof ExplainModelSections
+  /** the token as the model wrote it, e.g. "8.2ms" */
+  from: string
+  /** what replaced it, e.g. "8.2s" */
+  to: string
+}
+
+const MS_DURATION_RE = /\b(\d+(?:\.\d+)?)\s?ms\b/g
+
+/**
+ * Align model-asserted duration units with the app convention (issue #130).
+ *
+ * The evidence corpus is the only unit authority:
+ *  - a "Nms" claim survives verbatim when the corpus itself states "Nms"
+ *    (some engine metrics genuinely are milliseconds, e.g. "startup 84ms");
+ *  - when the corpus states only the bare number N, the token is relabeled to
+ *    seconds with one decimal — the convention every Wanyrix surface uses for
+ *    build-time metrics (overview trend axis "incremental (s)", insight text
+ *    "6.1s → 12.1s", server-derived facts "8.2s"). The NUMBER is untouched —
+ *    only the unit label follows the app's, so nothing is invented;
+ *  - when the corpus states neither, the token is left for
+ *    {@link validateModelGrounding} to redact — an ungrounded number never
+ *    gets blessed with a unit.
+ */
+export function normalizeGroundedUnits(
+  sections: ExplainModelSections,
+  evidenceCorpus: string,
+): { sections: ExplainModelSections; relabels: UnitRelabel[] } {
+  const corpus = evidenceCorpus.toLowerCase()
+  const out: ExplainModelSections = { ...sections }
+  const relabels: UnitRelabel[] = []
+  const fields: (keyof ExplainModelSections)[] = ['commentary', 'inference', 'recommendation', 'uncertainty']
+
+  for (const field of fields) {
+    const text = out[field]
+    if (!text) continue
+    out[field] = text.replace(MS_DURATION_RE, (match: string, num: string) => {
+      if (corpus.includes(match.trim().toLowerCase())) return match // evidence states this exact ms value
+      if (!corpus.includes(num.toLowerCase())) return match // number itself ungrounded → validator redacts
+      const seconds = `${Number(num).toFixed(1)}s`
+      relabels.push({ field, from: match.trim(), to: seconds })
+      return seconds
+    })
+  }
+  return { sections: out, relabels }
 }
