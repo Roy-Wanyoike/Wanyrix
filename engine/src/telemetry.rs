@@ -611,7 +611,15 @@ fn pass_keyword_assignments(s: &str) -> (String, usize) {
                     count += 1;
                 }
                 copy_from = value_start;
-                // skip past the value in both strings
+                // Skip past the value WITHOUT re-emitting it (QA-4-B-1): the
+                // VALUE span of a `keyword = value` assignment must never
+                // survive redaction. The previous code pushed this span right
+                // after the `[redacted]` label it had just inserted — the
+                // secret rode along in the "redacted" report while being
+                // counted as scrubbed. The one exception is a pre-existing
+                // `[redacted…]` label (the double-redaction guard above),
+                // which is preserved verbatim so already-redacted input
+                // stays byte-stable on re-ingest.
                 let skip = s[copy_from..]
                     .chars()
                     .take_while(|c| {
@@ -619,7 +627,9 @@ fn pass_keyword_assignments(s: &str) -> (String, usize) {
                     })
                     .map(char::len_utf8)
                     .sum::<usize>();
-                out.push_str(&s[copy_from..copy_from + skip]);
+                if already {
+                    out.push_str(&s[copy_from..copy_from + skip]);
+                }
                 copy_from += skip;
                 i = copy_from;
             }
@@ -888,6 +898,97 @@ mod tests {
                 "count reflects reality for {shape}"
             );
         }
+
+        // QA-4-B-1: the keyword-assignment shapes were once scrubbed
+        // label-only — `[redacted]` was inserted INSIDE the shape and the
+        // secret VALUE was re-emitted right after it, so a shape-absence
+        // assertion passed while the value leaked. Pin VALUE ABSENCE.
+        for secret_value in ["hunter2hunter2", "supersecretvalue123"] {
+            let stream = wrapped(&format!("leak password={secret_value}"));
+            let report = ingest_text(&stream, "test", &IngestOptions::default());
+            let out = serde_json::to_string(&report).unwrap();
+            assert!(
+                !out.contains(secret_value),
+                "QA-4-B-1: secret VALUE must never survive redaction: {secret_value}"
+            );
+        }
+    }
+
+    #[test]
+    fn keyword_assignment_values_are_gone_not_merely_labeled() {
+        // QA-4-B-1 regression pins: for `keyword sep value`, the VALUE span
+        // is DROPPED (never re-emitted after the label) — across separators
+        // (`=`, `:`), quoting (none, `"`, `'`), terminators (quote, comma,
+        // semicolon, space, end-of-string) and keyword casings/ joins.
+        // Exact-output assertions, so a value-preserving redaction fails.
+        let cases: [(&str, &str, usize); 9] = [
+            (
+                "api_key = \"supersecretvalue123\"",
+                "api_key = \"[redacted]\"",
+                1,
+            ),
+            ("apikey=hunter2hunter2", "apikey=[redacted]", 1),
+            (
+                "apikey=hunter2hunter2, next=1",
+                "apikey=[redacted], next=1",
+                1,
+            ),
+            ("secret: 'topsecretvalue42';", "secret: '[redacted]';", 1),
+            (
+                "token = verylongsecretvalue9 trailing",
+                "token = [redacted] trailing",
+                1,
+            ),
+            // case is preserved from the input; only the value is replaced
+            ("PASSWORD=hunter2hunter2", "PASSWORD=[redacted]", 1),
+            // credential FIELD names joined with `_` still qualify
+            ("auth_token=hunter2hunter2", "auth_token=[redacted]", 1),
+            // comments do not shield a secret-shaped assignment
+            (
+                "// token: rotate-leaked-1 now",
+                "// token: [redacted] now",
+                1,
+            ),
+            ("# api_key=supersecretvalue99", "# api_key=[redacted]", 1),
+        ];
+        for (input, expected, expected_count) in cases {
+            let (out, count) = scrub_secrets(input);
+            assert_eq!(out, expected, "scrubbed form for: {input}");
+            assert_eq!(count, expected_count, "scrub count for: {input}");
+        }
+    }
+
+    #[test]
+    fn keyword_assignments_below_the_value_floor_stay_untouched() {
+        // The ≥8 visible-char value rule is the documented shape boundary:
+        // shorter values are prose, not secrets, and stay verbatim (count 0).
+        let cases = ["token = short", "password=x", "api_key = \"1234567\", next"];
+        for case in cases {
+            let (out, count) = scrub_secrets(case);
+            assert_eq!(out, case, "false positive on a short value: {case}");
+            assert_eq!(count, 0, "no scrub may be counted for: {case}");
+        }
+    }
+
+    #[test]
+    fn keyword_assignment_redaction_covers_multilingual_context() {
+        // Multilingual PROSE around a secret-shaped value: the value is
+        // dropped, the surrounding non-ASCII text is untouched.
+        let (out, count) = scrub_secrets("错误 password=hunter2hunter2 を修正");
+        assert_eq!(out, "错误 password=[redacted] を修正");
+        assert_eq!(count, 1);
+
+        // Non-ASCII tail AFTER the ASCII secret run: the ASCII-graphic run is
+        // the recognized secret shape and is dropped in full; the tail lies
+        // outside the fixed shape list (QA-4-B-1 scope note: no new shapes /
+        // no entropy heuristics — the ASCII run boundary stays as-is).
+        let (out, count) = scrub_secrets("password=hunter2hunter2の秘密");
+        assert!(
+            !out.contains("hunter2hunter2"),
+            "ASCII secret run must be gone: {out}"
+        );
+        assert!(out.contains("[redacted]"), "labeled: {out}");
+        assert_eq!(count, 1);
     }
 
     #[test]

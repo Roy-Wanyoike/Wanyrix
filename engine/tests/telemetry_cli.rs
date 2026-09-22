@@ -257,3 +257,70 @@ fn cli_flags_summary_only_and_keep_paths_and_stdin() {
         std::fs::remove_file(&f).ok();
     }
 }
+
+/// QA-4-B-1 regression: the redaction surface once inserted `[redacted]` and
+/// then RE-EMITTED the secret value for `keyword = value` shapes — the value
+/// rode along in the "redacted" envelope while being counted as scrubbed.
+/// Drives the real binary over a secret-bearing stream and proves the VALUES
+/// are absent from the emitted report file (value absence, not just shape).
+#[test]
+fn cli_ingest_never_reemits_keyword_assignment_values() {
+    let input = tmp("secret-values");
+    let output = tmp("secret-values-out");
+    std::fs::write(
+        &input,
+        serde_json::json!({
+            "reason": "compiler-message",
+            "message": {
+                "level": "error",
+                "message": "password=hunter2hunter2 and api_key = \"supersecretvalue123\" and secret: 'topsecretvalue42'",
+                "code": {"code": "E0382"},
+                "spans": [],
+                "children": []
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let status = Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+        .args([
+            "telemetry",
+            "ingest",
+            "--input",
+            input.to_str().unwrap(),
+            "--out",
+            output.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run telemetry ingest");
+    assert_eq!(
+        status.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&status.stderr)
+    );
+
+    let raw = std::fs::read_to_string(&output).unwrap();
+    for secret in ["hunter2hunter2", "supersecretvalue123", "topsecretvalue42"] {
+        assert!(
+            !raw.contains(secret),
+            "SECRET VALUE LEAKED into the redacted envelope: {secret}"
+        );
+    }
+
+    // The labels are present and the count matches the three assignments.
+    let report: Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(
+        report["diagnostics"][0]["message"].as_str().unwrap(),
+        "password=[redacted] and api_key = \"[redacted]\" and secret: '[redacted]'"
+    );
+    assert_eq!(report["redaction"]["secretsScrubbed"].as_u64().unwrap(), 3);
+    assert_eq!(
+        report["redaction"]["policy"],
+        "wanyrix.telemetry-redaction/v1"
+    );
+
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&output).ok();
+}
