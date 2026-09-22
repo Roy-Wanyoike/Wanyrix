@@ -3,12 +3,12 @@
 Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.9.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
 store · synth · daemon · telemetry · build · init · status · analyze · dependencies ·
-experiment · events · ai · git · impact · what-changed · export`. Every engine command emits a versioned JSON
+experiment · events · ai · git · impact · what-changed · export · sync`. Every engine command emits a versioned JSON
 envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
 `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`, `wanyrix.init/v1`,
 `wanyrix.status/v1`, `wanyrix.analyze/v1`, `wanyrix.dependencies/v1`,
 `wanyrix.experiment/v1`, `wanyrix.events/v1`, `wanyrix.ai/v1`, `wanyrix.git/v1`,
-`wanyrix.impact/v1`, `wanyrix.what-changed/v1`, `wanyrix.export/v1`) behind a `--json` switch, plus
+`wanyrix.impact/v1`, `wanyrix.what-changed/v1`, `wanyrix.export/v1`, `wanyrix.sync/v1`) behind a `--json` switch, plus
 human-readable output by default. The web platform mirrors the same payloads over
 HTTP; the in-app **CLI contract** dialog
 (`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)
@@ -59,6 +59,8 @@ pins the command set, the flags, and the exit codes shown here.
 | 16 | `wanyrix impact --crate <name> [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.impact/v1` — reverse-dependency blast radius from the measured edge list: direct dependents by kind, transitive closure over normal+build edges only (dev edges never propagate — documented rule), blast radius in per-mille (integer math); unknown crates are a NAMED refusal (issue #68) | Impact panel (`GET /api/wanyrix/impact?ws=…&crate=…`) |
 | 17 | `wanyrix what-changed [--path <dir>] [--exclude <dir>]… --db <store> [--json] [--pretty]` | `wanyrix.what-changed/v1` — the fresh measured scan diffed against the NEWEST stored scan for the workspace: added/resolved/changed findings (duplicate-safe pairing), measured severity deltas; no baseline yet is a valid envelope with a named remediation note (issue #68) | What-changed panel (`GET /api/wanyrix/what-changed?ws=…`) |
 | 18 | `wanyrix export [--path <dir>] [--out <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.export/v1` — artifacts-as-code (issue #91): one measured pass (the `analyze` pipeline, zero re-shaping) written VERBATIM as `doctor.json` / `graph.json` / `health.json` under `<out>` (default `<path>/.wanyrix/exports`) plus an `index.json` manifest binding each artifact to its exact bytes (file name, `wanyrix.*` schema id, byte count, sha256) with the engine version and the `--exclude` echo. NO wall-clock timestamps (`generatedAt` carries the literal `not-measured`) and relative paths only, so repeat exports of unchanged input are byte-identical and team-diffable in PRs; an `<out>` that exists as a FILE, an unwritable target and absolute `--path`/`--out` are NAMED refusals | Exports view (`POST /api/wanyrix/export`) |
+| 19 | `wanyrix sync push --remote <path\|url> [--branch <branch>] [--path <dir>] [--json] [--pretty]` | `wanyrix.sync/v1` (push flavor) — serverless team sync (issue #92): a git branch IS the shared store. ONE measured pass (the same pipeline as `export`, zero re-shaping) is committed to the remote's REGISTRY BRANCH (default `wanyrix-registry`, orphan) as EXACTLY ONE commit with a deterministic message (`wanyrix-sync push <workspace-id> <sha256-min>..<sha256-max>` — no wall-clock in message or artifacts); the subtree reuses the `wanyrix.export/v1` artifact contract verbatim (`<workspace-id>/doctor.json\|graph.json\|health.json\|index.json`, sha256-bound); a byte-identical re-push is a measured no-op (`committed: false` + `noopReason`, ZERO new commits); missing remote, non-git remote and refused pushes are NAMED refusals (`sync remote unavailable`, git stderr verbatim); relative `--path` only; local-path remotes are the supported test surface | none yet — serverless git transport (issue #92); a hosted bridge is the documented L4 rung (`docs/CLOUD_DESIGN.md`) |
+| 20 | `wanyrix sync pull --remote <path\|url> [--branch <branch>] [--path <dir>] [--json] [--pretty]` | `wanyrix.sync/v1` (pull flavor) — fetches the registry branch and merges every workspace subtree into the local mirror (`<path>/.wanyrix/sync/registry` — the engine's own state dir, invisible to measurement). Merge key: (workspace id, finding id) + content hash — peer-only findings are ADOPTED, identical content kept, differing content a NAMED `SYNC-CONFLICT-n` finding (local bytes kept, the peer version stays in the registry; never a silent overwrite); evidence tiers NEVER upgrade (a peer `verified` claim imports as `peer-reported-verified` until locally re-verified, listed in the envelope's relabels); registry content violating its own `index.json` sha256 binding is a NAMED refusal (`sync conflict`); pulling before any push names the missing branch with the remediation (`sync registry branch unavailable`); non-workspace registry entries are named (`foreignEntries`), never silently ignored | none yet — serverless git transport (issue #92); a hosted bridge is the documented L4 rung (`docs/CLOUD_DESIGN.md`) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
 (pretty has no effect without `--json`), and per-subcommand options documented by
@@ -106,7 +108,7 @@ These surfaces are served by the Next.js API routes directly. They are labeled
 | Code | Meaning | Set when |
 | --- | --- | --- |
 | `0` | success | command completed — for `doctor`, findings do **not** fail the exit code; CI consumers parse the JSON |
-| `2` | error | bad usage/flags, unreadable workspace, store/IO failure, a named refusal (`export` absolute paths, `ai` https endpoint, …), or `daemon call` receiving an `ok:false` frame |
+| `2` | error | bad usage/flags, unreadable workspace, store/IO failure, a named refusal (`export` absolute paths, `ai` https endpoint, `sync` missing/non-git remote, missing registry branch, tampered registry content, absolute `--path`, …), or `daemon call` receiving an `ok:false` frame |
 | `101` | broken pipe (NOT a mapped exit code) | stdout closed before the payload is fully written — e.g. `wanyrix doctor --json \| head -c 10` on a payload larger than the pipe buffer. Rust's runtime turns the EPIPE write failure into a panic, which exits `101`. Not produced by `main.rs`'s error mapping and not a contract code; listed because pipeline wrappers observe it (measured against the real binary) |
 
 The mapped ladder is `0`/`2`: `main.rs` maps any `EngineError` to `2` with a
@@ -114,6 +116,35 @@ The mapped ladder is `0`/`2`: `main.rs` maps any `EngineError` to `2` with a
 "findings present" exit code — presence of findings is data, not failure, and the
 severity ladder lives inside the payload (`critical` / `warning` / `info`). `101` is
 the Rust runtime's default broken-pipe panic path, not an exit code the engine chooses.
+
+## CI contract (the neutral referee, issue #92)
+
+`.github/workflows/wanyrix.yml` is the L2 referee: on every PR (plus pushes to
+`main` and `workflow_dispatch`) it runs the engine gates — `cargo fmt --all
+-- --check`, `cargo build --locked`, `cargo clippy --locked --all-targets -- -D
+warnings`, `cargo test --locked --workspace` — and then measures the PR with
+the engine's own surfaces: `wanyrix analyze --json` plus
+`wanyrix impact --crate wanyrix-engine` (the primary crate, declared once via
+the `WANYRIX_PRIMARY_CRATE` env). The verbatim envelopes are published as the
+job summary (a measured-counts table) and the `wanyrix-referee-envelopes`
+artifact. `scripts/wanyrix-referee.sh` is the exact script the step runs, so
+the same bytes are reproducible locally:
+
+```bash
+cd engine && cargo build --locked && cd ..
+bash scripts/wanyrix-referee.sh   # GITHUB_STEP_SUMMARY unset → the summary prints to stdout
+```
+
+The envelope schemas documented above are the machine contract the referee
+publishes — nobody shares a database; CI output is the shared truth.
+
+**Honesty label (deliberate, keep current):** GitHub Actions is billing-locked
+on this repository — the referee workflow has NEVER run on hosted Actions
+runners and is validated LOCALLY ONLY: YAML parse (`bunx js-yaml`), `bash -n`
+on the step script, and a full local dry-run of `scripts/wanyrix-referee.sh`
+against a locally built binary (the artifact upload is the only
+runner-specific step). The label lives in the workflow header and stays there
+until the first hosted run.
 
 ## Web error contract (HTTP side)
 
