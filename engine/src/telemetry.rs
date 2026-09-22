@@ -634,7 +634,11 @@ fn pass_keyword_assignments(s: &str) -> (String, usize) {
                 i = copy_from;
             }
             None => {
-                i += 1;
+                // Advance to the next UTF-8 char boundary. `i += 1` can land
+                // inside a multibyte char (e.g. CJK occupying 3 bytes), and
+                // the `lower[i..]` slice on the next iteration would panic
+                // with "byte index is not a char boundary".
+                i += lower[i..].chars().next().map_or(1, char::len_utf8);
             }
         }
     }
