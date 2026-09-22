@@ -22,7 +22,6 @@ import { useSimulatorIntentStore } from '@/lib/wanyrix/simulator-intent'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import type { AddDepImpact, BlastEntry, EditFileImpact, ImpactPayload, SplitImpact, UpgradeImpact } from '@/lib/wanyrix/types'
 import { cn } from '@/lib/utils'
-import { ExplainDialog } from '../explain-dialog'
 import { CountUp, MeasurementBadge, Panel, SectionHeading } from '../shared'
 import type { ViewProps } from '../view-types'
 
@@ -1007,7 +1006,7 @@ export default function SimulatorView({ onNavigate }: ViewProps) {
   )
   // Catalogs are payload-driven per workspace; defaults derive during render
   // so a workspace switch never shows stale selections.
-  const addDepOptions = graph.data?.catalog?.addDeps ?? []
+  const addDepOptions = useMemo(() => graph.data?.catalog?.addDeps ?? [], [graph.data])
   const guardedAddDeps = useMemo(
     () => addDepOptions.map((opt) => ({ ...opt, inTree: presentInTree.has(opt.id) })),
     [addDepOptions, presentInTree],

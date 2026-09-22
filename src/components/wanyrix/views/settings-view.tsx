@@ -28,7 +28,6 @@ import { useStorage, useWorkspaces } from '@/lib/wanyrix/hooks'
 import { LEGACY_PERSIST_KEYS } from '@/lib/wanyrix/legacy-migration'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
-import { useDiffQueueStore } from '@/lib/wanyrix/diff-store'
 import { useAiStatusStore, useOnlineStatus, type AiStatus } from '../ai-status-store'
 import { Panel, SectionHeading } from '../shared'
 

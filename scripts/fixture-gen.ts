@@ -248,7 +248,6 @@ function generateFixtures(crates: number, seed: number): GeneratedFixtures {
   const rng = makeRng(`fixture-gen findings/${crates}/${seed}`)
   const { nodes, edges, workspaceCrates, duplicates } = generateGraph(crates, seed)
   const workspaceName = `synthetic-ws-${crates}c-seed${seed}`
-  const byId = new Map(nodes.map((n) => [n.id, n]))
   const workspaceNodes = nodes.filter((n) => n.kind === 'workspace')
   const buildTime = round1(workspaceNodes.reduce((s, n) => s + n.buildTime, 0))
 

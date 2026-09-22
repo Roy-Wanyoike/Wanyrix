@@ -12,12 +12,6 @@ const AI_LABEL: Record<AiStatus, string> = {
   deterministic: 'AI fallback',
 }
 
-const AI_DOT: Record<AiStatus, string> = {
-  untested: 'bg-zinc-400',
-  grounded: 'bg-emerald-400',
-  deterministic: 'bg-amber-400',
-}
-
 const AI_TITLE: Record<AiStatus, string> = {
   untested: 'Reasoning layer not exercised this session — requests are sent only when you trigger “Explain”.',
   grounded: 'Last reasoning request was grounded in the structured evidence context.',

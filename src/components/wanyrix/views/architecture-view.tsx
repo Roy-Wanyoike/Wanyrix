@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { ArrowDownRight, Blocks, GitFork, TriangleAlert, Waypoints } from 'lucide-react'
+import { ArrowDownRight, GitFork, TriangleAlert, Waypoints } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {

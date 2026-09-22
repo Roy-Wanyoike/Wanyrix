@@ -25,7 +25,6 @@
 import type {
   RegisteredWorkspaceSummary,
   WorkspaceSummary,
-  WorkspacesPayload,
 } from './types'
 
 /** Minimal input shape so callers can pass the raw query payload directly. */

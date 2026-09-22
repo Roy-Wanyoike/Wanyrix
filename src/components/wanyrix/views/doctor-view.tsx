@@ -34,7 +34,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useDoctor, useRecordDoctorRun } from '@/lib/wanyrix/hooks'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
-import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useToast } from '@/hooks/use-toast'
 import { FindingSheet } from '../finding-sheet'
 import { EngineExecPanel } from '../engine-exec-panel'
@@ -399,7 +398,6 @@ function FindingCard({
 export default function DoctorView({ onNavigate }: ViewProps) {
   const { data: report, isLoading, isError, error, refetch, isRefetching } = useDoctor()
   const { toast } = useToast()
-  const activeWs = useWorkspaceStore((s) => s.active)
   const scanTick = useScanStore((s) => s.scanTick)
   const lastTrigger = useScanStore((s) => s.lastTrigger)
   const bumpScan = useScanStore((s) => s.bumpScan)

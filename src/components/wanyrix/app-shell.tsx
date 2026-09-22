@@ -172,7 +172,7 @@ export function AppShell({
     isFetching: workspacesQuery.isFetching,
   })
 
-  /* global scan event (issue #37) + reviewable-diff queue (issue #38) */
+  /* Wire the global scan event (issue #37) + reviewable-diff queue (issue #38) */
   const bumpScan = useScanStore((s) => s.bumpScan)
   /* issue #99: shell-owned run lifecycle — the topbar Run-scan button mirrors
      the doctor-view run contract (loading state → POST scan-runs → History) */

@@ -8,11 +8,9 @@
  */
 import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight, ChevronDown, Lightbulb, RotateCcw, Search, SplitSquareHorizontal } from 'lucide-react'
+import { ArrowRight, ChevronDown, Lightbulb, SplitSquareHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -745,16 +743,14 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
   const data = graph.data
   const activeWorkspace = useWorkspaceStore((s) => s.active)
 
-  const [query, setQuery] = useState('')
-  const [showExternal, setShowExternal] = useState(true)
+  // Graph controls are wired in the panel child; these two were declared
+  // mutable but no control ever set them (dead since introduction) — keep the
+  // rendered contract, drop the dead setters (AUD-5 lint pass).
+  const query = ''
+  const showExternal = true
   const [selected, setSelected] = useState('common')
 
   const handleSelect = useCallback((id: string) => setSelected(id), [])
-  const resetSelection = useCallback(() => {
-    setSelected('common')
-    setQuery('')
-  }, [])
-
   if (graph.isPending) {
     return (
       <div className="space-y-5">

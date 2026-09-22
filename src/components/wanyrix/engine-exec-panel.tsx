@@ -304,7 +304,6 @@ export function EngineExecPanel() {
   const [showRaw, setShowRaw] = useState(false)
 
   const pending = mode === 'doctor' ? exec.isPending : build.isPending
-  const data = mode === 'doctor' ? exec.data : build.data
   const err = (mode === 'doctor' ? exec.error : build.error) as EngineExecError | null
   const idle = exec.isIdle && build.isIdle
   const tally = useMemo(

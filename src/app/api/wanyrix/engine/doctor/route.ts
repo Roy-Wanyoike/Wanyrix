@@ -185,7 +185,6 @@ export async function GET(req: NextRequest) {
   const binary = await resolveEngineBinary()
   if (!binary) return binaryMissingResponse()
 
-  let versionOut: string
   const versionRun = await execEngine(['--version'])
   if (versionRun.killed || versionRun.code !== undefined) {
     return NextResponse.json(
@@ -193,7 +192,7 @@ export async function GET(req: NextRequest) {
       { status: 502 },
     )
   }
-  versionOut = versionRun.stdout.trim()
+  const versionOut: string = versionRun.stdout.trim()
 
   const scanTargetPath = registered ? registered.path : ENGINE_DIR
 

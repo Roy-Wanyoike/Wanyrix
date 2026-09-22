@@ -3,7 +3,6 @@ import type { NextRequest } from 'next/server'
 import path from 'node:path'
 import { ENGINE_DIR, execEngine } from '@/lib/wanyrix/engine-exec'
 import {
-  binaryMissingResponse,
   engineExitResponse,
   engineTimeoutResponse,
   probeBinary,

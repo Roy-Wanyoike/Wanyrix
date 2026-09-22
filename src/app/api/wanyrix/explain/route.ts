@@ -560,7 +560,7 @@ export async function POST(req: NextRequest) {
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('reasoning timeout')), 30_000),
       ),
-    ])) as Awaited<ReturnType<typeof createCompletion>>
+    ])) as ChatCompletion
 
     const explanation = completion?.choices?.[0]?.message?.content?.trim()
     if (!explanation) throw new Error('empty completion')
@@ -644,4 +644,3 @@ export async function POST(req: NextRequest) {
 type ChatCompletion = {
   choices?: { message?: { content?: string } }[]
 }
-declare function createCompletion(): Promise<ChatCompletion>

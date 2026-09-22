@@ -28,7 +28,6 @@ import { resolveEngineBinary } from '../../src/lib/wanyrix/engine-exec'
 import {
   ACTIVATION_HINT,
   DEFAULT_SEATS,
-  HONESTY_LABEL,
   ISSUE_ROUTE_SCHEMA,
   LICENSE_TIERS,
   TOKEN_SCHEMA,

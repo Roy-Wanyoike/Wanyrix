@@ -59,7 +59,6 @@ export async function GET() {
     )
   }
 
-  let versionOut: string
   const versionRun = await execEngine(['--version'], 20_000, MAX_BUFFER)
   if (versionRun.killed || versionRun.code !== undefined) {
     return NextResponse.json(
@@ -67,7 +66,7 @@ export async function GET() {
       { status: 502 },
     )
   }
-  versionOut = versionRun.stdout.trim()
+  const versionOut: string = versionRun.stdout.trim()
 
   const run = await execEngine(['build', '--path', ENGINE_DIR, '--json'], EXEC_TIMEOUT_MS, MAX_BUFFER)
   if (run.killed) {

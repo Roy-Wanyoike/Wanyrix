@@ -268,7 +268,6 @@ describeRoundTrip('license issue route — issued token verifies OFFLINE (E1→E
         env: { ...process.env, WANYRIX_ACTIVATION_PUBKEY: pubHex },
       })
       const stdout = proc.stdout.toString()
-      const stderr = proc.stderr.toString()
       expect(proc.exitCode).toBe(0)
       expect(stdout).toContain('status: active')
       expect(stdout).toContain('plan: team')

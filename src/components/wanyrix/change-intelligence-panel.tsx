@@ -30,7 +30,6 @@ import {
   useRegisteredWorkspaces,
   EngineExecError,
   type EngineImpactPayload,
-  type EngineWhatChangedPayload,
 } from '@/lib/wanyrix/hooks'
 import type { Severity } from '@/lib/wanyrix/types'
 import { cn } from '@/lib/utils'

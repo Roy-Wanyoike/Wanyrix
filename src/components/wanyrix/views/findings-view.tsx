@@ -53,7 +53,7 @@ export default function FindingsView({ onNavigate }: ViewProps) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Finding | null>(null)
 
-  const findings = doctor.data?.findings ?? []
+  const findings = useMemo(() => doctor.data?.findings ?? [], [doctor.data])
 
   const sections = useMemo(() => {
     const set = new Set<FindingSection>()

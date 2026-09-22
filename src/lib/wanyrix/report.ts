@@ -20,10 +20,6 @@ import { storagePayload } from './storage-state'
  * would measure vs. what this demo simulates.
  */
 
-function pad(label: string): string {
-  return label.padEnd(34, ' ')
-}
-
 function severityRank(s: string): number {
   switch (s) {
     case 'critical':
