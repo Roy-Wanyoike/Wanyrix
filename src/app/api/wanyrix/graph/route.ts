@@ -1,12 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGraphPayload } from '@/lib/wanyrix/data'
-import { notAllowedOnGetOnly, resolveWorkspace } from '@/lib/wanyrix/api'
+import { notAllowedOnGetOnly, resolveWorkspace, workspaceParam } from '@/lib/wanyrix/api'
+import { isRegisteredWorkspaceId } from '@/lib/wanyrix/register'
+import {
+  RegisteredScanError,
+  RegisteredStoreError,
+  findRegisteredWorkspace,
+  registeredGraphPayload,
+} from '@/lib/wanyrix/registered-scan'
 
 /**
  * GET /api/wanyrix/graph?ws= — engineering graph payload.
  * ENG-TCA-1: unknown `ws` → 404 with the known-workspace list.
+ *
+ * QA-5-B-1: a REGISTERED local project id runs the REAL engine
+ * (`wanyrix graph --path <stored path> --json`) and adapts the measured
+ * `wanyrix.graph/v1` envelope — `meta.scope: full-manifest-graph`, provenance
+ * marked, telemetry-absent fields honestly zero/empty. Failures named:
+ * 503 binary/store · 502 engine · 504 timeout.
  */
 export async function GET(req: NextRequest) {
+  const raw = workspaceParam(req)
+  if (raw !== null && isRegisteredWorkspaceId(raw)) {
+    try {
+      const row = await findRegisteredWorkspace(raw)
+      if (!row) {
+        return NextResponse.json(
+          { error: `no registered workspace with id ${raw} — connect it via POST /api/wanyrix/workspaces` },
+          { status: 404 },
+        )
+      }
+      return NextResponse.json(await registeredGraphPayload(row))
+    } catch (err) {
+      if (err instanceof RegisteredStoreError) {
+        console.error('[graph] registered-workspace store unavailable:', err.detail)
+        return NextResponse.json(
+          { error: 'registered-workspace store unavailable — the scan was not started' },
+          { status: 503 },
+        )
+      }
+      if (err instanceof RegisteredScanError) {
+        return NextResponse.json(err.payload, { status: err.status })
+      }
+      throw err
+    }
+  }
   const { ws, error } = resolveWorkspace(req)
   if (error) return error
   return NextResponse.json(getGraphPayload(ws))

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -52,6 +52,7 @@ import {
   useWorkspaces,
 } from '@/lib/wanyrix/hooks'
 import { workspaceSelectorState } from '@/lib/wanyrix/workspace-selector'
+import { mergeWorkspaceRegistry } from '@/lib/wanyrix/registered-workspace'
 import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
 import type { ReportFormat } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
@@ -150,7 +151,13 @@ export function AppShell({
 
   /* workspace registry + active selection (issue #34) */
   const workspacesQuery = useWorkspaces()
-  const workspaces = workspacesQuery.data?.workspaces ?? []
+  /* QA-5-B-1: ONE merge point — connected LOCAL projects (engine-measured,
+     `registered`) lead the list, demo fixtures follow with their fixtureOnly
+     provenance intact. Dropping `data.registered` here was the dead end of
+     the whole connect-a-project journey. */
+  const workspaces = useMemo(() => mergeWorkspaceRegistry(workspacesQuery.data), [
+    workspacesQuery.data,
+  ])
   const activeWs = useWorkspaceStore((s) => s.active)
   const setActiveWs = useWorkspaceStore((s) => s.setActive)
   const activeSummary = workspaces.find((w) => w.id === activeWs)

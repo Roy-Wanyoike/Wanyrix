@@ -17,6 +17,19 @@ import path from 'node:path'
 const SLUG_MAX = 40
 
 /**
+ * Every registered-workspace id starts with this prefix (QA-5-B-1): routes
+ * use it as a CHEAP pre-filter before touching the registered-workspace
+ * store — an id without the prefix can never be a registered row, so the
+ * fixture guard answers it directly with no db round-trip.
+ */
+export const REGISTERED_WORKSPACE_ID_PREFIX = 'ws-local-'
+
+/** True when an id is shaped like a registered-workspace id (prefix check). */
+export function isRegisteredWorkspaceId(id: string): boolean {
+  return id.startsWith(REGISTERED_WORKSPACE_ID_PREFIX)
+}
+
+/**
  * Lowercases, maps every non-[a-z0-9] run to '-', trims '-' from both ends
  * and caps at 40 chars (a cap cut may leave a trailing dash — trimmed again).
  * An empty result degrades to 'workspace' so ids are never malformed.

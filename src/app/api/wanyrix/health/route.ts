@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getHealth } from '@/lib/wanyrix/data'
-import { notAllowedOnGetOnly, resolveWorkspace } from '@/lib/wanyrix/api'
+import { notAllowedOnGetOnly, resolveWorkspace, workspaceParam } from '@/lib/wanyrix/api'
+import { isRegisteredWorkspaceId } from '@/lib/wanyrix/register'
+import {
+  RegisteredScanError,
+  RegisteredStoreError,
+  findRegisteredWorkspace,
+  registeredHealthPayload,
+} from '@/lib/wanyrix/registered-scan'
 
 /**
  * GET /api/wanyrix/health?ws= — workspace overview payload.
@@ -9,8 +16,39 @@ import { notAllowedOnGetOnly, resolveWorkspace } from '@/lib/wanyrix/api'
  * under EITHER spelling 404s — the spelling is never silently ignored
  * (it used to read only `ws`, so `?workspace=<unknown>` leaked the default
  * workspace's data as a bogus "healthy" answer).
+ *
+ * QA-5-B-1: a REGISTERED local project id runs the REAL engine (doctor +
+ * graph, parallel, against the stored path) and adapts the measured
+ * envelopes — totals are real, telemetry-absent sections are honest
+ * empties with `provenance: registered-local-project`. Failures named:
+ * 503 binary/store · 502 engine · 504 timeout.
  */
 export async function GET(req: NextRequest) {
+  const raw = workspaceParam(req)
+  if (raw !== null && isRegisteredWorkspaceId(raw)) {
+    try {
+      const row = await findRegisteredWorkspace(raw)
+      if (!row) {
+        return NextResponse.json(
+          { error: `no registered workspace with id ${raw} — connect it via POST /api/wanyrix/workspaces` },
+          { status: 404 },
+        )
+      }
+      return NextResponse.json(await registeredHealthPayload(row))
+    } catch (err) {
+      if (err instanceof RegisteredStoreError) {
+        console.error('[health] registered-workspace store unavailable:', err.detail)
+        return NextResponse.json(
+          { error: 'registered-workspace store unavailable — the scan was not started' },
+          { status: 503 },
+        )
+      }
+      if (err instanceof RegisteredScanError) {
+        return NextResponse.json(err.payload, { status: err.status })
+      }
+      throw err
+    }
+  }
   const { ws, error } = resolveWorkspace(req)
   if (error) return error
   return NextResponse.json(getHealth(ws))

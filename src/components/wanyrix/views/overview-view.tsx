@@ -48,6 +48,7 @@ import {
 } from '@/lib/wanyrix/hooks'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+import { mergeWorkspaceRegistry } from '@/lib/wanyrix/registered-workspace'
 import type { ActivityEvent, GraphPayload, Severity } from '@/lib/wanyrix/types'
 import {
   CountUp,
@@ -491,7 +492,8 @@ function RecentChangesCard({ onNavigate }: ViewProps) {
         .map((e) => ({ key: e.id, label: `${e.findings} findings · ${e.trigger} run`, at: e.at })),
     )
   }
-  const registry = workspacesQ.data?.workspaces ?? []
+  // QA-5-B-1: the card lists the MERGED registry — connected projects first
+  const registry = useMemo(() => mergeWorkspaceRegistry(workspacesQ.data), [workspacesQ.data])
   return (
     <PromiseCard
       label="Recent changes"

@@ -543,6 +543,21 @@ export default function DoctorView({ onNavigate }: ViewProps) {
 
   return (
     <div className="space-y-5">
+      {/* QA-5-B-1: registered local projects get REAL engine findings but NO
+          build-time telemetry (engine v1 is filesystem-static) — the zeros
+          below are labeled placeholders, never presented as measurements. */}
+      {report.buildTelemetry === 'not-measured' && (
+        <div
+          role="note"
+          className="rounded-lg border border-amber-500/40 bg-amber-500/[0.08] px-3.5 py-2.5 text-[12.5px] leading-snug text-amber-800 dark:text-amber-300"
+        >
+          <span className="font-semibold">Build telemetry is not measured for this workspace.</span>{' '}
+          It is a registered local project: the findings below were measured by the real wanyrix
+          engine from your manifests, but the engine does not emit build-time telemetry — the
+          build-time figures on this view are placeholders, not measurements.
+        </div>
+      )}
+
       {/* issue #99: mid-session failure with cached data → degraded banner,
           never a silent stale table; a retry is one click away */}
       {isError && (

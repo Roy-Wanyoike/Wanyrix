@@ -22,8 +22,9 @@ import {
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useWorkspaces, useWorkspaceHealths } from '@/lib/wanyrix/hooks'
+import { mergeWorkspaceRegistry } from '@/lib/wanyrix/registered-workspace'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
-import type { WorkspaceSummary } from '@/lib/wanyrix/types'
+import type { HealthPayload, WorkspaceSummary } from '@/lib/wanyrix/types'
 import { CachedDataBanner, DataErrorPanel, ViewSkeleton, WorkspaceProvenanceBadge } from '../shared'
 import type { ViewProps } from '../view-types'
 
@@ -55,8 +56,27 @@ function timeAgo(iso: string): string {
  */
 export default function RepositoriesView({ onNavigate }: ViewProps) {
   const workspacesQuery = useWorkspaces()
-  const workspaces = useMemo(() => workspacesQuery.data?.workspaces ?? [], [workspacesQuery.data])
-  const healths = useWorkspaceHealths(workspaces)
+  /* QA-5-B-1: the registry is fixtures + CONNECTED projects — dropping
+     `data.registered` here hid the user's own measured workspaces. */
+  const workspaces = useMemo(() => mergeWorkspaceRegistry(workspacesQuery.data), [
+    workspacesQuery.data,
+  ])
+  const connectedCount = workspaces.filter((w) => w.fixtureOnly === false).length
+  /* cache-hit telemetry only exists for the fixture workspaces — connected
+     projects render an honest "not measured" instead of a fake 0% */
+  const fixtureWorkspaces = useMemo(
+    () => workspaces.filter((w) => w.fixtureOnly === true),
+    [workspaces],
+  )
+  const healths = useWorkspaceHealths(fixtureWorkspaces)
+  const healthById = useMemo(() => {
+    const byId = new Map<string, HealthPayload>()
+    fixtureWorkspaces.forEach((w, i) => {
+      const h = healths[i]?.data
+      if (h) byId.set(w.id, h)
+    })
+    return byId
+  }, [fixtureWorkspaces, healths])
 
   /* issue #99: a mid-session failure must never degrade into a silent cache —
      when the registry/health payloads still render from the last successful
@@ -117,8 +137,9 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-primary/90">Workspace Registry</p>
           <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Repositories</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {workspaces.length} registered workspace{workspaces.length === 1 ? '' : 's'} · health, scan recency
-            and finding counts from the local engine registry
+            {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'} ·{' '}
+            {connectedCount} connected project{connectedCount === 1 ? '' : 's'} · health, scan
+            recency and finding counts from the local engine registry — fixture rows are demo data
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -162,8 +183,8 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {workspaces.map((w, i) => {
-                const health = healths[i]?.data
+              {workspaces.map((w) => {
+                const health = healthById.get(w.id)
                 return (
                   <TableRow key={w.id} className={w.id === activeWs ? 'bg-primary/5' : undefined}>
                     <TableCell>
@@ -184,7 +205,15 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
                     <TableCell className="text-right font-mono text-xs tabular-nums">{w.edges}</TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">{w.findings}</TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">
-                      {health ? `${health.cacheHitRate}%` : <span className="text-muted-foreground/90">…</span>}
+                      {w.fixtureOnly === true ? (
+                        health ? (
+                          `${health.cacheHitRate}%`
+                        ) : (
+                          <span className="text-muted-foreground/90">…</span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground/90">not measured</span>
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-[11px] text-muted-foreground">{w.toolchain}</TableCell>
                     <TableCell className="text-right font-mono text-[11px] text-muted-foreground">
@@ -212,10 +241,8 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
 
         {/* mobile cards */}
         <ul className="divide-y divide-border/60 md:hidden">
-          {workspaces.map((w, i) => {
-            const health = healths[i]?.data
-            return (
-              <li key={w.id} className="space-y-2.5 p-4">
+          {workspaces.map((w) => (
+            <li key={w.id} className="space-y-2.5 p-4">
                 <div className="flex items-center gap-2">
                   <span className={`size-2 shrink-0 rounded-full ${WS_ACCENT[w.accent]}`} aria-hidden />
                   <p className="truncate font-mono text-[13px] font-medium">{w.name}</p>
@@ -245,7 +272,13 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt>cache hit</dt>
-                    <dd className="tabular-nums text-foreground/85">{health ? `${health.cacheHitRate}%` : '…'}</dd>
+                    <dd className="tabular-nums text-foreground/85">
+                      {w.fixtureOnly === true
+                        ? healthById.get(w.id)
+                          ? `${healthById.get(w.id)!.cacheHitRate}%`
+                          : '…'
+                        : 'not measured'}
+                    </dd>
                   </div>
                   <div className="col-span-2 flex justify-between gap-2">
                     <dt>last scan</dt>
@@ -257,8 +290,7 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
                   <span aria-hidden>·</span> {w.toolchain}
                 </p>
               </li>
-            )
-          })}
+          ))}
         </ul>
       </section>
 
@@ -266,10 +298,12 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
       <div className="flex flex-wrap items-start gap-2.5 rounded-lg border border-border/70 bg-muted/10 p-3">
         <Database className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
         <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-          The registry is served by the local engine. New repositories are registered through the{' '}
-          <span className="font-mono text-foreground/85">wanyrix</span> CLI / engine config — this dashboard reads
-          the registry and switches the active workspace, it never mutates it (no writes beyond fixtures in this
-          environment). Finding counts are from the last doctor scan per workspace.
+          The registry is served by the local engine. Connect a real project with the topbar{' '}
+          <span className="font-mono text-foreground/85">Connect a local project</span> bridge — the real engine
+          measures it at registration — or register one through the{' '}
+          <span className="font-mono text-foreground/85">wanyrix</span> CLI. This dashboard reads the registry and
+          switches the active workspace; it never mutates it. Finding counts are from the last engine scan per
+          workspace (connected projects: measured · fixture rows: demo data).
         </p>
         <Button
           size="sm"

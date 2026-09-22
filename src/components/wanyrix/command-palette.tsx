@@ -40,6 +40,7 @@ import {
 } from '@/lib/wanyrix/palette-search'
 import { useWorkspaces } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+import { mergeWorkspaceRegistry } from '@/lib/wanyrix/registered-workspace'
 import { NAV_ITEMS } from './nav-registry'
 import { WorkspaceProvenanceBadge } from './shared'
 import type { ViewId } from '@/lib/wanyrix/types'
@@ -196,7 +197,9 @@ export function CommandPalette({
           })}
         <CommandSeparator />
         <CommandGroup heading="Switch workspace">
-          {(wsData?.workspaces ?? []).map((w) => (
+          {/* QA-5-B-1: registered LOCAL projects first, fixtures after — the
+              same merged registry the topbar selector renders. */}
+          {mergeWorkspaceRegistry(wsData).map((w) => (
             <CommandItem
               key={w.id}
               value={`workspace ${w.name}`}

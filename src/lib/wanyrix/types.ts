@@ -82,6 +82,14 @@ export interface DoctorReport {
   scannedAt: string
   phases: { label: string; detail: string }[]
   summary: { developerBuild: string; ciBuild: string; diskUsage: string }
+  /**
+   * QA-5-B-1 — set ONLY on payloads adapted from the REAL engine for a
+   * registered local project: the engine (v1, filesystem-static) measures
+   * findings but emits no build-time telemetry, so the numeric telemetry
+   * fields above are honest zeros/empty arrays and the doctor view renders
+   * its "not measured" notice instead of pretending the zeros are data.
+   */
+  buildTelemetry?: 'not-measured'
   /** workspace-specific explanation for the summary card (payload-driven copy) */
   criticalPathExplanation?: string
   /** footnote under the critical-path chart */
@@ -179,14 +187,25 @@ export interface GraphPayload {
     workspaceCrates: number
     totalEdges: number
     lastScan: string
-    /** the served node/edge set is the analysis backbone subset of the full graph (ENG-TCA-3) */
-    scope: 'backbone-subset'
+    /**
+     * the served node/edge set semantics (ENG-TCA-3):
+     *   - `backbone-subset` — fixture payloads: the served set is the analysis
+     *     backbone subset of the full workspace graph;
+     *   - `full-manifest-graph` — registered-project payloads (QA-5-B-1): the
+     *     REAL engine serves every measured crate and edge, nothing is sampled.
+     */
+    scope: 'backbone-subset' | 'full-manifest-graph'
     servedNodes: number
     servedEdges: number
     /** every per-node aggregate is computed from `edges` — never hand-typed */
     aggregateSource: 'served-edges'
     /** human-readable reconciliation note (subset semantics) */
     note: string
+    /**
+     * QA-5-B-1 — present ONLY on payloads served for a registered local
+     * project (see HealthPayload.provenance).
+     */
+    provenance?: 'registered-local-project'
   }
   /** optional per-workspace simulator catalogs (issue #34) */
   catalog?: ImpactCatalog
@@ -517,6 +536,12 @@ export interface HealthPayload {
   activity: ActivityEvent[]
   findingCounts: { section: FindingSection; count: number }[]
   lastScan: string
+  /**
+   * QA-5-B-1 — present ONLY on payloads served for a registered local
+   * project: every measured figure is real (engine-spawned) and every absent
+   * telemetry figure is an honest zero/empty array, labeled as such.
+   */
+  provenance?: 'registered-local-project'
   /** workspace-specific headline insight for the overview strip */
   insight?: { text: string; question: string }
 }

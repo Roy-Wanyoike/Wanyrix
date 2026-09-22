@@ -29,6 +29,7 @@ import {
   type EngineExecPayload,
   type RegisterWorkspaceResponse,
 } from '@/lib/wanyrix/hooks'
+import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import type { RegisteredWorkspaceSummary, Severity } from '@/lib/wanyrix/types'
 
 /**
@@ -86,9 +87,13 @@ export function ConnectProjectDialog({ trigger }: { trigger?: React.ReactNode })
         setVerdict(res.verdict)
         setVerdictName(res.workspace.name)
         setPathInput('')
+        // QA-5-B-1: the journey no longer dead-ends after the dialog — the
+        // connected project becomes the ACTIVE workspace immediately, and the
+        // merged registry (selector/palette/Repositories) shows it first.
+        useWorkspaceStore.getState().setActive(res.workspace.id)
         toast({
           title: `Connected ${res.workspace.name}`,
-          description: `Real engine scan: ${res.verdict.crates} crates · ${res.verdict.edges} edges · ${res.verdict.findings} findings.`,
+          description: `Real engine scan: ${res.verdict.crates} crates · ${res.verdict.edges} edges · ${res.verdict.findings} findings — now active in the workspace selector.`,
         })
       },
       onError: (err) => {
