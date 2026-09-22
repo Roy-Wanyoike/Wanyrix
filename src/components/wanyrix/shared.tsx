@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, TriangleAlert } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -327,6 +327,54 @@ export function DataErrorPanel({
         </Button>
       </div>
     </Panel>
+  )
+}
+
+/**
+ * Degraded-state banner (issue #99) — shown when a view still renders its
+ * last successful payload after a mid-session API failure. The Overview view
+ * replaces itself with an error panel when it has NO data; these views keep
+ * the cached table (usually more useful than a blank page) but must say so
+ * honestly instead of silently passing stale figures off as live.
+ */
+export function CachedDataBanner({
+  message,
+  onRetry,
+  retrying,
+}: {
+  message?: string
+  onRetry: () => void
+  retrying?: boolean
+}) {
+  return (
+    <div
+      role="status"
+      className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/[0.08] px-3.5 py-2.5 text-amber-800 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="flex items-start gap-2 text-[12.5px] leading-snug">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <span>
+          <span className="font-semibold">Showing cached data</span> — the last refresh failed
+          {message ? (
+            <>
+              {' '}
+              (<span className="font-mono text-[11px]">{message}</span>)
+            </>
+          ) : null}
+          . Figures below may be stale until the engine responds again.
+        </span>
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="shrink-0 gap-1.5 border-amber-500/40 text-amber-800 hover:bg-amber-500/10 dark:text-amber-300"
+        onClick={onRetry}
+        disabled={retrying}
+      >
+        <RefreshCw className={`size-3.5 ${retrying ? 'animate-spin' : ''}`} aria-hidden />
+        {retrying ? 'Retrying…' : 'Retry now'}
+      </Button>
+    </div>
   )
 }
 

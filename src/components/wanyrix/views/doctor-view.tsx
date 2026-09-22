@@ -31,15 +31,15 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useDoctor, useRecordScanRun } from '@/lib/wanyrix/hooks'
+import { useDoctor, useRecordDoctorRun } from '@/lib/wanyrix/hooks'
 import { useScanStore } from '@/lib/wanyrix/scan-store'
-import { capFindingIds } from '@/lib/wanyrix/finding-diff'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useToast } from '@/hooks/use-toast'
 import { FindingSheet } from '../finding-sheet'
 import { EngineExecPanel } from '../engine-exec-panel'
 import { ScanHistoryPanel } from '../scan-history'
 import { SccacheSimulator } from '../sccache-simulator'
+import { CachedDataBanner } from '../shared'
 import type {
   ConfidenceClass,
   CriticalPathSegment,
@@ -355,15 +355,16 @@ function FindingCard({
 /* ------------------------------------------------------------------ view */
 
 export default function DoctorView({ onNavigate }: ViewProps) {
-  const { data: report, isLoading, isError, error, refetch } = useDoctor()
+  const { data: report, isLoading, isError, error, refetch, isRefetching } = useDoctor()
   const { toast } = useToast()
   const activeWs = useWorkspaceStore((s) => s.active)
   const scanTick = useScanStore((s) => s.scanTick)
   const lastTrigger = useScanStore((s) => s.lastTrigger)
   const bumpScan = useScanStore((s) => s.bumpScan)
-  const addScanEntry = useScanStore((s) => s.addEntry)
-  /* Task 3-b wiring: structured scan-run log (runs[]) recorded at completion */
-  const recordScanRun = useRecordScanRun()
+  /* Task 3-b wiring: structured scan-run log (runs[]) recorded at completion.
+     useRecordDoctorRun owns BOTH records (history entry + scan-run log) so
+     the entry shape can never drift from the shell's recorder (issue #99). */
+  const recordDoctorRun = useRecordDoctorRun()
 
   const [mode, setMode] = useState<'human' | 'json'>('human')
   const [selected, setSelected] = useState<Finding | null>(null)
@@ -407,42 +408,22 @@ export default function DoctorView({ onNavigate }: ViewProps) {
      the auto-run on view mount, otherwise whatever control bumped the scan
      event that produced this run. R7: the run also persists its findings
      fingerprint (sorted unique payload finding ids, capped) so History can
-     diff runs at finding-id granularity. */
+     diff runs at finding-id granularity.
+
+     Issue #99: the recording is CLAIMED per scanTick — when the run was
+     triggered from the topbar / ⌘K, the app shell already recorded it and
+     this replay stays purely visual (one scan event, exactly one entry). */
   const handleScanDone = (done: boolean, durationMs: number) => {
     if (!done) return
     setDoneRun(runId)
     if (report) {
       const trigger = scanTick === mountedAtTick.current ? 'manual' : lastTrigger
-      const fingerprint = capFindingIds(report.findings.map((f) => f.id))
-      addScanEntry(activeWs, {
-        id: `scan-${Date.now()}`,
-        workspace: activeWs,
-        at: Date.now(),
-        durationMs,
-        findings: report.findings.length,
-        critical: report.findings.filter((f) => f.severity === 'critical').length,
-        warning: report.findings.filter((f) => f.severity === 'warning').length,
-        info: report.findings.filter((f) => f.severity === 'info').length,
-        buildTime: report.buildTime,
-        estimatedFrom: report.estimatedRange[0],
-        estimatedTo: report.estimatedRange[1],
+      if (!useScanStore.getState().claimRunRecording(scanTick)) return
+      recordDoctorRun({
+        report,
         trigger,
-        findingIds: fingerprint.ids,
-        ...(fingerprint.truncated ? { findingIdsTruncated: true } : {}),
-      })
-      recordScanRun({
         startedAt: runStartedAtRef.current,
-        finishedAt: Date.now(),
         durationMs,
-        findingCount: report.findings.length,
-        severityCounts: {
-          critical: report.findings.filter((f) => f.severity === 'critical').length,
-          warning: report.findings.filter((f) => f.severity === 'warning').length,
-          info: report.findings.filter((f) => f.severity === 'info').length,
-        },
-        trigger,
-        findingIds: fingerprint.ids,
-        findingIdsTruncated: fingerprint.truncated,
       })
     }
   }
@@ -505,8 +486,12 @@ export default function DoctorView({ onNavigate }: ViewProps) {
     )
   }
 
+  /* load-failure contract: with NO data the view is replaced by the honest
+     error+retry panel (same as Overview); WITH cached data the view keeps
+     rendering but shows the degraded-state banner (issue #99 — no silent
+     cache fallback). */
   if (isLoading) return <LoadingSkeleton />
-  if (isError || !report)
+  if (!report)
     return (
       <ErrorState
         message={isError ? (error as Error).message : 'empty payload'}
@@ -516,6 +501,16 @@ export default function DoctorView({ onNavigate }: ViewProps) {
 
   return (
     <div className="space-y-5">
+      {/* issue #99: mid-session failure with cached data → degraded banner,
+          never a silent stale table; a retry is one click away */}
+      {isError && (
+        <CachedDataBanner
+          message={(error as Error | null)?.message}
+          onRetry={() => refetch()}
+          retrying={isRefetching}
+        />
+      )}
+
       {/* ------------------------------------------------ 1) header */}
       <SectionHeading
         eyebrow="Build Intelligence"
