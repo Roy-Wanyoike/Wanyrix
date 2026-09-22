@@ -1,0 +1,87 @@
+name: Wanyrix referee (engine gates + measured envelopes)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HONESTY LABEL (issue #92 — keep current when editing; DO NOT silently drop):
+# GitHub Actions is BILLING-LOCKED on this repository. This workflow has
+# NEVER executed on hosted Actions runners and is NOT validated there.
+# It was validated LOCALLY ONLY:
+#   - YAML parses (bunx js-yaml),
+#   - `bash -n` on the step script (scripts/wanyrix-referee.sh),
+#   - the referee script itself dry-run end-to-end against a locally built
+#     engine binary (envelopes + job summary; the artifact upload is the
+#     only step that needs a runner).
+# The first successful hosted run — whenever billing is unlocked — is the
+# moment this label may be retired.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Why this workflow exists (issue #92, L2 — CI as the neutral referee):
+# nobody shares a database; CI output is the shared truth. On every PR the
+# referee runs the engine gates AND the engine's measured surfaces
+# (`wanyrix analyze --json`, plus `wanyrix impact --crate <primary>` for the
+# declared primary crate) and publishes the envelopes as the job summary and
+# a workflow artifact, so review debates cite measured bytes, not local
+# opinions.
+#
+# The engine gates (fmt · build · clippy · tests) previously lived in
+# ci.yml's `engine` job; they MOVED here so the repo has EXACTLY ONE engine
+# gate job — no duplicated identical jobs. ci.yml keeps the web job.
+#
+# PR commenting is deliberately absent: posting comments needs an extra
+# third-party action and secrets; the job summary + artifact carry the same
+# envelopes without them.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # The primary crate the impact gate measures (issue #92: "+ impact
+  # --crate <primary> where a primary crate is declared" — declared here,
+  # in one place; scripts/wanyrix-referee.sh reads this).
+  WANYRIX_PRIMARY_CRATE: wanyrix-engine
+
+jobs:
+  referee:
+    name: Engine gates + measured envelopes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Build (locked)
+        run: cargo build --locked
+
+      - name: Clippy (deny warnings, all targets)
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Tests (workspace)
+        run: cargo test --locked --workspace
+
+      # Needs the binary from the build step → runs only when the gates
+      # passed (default success()); a gate failure fails the PR without
+      # envelopes — no referee report pretending success.
+      - name: Measured envelopes (analyze + impact → job summary)
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/wanyrix-referee.sh
+
+      - name: Upload referee envelopes
+        uses: actions/upload-artifact@v4
+        with:
+          name: wanyrix-referee-envelopes
+          path: wanyrix-envelope/
+          if-no-files-found: error
