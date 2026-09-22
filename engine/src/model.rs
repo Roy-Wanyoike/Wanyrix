@@ -302,7 +302,9 @@ impl std::fmt::Display for EngineError {
                 plan_required,
             } => write!(
                 f,
-                "surface '{surface}' requires the {plan_required} plan — no qualifying entitlement is activated (activate with: wanyrix activate --key <token>; core local surfaces are never gated — docs/COMMERCIAL.md rule #1)"
+                "subscription required: surface '{surface}' needs the {plan_required} plan — no qualifying license is activated; \
+                 run `wanyrix activate --key <token-file-or-json>` to activate, or obtain a license — see docs/COMMERCIAL.md \
+                 (core local surfaces are never gated; CI/dev honest dry-runs: WANYRIX_ALLOW_UNLICENSED=1)"
             ),
             EngineError::SyncRemoteUnavailable(e) => write!(f, "sync remote unavailable: {e}"),
             EngineError::SyncBranch(e) => write!(f, "sync registry branch unavailable: {e}"),

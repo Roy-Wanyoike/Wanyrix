@@ -31,7 +31,10 @@
 //!   #1): core measured surfaces (doctor/graph/health/…) are NEVER gated —
 //!   a no-license user keeps 100% of local functionality. `gate` returns
 //!   success for any surface absent from the registry; premium surfaces
-//!   MUST be registered there.
+//!   MUST be registered there. Since AUD-1 the CLI dispatch actually calls
+//!   this gate (`gate_cli`) before every registered surface runs, honoring
+//!   the 30-day revalidation grace offline and the documented
+//!   `WANYRIX_ALLOW_UNLICENSED=1` CI/dev escape hatch.
 //!
 //! # Honesty contract (this module)
 //!
@@ -106,12 +109,25 @@ pub const PUBKEY_OVERRIDE_ENV: &str = "WANYRIX_ACTIVATION_PUBKEY";
 /// by the engine — documented here because the two halves only meet when
 /// the dev key's public half is the embedded key above.
 pub const SIGNING_KEY_ENV: &str = "WANYRIX_SIGNING_KEY";
+/// CI/dev escape hatch (AUD-1): setting `WANYRIX_ALLOW_UNLICENSED=1`
+/// (exactly that value) grants EVERY surface for honest dry-run contexts —
+/// CI referees and dev machines that must exercise premium surfaces without
+/// a license. Default (unset, empty, or any other value) is STRICT
+/// enforcement. The override never touches activation state: it admits the
+/// caller at the gate; it does not mint, cache or fake a license.
+pub const ALLOW_UNLICENSED_ENV: &str = "WANYRIX_ALLOW_UNLICENSED";
 
 /// Tier-gated surface → required plan. The single mapping docs/COMMERCIAL.md
 /// documents. Core measured surfaces are deliberately ABSENT: they are never
-/// gated (COMMERCIAL.md rule #1). `sync.push`/`sync.pull` land with the sync
-/// branch (issue #92); the gate mechanism is proven here with that fixture
-/// mapping so the sync branch can call `gate("sync.push", …)` day one.
+/// gated (COMMERCIAL.md rule #1) — and so is local `export` (the Free tier
+/// row lists exports; the TEAM feature is export SHARING, i.e. the
+/// registry-branch sync transport below). AUD-1 wires the CLI dispatch to
+/// consult this registry: `sync.push` AND `sync.pull` are enforced at
+/// dispatch (the issue's parenthetical "pull stays free" predates the
+/// ratified matrix — this table and docs/COMMERCIAL.md are the single
+/// mapping and both name sync.pull as team-gated; a shared REGISTRY one
+/// could read without a license would leak the very data the gate exists to
+/// protect).
 pub const SURFACE_REGISTRY: &[(&str, Plan)] =
     &[("sync.push", Plan::Team), ("sync.pull", Plan::Team)];
 
@@ -934,11 +950,20 @@ pub struct GateGrant {
     pub plan: Plan,
 }
 
+/// True only for the documented CI/dev escape hatch value
+/// (`WANYRIX_ALLOW_UNLICENSED=1`). Any other value — including `true`,
+/// `yes`, `0` — is NOT an override: a boolean-ish env var that silently
+/// granted premium surfaces would be a lying default.
+pub fn unlicensed_override() -> bool {
+    matches!(std::env::var(ALLOW_UNLICENSED_ENV).as_deref(), Ok("1"))
+}
+
 /// The premium-surface gate.
 ///
-/// - Surfaces absent from [`SURFACE_REGISTRY`] (every core measured surface)
-///   are granted unconditionally — the honesty contract of COMMERCIAL.md
-///   rule #1, pinned by tests.
+/// - Surfaces absent from [`SURFACE_REGISTRY`] (every core measured surface
+///   AND local `export` — the plan matrix keeps local artifacts free) are
+///   granted unconditionally — the honesty contract of COMMERCIAL.md rule
+///   #1, pinned by tests.
 /// - Registered surfaces require an activated, signature-verified token of
 ///   sufficient tier:
 ///   - no/deleted cache or tier too low →
@@ -948,7 +973,22 @@ pub struct GateGrant {
 ///   - tampered/corrupt cache → [`EngineError::Entitlement`] naming the
 ///     signature failure;
 ///   - in grace → granted with `grant.grace == true`.
+/// - The documented `WANYRIX_ALLOW_UNLICENSED=1` escape hatch (CI/dev
+///   honest dry-runs) short-circuits everything to a grant; the test seam
+///   [`gate_with`] stays env-free so unit tests never depend on process
+///   state.
+///
+/// Refusal payloads carry NO wall-clock value: the expired-beyond-grace
+/// message names the TOKEN's expiry day (data), never the current time.
 pub fn gate(surface: &str, dir: &Path, now_day: u64) -> Result<GateGrant, EngineError> {
+    // Documented CI/dev override first: it decides nothing about license
+    // state, it only admits the caller to premium surfaces this once.
+    if unlicensed_override() {
+        return Ok(GateGrant {
+            grace: false,
+            plan: Plan::Free,
+        });
+    }
     match required_plan(surface) {
         // Core surface: never gated — and decided WITHOUT any key material,
         // so a dev build's pending embedded key can never break core use.
@@ -966,6 +1006,19 @@ pub fn gate(surface: &str, dir: &Path, now_day: u64) -> Result<GateGrant, Engine
         // authority (override env or embedded key) is resolved here.
         Some(_) => gate_with(surface, dir, now_day, &authority()?),
     }
+}
+
+/// The CLI-dispatch gate (main.rs calls this BEFORE a gated runner).
+///
+/// The state root is the process CWD — exactly the `.wanyrix` root
+/// `activate`/`entitlement` resolve — so the cache activation writes is the
+/// cache enforcement reads, whichever directory the operator runs from.
+/// The verification authority (env override or embedded release key) is
+/// resolved lazily through [`gate`]: an unlicensed refusal needs no key
+/// material, so it stays honest even on dev builds still carrying the
+/// `PENDING_RELEASE_KEY` placeholder.
+pub fn gate_cli(surface: &str) -> Result<GateGrant, EngineError> {
+    gate(surface, Path::new("."), today_day())
 }
 
 /// [`gate`] with an explicit verification key (unit-test seam).

@@ -62,10 +62,18 @@ struct Out {
 
 /// Run the REAL binary from `cwd` (the operator's shell) — relative
 /// `--path`/`--remote` arguments resolve exactly as they would for a human.
+///
+/// Every invocation sets `WANYRIX_ALLOW_UNLICENSED=1` EXPLICITLY: since
+/// AUD-1 the sync surfaces are premium (docs/COMMERCIAL.md tier matrix) and
+/// these tests pin sync TRANSPORT semantics, not licensing — so they use
+/// the documented CI/dev escape hatch instead of pretending to have bought
+/// a license. The default (unset) stays strictly enforced and is pinned by
+/// tests/entitlement_gate_cli.rs.
 fn run_in(cwd: &Path, args: &[&str]) -> Out {
     let out = Command::new(env!("CARGO_BIN_EXE_wanyrix"))
         .args(args)
         .current_dir(cwd)
+        .env("WANYRIX_ALLOW_UNLICENSED", "1")
         .output()
         .unwrap();
     Out {

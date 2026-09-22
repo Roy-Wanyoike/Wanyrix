@@ -135,6 +135,43 @@ history). An expired token keeps working through a visible **30-day
 revalidation grace** window (`status: grace` in the envelope); beyond it, the
 refusal names the expiry date.
 
+### Enforcement at the binary (AUD-1 — the matrix is behavior, not prose)
+
+The mapping above is ENFORCED at CLI dispatch: `main.rs` consults the single
+surface registry (`engine/src/entitlement.rs` `SURFACE_REGISTRY`) through
+`gate_cli` before a gated surface runs — the same cache file `wanyrix
+activate` writes is the one enforcement re-verifies (signature re-checked
+every time).
+
+- **Gated (require `team` or above): `sync push`, `sync pull`.** Both
+  directions: a shared registry a licenseless machine could *read* would
+  leak exactly the team data the gate exists to protect. The gate fires
+  before any measurement or git transport work.
+- **Never gated (free tier, rule #1): every core local surface — including
+  local `export`.** Artifacts-as-code written to the LOCAL disk stays free
+  forever; the paid capability is export *sharing* (the registry-branch
+  sync), not local writing. `doctor`, `graph`, `health`, `analyze`,
+  `dependencies`, `build`, `init`, `status`, `store`, `synth`, `daemon`,
+  `telemetry`, `experiment`, `events`, `ai`, `git`, `impact`,
+  `what-changed`, `export`, `activate`, `entitlement`, `license` all run
+  with zero license state — pinned by binary-level tests.
+- **Refusal shape:** the named `subscription required` error, exit code 2,
+  stdout left empty (machine envelopes carry results, never refusals), and
+  a stderr message naming the surface, the required plan and the
+  remediation: run `wanyrix activate --key <token-file-or-json>`, or obtain
+  a license — see this document. Refusal payloads carry **no wall-clock
+  value** (the only dates they may name are the token's own expiry, as
+  data).
+- **Grace honored offline:** an expired token inside the 30-day revalidation
+  window keeps pushing/pulling with a visible grace note on stderr (stdout
+  stays the clean envelope). No network is consulted, ever.
+- **CI/dev escape hatch (documented, default strict):**
+  `WANYRIX_ALLOW_UNLICENSED=1` — exactly that value — grants every surface
+  without a license, for CI referees and dev machines that must exercise
+  premium surfaces in honest dry-run contexts. Any other value (including
+  `true`/`yes`/`0`) enforces strictly. The hatch only admits the caller at
+  the gate; it never mints, caches or fakes a license.
+
 ### Sandbox issuance honesty label
 
 Until a payment backend exists, the web Plans view (`Plans`) issues REAL,

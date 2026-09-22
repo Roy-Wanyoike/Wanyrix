@@ -17,7 +17,7 @@ use crate::scan::{scan_workspace, scan_workspace_excluding};
 use crate::timestamp::iso8601_now;
 use crate::{daemon, store, synth, telemetry};
 
-pub use crate::entitlement::{activate_run, entitlement_run, license_run};
+pub use crate::entitlement::{activate_run, entitlement_run, gate_cli, license_run};
 
 #[derive(Parser)]
 #[command(
