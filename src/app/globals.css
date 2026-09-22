@@ -276,6 +276,29 @@ html:not(.dark) .diff-body {
   border-radius: 4px;
 }
 
+/*
+ * Hit-area extender (issue #99) — WCAG 2.5.8 asks for a ≥24px pointer target,
+ * mobile platform guidance (iOS HIG / Material) for ≥44px. Compact controls
+ * whose VISUAL size must stay small (32px header icon buttons, the 28px
+ * "Explain with AI" chip, the 16px footer storage link) get an invisible
+ * ::after overlay centered on the control that stretches the tappable region
+ * to 44×44 without moving any surrounding layout. Apply with `hit-44`; the
+ * control must not clip overflow (buttons/links don't).
+ */
+.hit-44 {
+  position: relative;
+}
+.hit-44::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: inherit;
+}
+
 ::selection {
   background: oklch(0.72 0.16 45 / 30%);
 }

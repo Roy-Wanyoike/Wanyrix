@@ -158,7 +158,7 @@ export function ConnectProjectDialog({ trigger }: { trigger?: React.ReactNode })
           <Button
             size="icon"
             variant="outline"
-            className="size-8"
+            className="hit-44 size-8"
             aria-label="Connect a local project"
             title="Connect a local Rust project — the real engine scans it"
           >
