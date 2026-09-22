@@ -28,7 +28,7 @@ what a reader can reproduce today with [`README.md`](../README.md) ("Run locally
 
 | Surface | Status | Allowed in public material |
 | --- | --- | --- |
-| Web platform (19-view dashboard, 23 API routes, 584-test suite: 577 pass / 4 counted skip — measured 2026-09-22 via `bun test`) | **Shipped, verified** (gates green; browser-QA rounds M1–M9) | Real demo, screenshots, live walkthrough |
+| Web platform (19-view dashboard, 23 API routes, 602-test suite: 0 fail / 4 counted skip — measured 2026-09-22 via `bun test`) | **Shipped, verified** (gates green; browser-QA rounds M1–M9) | Real demo, screenshots, live walkthrough |
 | Honesty architecture (Estimated ≠ Measured ≠ Verified, Gate 21) | **Shipped, test-enforced** | Core differentiator — show it |
 | Grounded AI (server-rendered FACT block, post-validated model output) | **Shipped, tested** | Show a real transcript ([README example](../README.md)) |
 | Versioned API flavors (`wanyrix.report/v1`, `wanyrix.scan-history/v1`, `wanyrix.release-scorecard/v1`) | **Shipped, pinned by tests** | Show as contract examples |

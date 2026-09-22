@@ -16,7 +16,7 @@
 | --- | --- |
 | Branch / commit | `main` @ `cfd2c1b` (re-derived 2026-09-22) |
 | Engine | `wanyrix-engine` v0.9.0 — 25 source files, 16,645 LOC (`wc -l engine/src/*.rs`), **23 CLI surfaces** (enum `Command` in `engine/src/cli.rs`, cross-checked against `docs/CLI.md` rows 1–23), **302 tests / 0 failed / 2 ignored opt-in probes** (`cd engine && cargo test --workspace --offline`, measured 2026-09-22) |
-| Web | Next.js 16 + TS + Tailwind 4 + shadcn/ui — **23 versioned API routes** under `/api/wanyrix/*` (24 `route.ts` files incl. the `/api` root; `find src/app/api -name "route.ts" \| wc -l`); **584 web tests across 33 files** (27 unit + 6 api) — 577 pass / 4 counted skip / 3 worktree-split fail (`cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test` vs the running dev server, measured 2026-09-22; the 3 fails are checkout-root coupling — export-digest path + registration-confinement refusal — not product defects; same-root runs are 0-fail) |
+| Web | Next.js 16 + TS + Tailwind 4 + shadcn/ui — **23 versioned API routes** under `/api/wanyrix/*` (**23** `route.ts` files, all under `/api/wanyrix/*` — the scaffold `/api` root was removed in the AUD-6 cleanup; `find src/app/api -name "route.ts" \| wc -l`); **602 web tests across 36 files** (30 unit + 6 api) — 0 fail / 4 counted skip (`cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 WANYRIX_REQUIRE_LIVE=1 bun test` same-checkout, measured 2026-09-22; the skips are the license-issuance 200-forks needing `WANYRIX_SIGNING_KEY`) |
 | Docs | 21 markdown files: docs/ = ARCHITECTURE, AUDIT, CLI, CLOUD_DESIGN, COMMERCIAL, CONTRIBUTING, CRATES_IO_STRATEGY, DEVELOPMENT, DOGFOODING, INVESTOR_OVERVIEW, OPEN_SOURCE_STRATEGY, PERFORMANCE, PLUGIN_AND_EVENTS, PRIVACY, RUST_COMMUNITY_GUIDE, SECURITY, USER_GUIDE, W-EIR (18) + `README.md` + `engine/README.md` + `engine/BENCHMARKS.md` |
 | License | Dual MIT OR Apache-2.0, open-core (cloud may be proprietary, trademark carved out) |
 | Tracker | Open: #66 (commercial roadmap), #100–#103 (engine gaps from this matrix), #114–#119 (follow-on execution wave). Everything else closed with evidence — including #109: the CLI-contract dialog now carries the sync & license rows (`src/components/wanyrix/cli-dialog.tsx`, pinned by `tests/unit/cli-dialog-command-set.test.ts`). |
@@ -134,10 +134,10 @@ via PR #92 (see matrix rows above).
   v0.9.0 → `35077c7`.
 - Counts measured on the derivation host: `wc -l engine/src/*.rs`,
   `find src/app/api -name "route.ts"`, `rg -c "id: '"` over the nav
-  registry, `bun test` (584 across 33 files; 577 pass / 4 counted skip / 3
+  registry, `bun test` (602 across 36 files; 0 fail / 4 counted skip
   worktree-split fail — see Baseline).
 - Engine test total re-measured 2026-09-22 (AUD-7 drift pass):
-  `cd engine && cargo test --workspace --offline` → **302 passed / 0 failed /
+  `cd engine && cargo test --workspace --offline` → **314 passed / 0 failed /
   2 ignored** (the opt-in `perf_probe` probes); the 182 figure quoted from
   `engine/README.md` v0.9.0 in earlier passes predates the entitlement, gate
   and stdin-shorthand suites.
