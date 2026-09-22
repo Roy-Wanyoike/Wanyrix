@@ -86,3 +86,7 @@ wanyrix-license-pub.hex
 /pending-task.md
 .wanyrix/
 dev.pid
+
+# local ops ledgers (mirrors GitHub issues; not product files)
+issues/
+exports/
