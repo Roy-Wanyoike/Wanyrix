@@ -15,6 +15,7 @@ import {
   Activity,
   Blocks,
   Calculator,
+  CreditCard,
   Database,
   FileSearch,
   FlaskConical,
@@ -93,12 +94,13 @@ export const NAV_GROUPS: NavGroup[] = [
     group: 'Workspace',
     items: [
       { id: 'organization', label: 'Organization', icon: Users, hint: 'plan · members' },
+      { id: 'plans', label: 'Plans', icon: CreditCard, hint: 'tiers · license' },
       { id: 'settings', label: 'Settings', icon: Settings, hint: 'local-first' },
     ],
   },
 ]
 
-/** Flat 18-item list — command palette + mobile nav. */
+/** Flat 19-item list — command palette + mobile nav. */
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items)
 
 /** Topbar title/subtitle for every ViewId. */
@@ -120,5 +122,6 @@ export const VIEW_TITLES: Record<ViewId, { title: string; sub: string }> = {
   scorecard: { title: 'Policies · Gates', sub: 'release verdict · MVP acceptance gates' },
   issues: { title: 'Issues & PRs', sub: 'every issue fixed by a PR' },
   organization: { title: 'Organization', sub: 'plan · members · policy summary' },
+  plans: { title: 'Plans', sub: 'local subscription tiers · sandbox license issuance (estimated)' },
   settings: { title: 'Settings', sub: 'local-first preferences · migration status' },
 }

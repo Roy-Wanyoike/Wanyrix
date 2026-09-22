@@ -74,6 +74,13 @@ mini-services/
 now.png
 tool-results/
 
+# ed25519 license signing key material (issue #94) — private keys are NEVER
+# committed; operators mint keypairs OUT OF REPO with `wanyrix license keygen`
+# and point WANYRIX_SIGNING_KEY at the private half.
+wanyrix-license-priv.hex
+wanyrix-license-pub.hex
+*-priv.hex
+
 # Local-only working artifact: master validation prompt (never published)
 /pending-task.md
 .wanyrix/

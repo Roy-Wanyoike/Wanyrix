@@ -3,12 +3,14 @@
 Status: the `wanyrix` binary **exists** — `wanyrix-engine` v0.9.0
 ([`engine/README.md`](../engine/README.md)) implements `doctor · graph · health ·
 store · synth · daemon · telemetry · build · init · status · analyze · dependencies ·
-experiment · events · ai · git · impact · what-changed · export`. Every engine command emits a versioned JSON
+experiment · events · ai · git · impact · what-changed · export · activate · entitlement · license`. Every engine command emits a versioned JSON
 envelope (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
 `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, `wanyrix.build/v1`, `wanyrix.init/v1`,
 `wanyrix.status/v1`, `wanyrix.analyze/v1`, `wanyrix.dependencies/v1`,
 `wanyrix.experiment/v1`, `wanyrix.events/v1`, `wanyrix.ai/v1`, `wanyrix.git/v1`,
-`wanyrix.impact/v1`, `wanyrix.what-changed/v1`, `wanyrix.export/v1`) behind a `--json` switch, plus
+`wanyrix.impact/v1`, `wanyrix.what-changed/v1`, `wanyrix.export/v1`,
+`wanyrix.entitlement/v1`, `wanyrix.entitlement.token/v1`, `wanyrix.entitlement.cache/v1`,
+`wanyrix.license-keygen/v1`) behind a `--json` switch, plus
 human-readable output by default. The web platform mirrors the same payloads over
 HTTP; the in-app **CLI contract** dialog
 (`src/components/wanyrix/cli-dialog.tsx`, opened from the top bar's terminal entry)
@@ -59,6 +61,9 @@ pins the command set, the flags, and the exit codes shown here.
 | 16 | `wanyrix impact --crate <name> [--path <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.impact/v1` — reverse-dependency blast radius from the measured edge list: direct dependents by kind, transitive closure over normal+build edges only (dev edges never propagate — documented rule), blast radius in per-mille (integer math); unknown crates are a NAMED refusal (issue #68) | Impact panel (`GET /api/wanyrix/impact?ws=…&crate=…`) |
 | 17 | `wanyrix what-changed [--path <dir>] [--exclude <dir>]… --db <store> [--json] [--pretty]` | `wanyrix.what-changed/v1` — the fresh measured scan diffed against the NEWEST stored scan for the workspace: added/resolved/changed findings (duplicate-safe pairing), measured severity deltas; no baseline yet is a valid envelope with a named remediation note (issue #68) | What-changed panel (`GET /api/wanyrix/what-changed?ws=…`) |
 | 18 | `wanyrix export [--path <dir>] [--out <dir>] [--exclude <dir>]… [--json] [--pretty]` | `wanyrix.export/v1` — artifacts-as-code (issue #91): one measured pass (the `analyze` pipeline, zero re-shaping) written VERBATIM as `doctor.json` / `graph.json` / `health.json` under `<out>` (default `<path>/.wanyrix/exports`) plus an `index.json` manifest binding each artifact to its exact bytes (file name, `wanyrix.*` schema id, byte count, sha256) with the engine version and the `--exclude` echo. NO wall-clock timestamps (`generatedAt` carries the literal `not-measured`) and relative paths only, so repeat exports of unchanged input are byte-identical and team-diffable in PRs; an `<out>` that exists as a FILE, an unwritable target and absolute `--path`/`--out` are NAMED refusals | Exports view (`POST /api/wanyrix/export`) |
+| 19 | `wanyrix activate --key <token-file\|literal> [--json] [--pretty]` | `wanyrix.entitlement/v1` — offline activation (issue #94 E2): verifies the ed25519-signed entitlement token (`wanyrix.entitlement.token/v1`) OFFLINE against the embedded release key (dev `PENDING_RELEASE_KEY` until release signing; the `WANYRIX_ACTIVATION_PUBKEY` override serves on-prem entitlement servers and tests) and caches the token verbatim + a receipt (`wanyrix.entitlement.cache/v1`) at `.wanyrix/entitlement.json`. ZERO network I/O — pinned by a source-level scan test. Tampered tokens, wrong schema/version and expired-beyond-grace tokens are NAMED refusals and are NEVER cached | Plans view → issued-token activation hint |
+| 20 | `wanyrix entitlement [--json] [--pretty]` | `wanyrix.entitlement/v1` — the cached entitlement read honestly: status (`active` / `grace` / `not-activated` / `expired`), plan, team, seats (measured on THIS machine — offline verification cannot count others, the `seatsNote` says so), issued/expiry day (UTC day counts), days-until-revalidation, the 30-day revalidation grace window, and the tier-gated surface registry. No license is an honest `not-activated` envelope (the free tier), NEVER an error; a cache tampered after activation is a named signature refusal on every read | Plans view (license status) |
+| 21 | `wanyrix license keygen --out <dir>` · `wanyrix license issue --plan team --team <id> --days <n> [--seats <n>] --key <hex-file\|literal> [--out <file>] [--json]` | `wanyrix.license-keygen/v1` · `wanyrix.entitlement.token/v1` — maintainer tooling (issue #94 E2): keygen writes a 0600 private key + public half (entropy from /dev/urandom via std::fs — no `rand` dep; existing keys are NEVER overwritten); issue mints an ed25519-signed token (plan `team\|enterprise` — `free` is NEVER issued because the free tier needs no license; days 1..=36500; seats 1..=100000; nonce = 16 urandom bytes). Private keys are never committed | sandbox license issuer (`POST /api/wanyrix/license/issue`, web-only) |
 
 Common flags: `--path` (workspace root, default `.`), `--json` / `--pretty`
 (pretty has no effect without `--json`), and per-subcommand options documented by
@@ -100,6 +105,7 @@ These surfaces are served by the Next.js API routes directly. They are labeled
 | Real engine execution (Build Doctor view) | `GET /api/wanyrix/engine/doctor` | `wanyrix.engine-exec/v1` — spawns the actual `wanyrix` binary built from `engine/` and returns its verbatim `wanyrix.doctor/v1` stdout (scan target: the engine crate itself, or a registered local project via `?workspace=<id>`); 503 when the binary is not built on the host |
 | Workspace registration bridge (Connect a project) | `GET`/`POST`/`DELETE /api/wanyrix/workspaces` | GET serves the demo registry + `registered` rows; POST validates the absolute path, runs the REAL engine (doctor + graph) against it and upserts the measured counts (Prisma `RegisteredWorkspace`); DELETE unregisters — failures register nothing |
 | Experiments board | `GET /api/wanyrix/experiments?ws=…` | `EXP-*` records |
+| Sandbox license issuer (Plans view) | `POST /api/wanyrix/license/issue` | `wanyrix.license-issue/v1` — wraps the REAL `wanyrix license issue` binary and returns the signed `wanyrix.entitlement.token/v1` token VERBATIM + the honesty label (`estimated`: sandbox-local issuance, no payment method, never a simulated purchase). `plan ∈ {team, trial}` (trial = exactly 14 days, team = 365); `free` is never issued and `enterprise` belongs to the on-prem server (roadmap #66). Honest 503 when `WANYRIX_SIGNING_KEY` (dev signing key file) is not configured — the issuer never simulates a license; 405/400/502/504 follow the family contract |
 
 ## Exit codes (as implemented by the binary)
 
@@ -139,6 +145,7 @@ the Rust runtime's default broken-pipe panic path, not an exit code the engine c
 - ~~`wanyrix init`, repository discovery~~ — shipped in v0.5.0 (`init`, `status`, `analyze`, `dependencies`, `experiment` ledger + `verify` gate).
 - ~~durable event log~~ — shipped in v0.6.0 (`events`, `wanyrix.event/v1`); the out-of-process plugin contract follows [`docs/PLUGIN_AND_EVENTS.md`](PLUGIN_AND_EVENTS.md)'s decision points.
 - ~~local AI~~ — shipped in v0.7.0 (`ai`, `wanyrix.ai/v1`): local-model (Ollama-class) grounding over the measured evidence digest only; named refusals when no local server is reachable.
+- ~~offline entitlement verification~~ — shipped in v0.9.0 (issue #94: `activate`, `entitlement`, `license keygen|issue`; offline ed25519 tokens, 30-day revalidation grace, premium-surface gate with core surfaces never gated — see [`docs/COMMERCIAL.md`](COMMERCIAL.md)).
 - An `impact`/`report` engine subcommand to absorb the web-only surfaces above is
   intentionally not faked in the binary; the web platform serves them today.
 - Anything that would fake engine evidence in this repo is forbidden by the honesty
