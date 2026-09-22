@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useGraph, useHealth } from '@/lib/wanyrix/hooks'
+import { formatWorkspaceCountsLine, servedGraphCounts } from '@/lib/wanyrix/workspace-counts'
 import type { GraphNode } from '@/lib/wanyrix/types'
 import { CountUp, DataErrorPanel, MeasurementBadge, Panel, ViewSkeleton } from '../shared'
 import type { ViewProps } from '../view-types'
@@ -107,7 +108,6 @@ export default function ArchitectureView({ onNavigate }: ViewProps) {
       />
     )
 
-  const workspaceCrates = rows.length
   const hotspots = rows.filter((r) => r.node.fanIn >= 3 && r.node.changeFreq >= 5)
   const maxFanIn = Math.max(1, ...rows.map((r) => r.node.fanIn))
   const maxDownstream = Math.max(1, ...rows.map((r) => r.node.downstream))
@@ -120,7 +120,7 @@ export default function ArchitectureView({ onNavigate }: ViewProps) {
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-primary/90">Module Boundaries</p>
           <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Architecture</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {workspaceCrates} workspace crates · {graph.data.meta.totalEdges} edges · dependency direction and
+            {formatWorkspaceCountsLine(servedGraphCounts(graph.data))} · dependency direction and
             coupling from the engineering graph
           </p>
         </div>

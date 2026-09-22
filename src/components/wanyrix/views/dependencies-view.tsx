@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table'
 import { useGraph, useHealth } from '@/lib/wanyrix/hooks'
 import { useSimulatorIntentStore } from '@/lib/wanyrix/simulator-intent'
+import { formatWorkspaceCountsLine, servedGraphCounts } from '@/lib/wanyrix/workspace-counts'
 import type { GraphNode } from '@/lib/wanyrix/types'
 import { CountUp, DataErrorPanel, DeltaBadge, MeasurementBadge, Panel, ViewSkeleton } from '../shared'
 import type { ViewProps } from '../view-types'
@@ -64,7 +65,7 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-primary/90">Dependency Intelligence</p>
           <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Dependencies</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {d.meta.workspaceCrates} workspace crates · {externals.length} external crates · {d.meta.totalEdges} edges
+            {formatWorkspaceCountsLine(servedGraphCounts(d))}
             — from <span className="font-mono text-foreground/85">cargo metadata / cargo tree</span>
           </p>
         </div>

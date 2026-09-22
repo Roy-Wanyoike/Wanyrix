@@ -24,6 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useGraph } from '@/lib/wanyrix/hooks'
+import { formatWorkspaceCountsLine, servedGraphCounts } from '@/lib/wanyrix/workspace-counts'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { useSimulatorIntentStore } from '@/lib/wanyrix/simulator-intent'
 import type { BlastEntry, DuplicateResolution, GraphEdge, GraphNode, GraphPayload } from '@/lib/wanyrix/types'
@@ -790,7 +791,7 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
   }
 
   const node = data.nodes.find((n) => n.id === selected) ?? data.nodes[0]
-  const externals = data.nodes.filter((n) => n.band === 'external').length
+  const counts = servedGraphCounts(data)
   const lastScan = data.meta.lastScan.slice(0, 10)
 
   return (
@@ -798,7 +799,7 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
       <SectionHeading
         eyebrow="Engineering Graph"
         title="Dependency backbone"
-        description={`${data.meta.workspaceCrates} first-class workspace crates · ${externals} externals shown · ${data.meta.totalEdges} edges · last scan ${lastScan}`}
+        description={`${formatWorkspaceCountsLine(counts)} · last scan ${lastScan}`}
       />
 
       <div className="flex flex-wrap items-center gap-1.5" aria-label="Graph legend">
