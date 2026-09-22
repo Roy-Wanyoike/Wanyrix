@@ -24,7 +24,7 @@ import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
  * as such.
  */
 
-const COMMANDS: { cmd: string; maps: string; ai?: boolean }[] = [
+export const COMMANDS: { cmd: string; maps: string; ai?: boolean }[] = [
   { cmd: 'wanyrix doctor --exclude tests/fixtures --json', maps: 'Build Doctor view — findings + evidence; repeatable --exclude prunes a subtree, echoes it and counts the skip (wanyrix.doctor/v1)' },
   { cmd: 'wanyrix build --path <dir> --json', maps: 'Real engine binary panel → build — instrumented cargo build, measured wall clock + cache-hit rate (wanyrix.build/v1)' },
   { cmd: 'wanyrix graph --json', maps: 'Engineering Graph — measured edge list (wanyrix.graph/v1)' },
@@ -40,18 +40,20 @@ const COMMANDS: { cmd: string; maps: string; ai?: boolean }[] = [
   { cmd: 'wanyrix impact --crate <name> --json', maps: 'Impact & changes panel — measured dependents by kind, transitive reach, blast radius per mille (wanyrix.impact/v1)' },
   { cmd: 'wanyrix what-changed --db <store> --json', maps: 'Impact & changes panel — added/resolved/changed findings vs the stored baseline (wanyrix.what-changed/v1)' },
   { cmd: 'wanyrix export --path <dir> --json', maps: 'Exports view — artifacts-as-code: doctor/graph/health envelopes verbatim + a sha256-bound index.json; clock-free, relative paths, byte-identical re-runs (wanyrix.export/v1)' },
-  { cmd: 'wanyrix activate --key <token-file>', maps: 'verify an ed25519-signed entitlement token OFFLINE (zero network I/O) and cache it under .wanyrix/entitlement.json; tampered/expired tokens are named refusals, never cached (wanyrix.entitlement/v1)' },
+  { cmd: 'wanyrix sync push --remote <path|url> --json', maps: 'serverless team sync — a git branch IS the shared store: one measured pass committed to the registry branch (default wanyrix-registry) as exactly one deterministic commit; a byte-identical re-push is a measured no-op (committed:false); missing/non-git remote is a named refusal; no web mirror yet (wanyrix.sync/v1)' },
+  { cmd: 'wanyrix sync pull --remote <path|url> --json', maps: 'serverless team sync — merges the registry branch into the local mirror (.wanyrix/sync/registry); differing content is a named SYNC-CONFLICT-n finding — local bytes kept, never a silent overwrite — and peer evidence tiers never upgrade (a peer-verified claim imports as peer-reported-verified); pulling before any push names the missing branch (wanyrix.sync/v1)' },
+  { cmd: 'wanyrix activate --key <token-file|literal>', maps: 'verify an ed25519-signed entitlement token OFFLINE (zero network I/O) and cache it under .wanyrix/entitlement.json; tampered/expired tokens are named refusals, never cached (wanyrix.entitlement/v1)' },
   { cmd: 'wanyrix entitlement --json', maps: 'cached entitlement state — plan, seats (measured: this machine), expiry, 30-day grace, tier-gated surfaces; no license is an honest not-activated envelope (wanyrix.entitlement/v1)' },
-  { cmd: 'wanyrix license keygen|issue', maps: 'maintainer tooling — mint 0600 signing keypairs + ed25519-signed entitlement tokens (free is never issued; private keys never committed) (wanyrix.entitlement.token/v1)' },
+  { cmd: 'wanyrix license keygen|issue', maps: 'maintainer tooling — mint 0600 signing keypairs + ed25519-signed entitlement tokens (free is never issued; private keys never committed) (wanyrix.license-keygen/v1 · wanyrix.entitlement.token/v1)' },
   { cmd: 'wanyrix store list', maps: 'History view — persisted scan runs (SQLite + WAL)' },
   { cmd: 'wanyrix daemon start', maps: 'Runtime view — cached measured scan over a local Unix socket' },
   { cmd: 'wanyrix telemetry ingest -', maps: 'Diagnostics view — redacted rustc JSON diagnostics (wanyrix.telemetry/v1)' },
   { cmd: 'wanyrix synth --crates 50 --out tmp/ws', maps: 'fixture workspaces — deterministic (seed, count) → byte-identical tree' },
 ]
 
-const EXIT_CODES: { code: string; label: string; cls: string }[] = [
+export const EXIT_CODES: { code: string; label: string; cls: string }[] = [
   { code: '0', label: 'success — findings are data, not failure', cls: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
-  { code: '2', label: 'error — bad usage, IO failure, or ok:false daemon frame', cls: 'text-orange-300 border-orange-500/30 bg-orange-500/10' },
+  { code: '2', label: 'error — bad usage, IO failure, a named refusal, or ok:false daemon frame', cls: 'text-orange-300 border-orange-500/30 bg-orange-500/10' },
   { code: '101', label: 'broken pipe — stdout closed early (Rust EPIPE panic, not a mapped code)', cls: 'text-muted-foreground border-border bg-muted/40' },
 ]
 
