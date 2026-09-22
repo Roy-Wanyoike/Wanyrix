@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { workspaceParam } from '@/lib/wanyrix/api'
 import {
   ENGINE_DIR,
   EXEC_TIMEOUT_MS,
@@ -30,8 +31,10 @@ import {
  *     state-dir convention), so request params never reach a filesystem path.
  *
  * Workspace resolution (same contract as `GET /api/wanyrix/engine/doctor`):
- *   - `?workspace=<id>` (or the `?ws=` alias) → a REGISTERED local project
- *     looked up in the Prisma store (404 unknown id / 503 store down);
+ *   - `?workspace=<id>` or the `?ws=` alias (issue #129: both spellings on
+ *     every ws-scoped surface, `ws` wins when both are present) → a
+ *     REGISTERED local project looked up in the Prisma store (404 unknown
+ *     id / 503 store down);
  *   - absent/empty param → the engine crate itself (dogfood, ENG-TCA-1:
  *     empty param = param absent).
  */
@@ -53,7 +56,9 @@ export async function resolveExecTarget(
   req: NextRequest,
   routeLabel: string,
 ): Promise<ResolvedExecTarget | NextResponse> {
-  const param = req.nextUrl.searchParams.get('workspace') ?? req.nextUrl.searchParams.get('ws')
+  // Issue #129: the shared reader accepts both `ws` and `workspace` — the
+  // spelling is cosmetic, the registered-workspace resolution is unchanged.
+  const param = workspaceParam(req)
   if (param === null || param === '') {
     return { targetPath: ENGINE_DIR, registered: null }
   }

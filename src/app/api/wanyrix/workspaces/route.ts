@@ -20,9 +20,15 @@ import type { RegisteredWorkspaceSummary } from '@/lib/wanyrix/types'
 /**
  * Workspace registry — demo fixtures + the REAL registration bridge (2-b).
  *
- * GET  /api/wanyrix/workspaces          → `{ ...demo registry, registered }`
- *   where `registered` lists user-registered LOCAL projects (empty array =
- *   nothing connected yet — never fabricated, Gate 21).
+ * GET  /api/wanyrix/workspaces          → the demo registry + `registered`
+ *   + fixture marking (issue #129): every demo entry carries
+ *   `fixtureOnly: true` (web-demo data only — the engine-exec routes 404
+ *   these ids: they have no executable scan target), every registered row
+ *   `fixtureOnly: false`, and `execCapableIds` lists the ids the exec
+ *   surfaces (engine/doctor, engine/impact, git, what-changed, export)
+ *   can actually scan. Empty `execCapableIds` = nothing connected yet;
+ *   engine-exec routes still serve a bare request (the repo engine crate
+ *   dogfood target).
  *
  * POST /api/wanyrix/workspaces { path } → connect a local project:
  *   1. validate the path (absolute, exists, is a directory) → 400 named reason
@@ -62,6 +68,8 @@ function toDto(r: RegisteredWorkspace): RegisteredWorkspaceSummary {
     warning: r.warning,
     info: r.info,
     toolchain: r.toolchain,
+    // issue #129: registered rows ARE exec-capable (unlike the demo fixtures)
+    fixtureOnly: false,
   }
 }
 
@@ -94,7 +102,13 @@ export async function GET(_req: NextRequest) {
       { status: 503 },
     )
   }
-  return NextResponse.json({ ...getWorkspaces(), registered: rows.map(toDto) })
+  const demo = getWorkspaces()
+  return NextResponse.json({
+    workspaces: demo.workspaces.map((w) => ({ ...w, fixtureOnly: true })),
+    default: demo.default,
+    registered: rows.map((r) => ({ ...toDto(r), fixtureOnly: false })),
+    execCapableIds: rows.map((r) => r.id),
+  })
 }
 
 /* ----------------------------------------------------------------- POST --- */
