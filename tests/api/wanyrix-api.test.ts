@@ -880,7 +880,11 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
     expect((res.body as { error: string }).error).toContain('absolute')
   })
 
-  test('POST nonexistent path → 400 mentioning existence', async () => {
+  test('POST nonexistent path OUTSIDE the approved roots → 400 generic confinement refusal, no echo (QA-3-B-2)', async () => {
+    // /nonexistent/... is outside the default workspace roots (repo engine/,
+    // repo fixtures/, system temp dir): the pre-confinement contract leaked
+    // existence state ('does not exist') for ANY host path; the confined
+    // contract answers with ONE generic policy refusal and no path echo.
     const res = await fetchJson('/api/wanyrix/workspaces', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -888,10 +892,18 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
     })
     expect(res.status).toBe(400)
     expectJson(res)
-    expect((res.body as { error: string }).error).toContain('does not exist')
+    const body = res.body as { error: string }
+    expect(body.error).toContain('outside the allowed workspace roots')
+    expect(body.error).toContain('WANYRIX_WORKSPACE_ROOTS')
+    expect(body.error).not.toContain('does not exist')
+    expect(body.error).not.toContain('/nonexistent')
   })
 
-  test('POST /tmp (exists, no Cargo.toml/.wanyrix) → 404 "does not look like a Rust project"', async () => {
+  test('POST /tmp (contained, exists, no Cargo.toml/.wanyrix) → 404 ONE shared message, no path echo (QA-3-B-2)', async () => {
+    // /tmp sits INSIDE the default system-temp root, so the marker check
+    // runs — but the response must not distinguish it from a missing or
+    // non-directory candidate (existence/type enumeration is collapsed,
+    // QA-3-B-2 AC 2), and must not echo the resolved path back.
     const res = await fetchJson('/api/wanyrix/workspaces', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -899,10 +911,10 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
     })
     expect(res.status).toBe(404)
     expectJson(res)
-    const body = res.body as { error: string; path: string }
-    expect(body.error).toContain('does not look like a Rust project')
-    expect(body.error).toContain('no Cargo.toml or .wanyrix at /tmp')
-    expect(body.path).toBe('/tmp')
+    const body = res.body as { error: string; path?: string }
+    expect(body.error).toContain('no scannable Rust project directory at the submitted path')
+    expect(body.error).not.toContain('/tmp')
+    expect(body.path).toBeUndefined()
     // nothing may be stored for a rejected path
     const after = await fetchJson('/api/wanyrix/workspaces')
     expect(
@@ -910,6 +922,27 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
         (r) => r.path === '/tmp',
       ),
     ).toBe(false)
+  })
+
+  test('QA-3 oracle probes collapse: /etc/hostname (a file) and /etc (a dir) → the SAME generic 400 (QA-3-B-2)', async () => {
+    // The pre-confinement surface distinguished file/not-a-directory vs
+    // directory/no-marker for ANY host path (a three-state existence oracle).
+    // Confined, both outside-roots probes get ONE byte-identical refusal.
+    const bodies: string[] = []
+    for (const probe of ['/etc/hostname', '/etc']) {
+      const res = await fetchJson('/api/wanyrix/workspaces', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path: probe }),
+      })
+      expect(res.status).toBe(400)
+      expectJson(res)
+      const body = res.body as { error: string }
+      expect(body.error).toContain('outside the allowed workspace roots')
+      expect(body.error).not.toContain(probe) // no path echo
+      bodies.push(body.error)
+    }
+    expect(bodies[0]).toBe(bodies[1]) // byte-identical — no differential
   })
 
   test('DELETE without id → 400 named error', async () => {

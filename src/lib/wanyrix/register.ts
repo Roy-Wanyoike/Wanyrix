@@ -10,7 +10,8 @@
  * same row instead of duplicating it, and DELETE-by-id stays unambiguous.
  */
 
-import { stat } from 'node:fs/promises'
+import { stat, realpath } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 /** Max length of the slug segment inside a workspace id. */
@@ -127,4 +128,144 @@ export async function validateCandidatePath(raw: string): Promise<PathCheck> {
  */
 export function hasRustProjectMarker(entries: string[]): boolean {
   return entries.includes('Cargo.toml') || entries.includes('.wanyrix')
+}
+
+/* ------------------------------------------------ workspace root confinement (QA-3-B-2) --- */
+
+/**
+ * Wire-safe refusal for any candidate OUTSIDE the approved workspace roots.
+ * Deliberately generic: no resolved path, no root list, and no filesystem
+ * state is echoed back to an unauthenticated caller (QA-3-B-2 AC 1). It does
+ * name the remedy — how to configure `WANYRIX_WORKSPACE_ROOTS`.
+ */
+export const ROOT_CONFINEMENT_REFUSAL =
+  "path is outside the allowed workspace roots — registration is confined to approved roots (default: this repo's engine/ and fixtures/ directories plus the system temp directory); to allow another root set WANYRIX_WORKSPACE_ROOTS to a path-delimiter-separated list of absolute directories and restart the server"
+
+/**
+ * Wire-safe refusal for any candidate INSIDE the approved roots that fails
+ * validation or the Rust-marker check. The three previously distinguishable
+ * cases (does not exist / not a directory / no Cargo.toml or .wanyrix)
+ * collapse into THIS one message so response differentials cannot enumerate
+ * the filesystem (QA-3-B-2 AC 2); the specific reason moves to the server
+ * log only.
+ */
+export const NOT_A_CONNECTABLE_PROJECT_REFUSAL =
+  'no scannable Rust project directory at the submitted path — the directory must exist, be a directory, and contain Cargo.toml or .wanyrix (the specific reason is in the server log; run `wanyrix init` in the project first if it is one)'
+
+/** Env var that overrides the default workspace roots (documented in SECURITY.md §3). */
+export const WORKSPACE_ROOTS_ENV = 'WANYRIX_WORKSPACE_ROOTS'
+
+/**
+ * The approved workspace roots (QA-3-B-2).
+ *
+ * `WANYRIX_WORKSPACE_ROOTS` — a path-delimiter-separated list of absolute
+ * directories (`:` on POSIX) — overrides the default. A set-but-unusable
+ * value (only blank entries) yields an EMPTY list: a misconfiguration
+ * refuses everything rather than silently falling back to the defaults.
+ * When unset (or blank), the documented defaults apply: the repo's own
+ * `engine/` (dogfood target) and `fixtures/` directories plus the system
+ * temp dir — registration stays a no-op change for the dogfood flow.
+ *
+ * Pure: the env value is passed in (no `process.env` read here) so the
+ * resolution is unit-testable and CWD-independent.
+ */
+export function configuredWorkspaceRoots(
+  envValue: string | undefined,
+  repoRoot: string,
+): string[] {
+  if (envValue === undefined || envValue.trim().length === 0) {
+    return [path.join(repoRoot, 'engine'), path.join(repoRoot, 'fixtures'), tmpdir()].map((root) =>
+      path.resolve(root),
+    )
+  }
+  return envValue
+    .split(path.delimiter)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => path.resolve(entry))
+}
+
+/**
+ * True when `abs` — symlink-resolved via `realpath` — is contained in one of
+ * `roots` (each root resolved best-effort the same way). Containment is
+ * decided on the REAL paths, so a symlink that resolves outside the roots is
+ * refused (QA-3-B-2 symlink-escape pin). A non-existent root can contain
+ * nothing; its lexical form is still compared so an empty misconfigured
+ * list behaves predictably.
+ */
+export async function isInsideApprovedRoots(abs: string, roots: string[]): Promise<boolean> {
+  let real = abs
+  try {
+    real = await realpath(abs)
+  } catch {
+    // nothing to resolve (validated candidates exist; races fall back lexical)
+  }
+  for (const root of roots) {
+    let realRoot = root
+    try {
+      realRoot = await realpath(root)
+    } catch {
+      // non-existent root: lexical compare only
+    }
+    const rel = path.relative(realRoot, real)
+    if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Result of the composed registration gate (validation + confinement). */
+export interface RegistrationCheck extends PathCheck {
+  /**
+   * The SPECIFIC reason for the server log only — set exactly when the wire
+   * reason was collapsed (never echoed to the caller — QA-3-B-2).
+   */
+  logDetail?: string
+  /** True when the refusal is the root-confinement policy refusal. */
+  outsideRoots?: boolean
+}
+
+/**
+ * Composed registration gate. The existing `validateCandidatePath` layers
+ * (trim → absolute → stat → isDirectory → basename) ALL still run; the
+ * root-confinement layer is then applied to the resolved path:
+ *
+ *   1. input-shape failures (empty / not absolute) keep their named reasons —
+ *      they probe no filesystem state, so they cannot serve as an oracle;
+ *   2. a resolvable candidate OUTSIDE the approved roots → the single generic
+ *      `ROOT_CONFINEMENT_REFUSAL` (no path echo, no existence information —
+ *      the host-wide existence/type/oracle dies here); the specific named
+ *      reason moves to `logDetail` (server log only);
+ *   3. a CONTAINED candidate that fails validation → the single generic
+ *      `NOT_A_CONNECTABLE_PROJECT_REFUSAL` (existence/type differentials
+ *      collapse; specific reason in `logDetail`);
+ *   4. a contained, valid candidate → ok with the canonical absolute path.
+ */
+export async function validateRegistrationPath(
+  raw: string,
+  roots: string[],
+): Promise<RegistrationCheck> {
+  const base = await validateCandidatePath(raw)
+  if (base.abs === undefined) {
+    return base // input-shape refusal: no filesystem state was probed
+  }
+  if (!(await isInsideApprovedRoots(base.abs, roots))) {
+    return {
+      ok: false,
+      abs: base.abs,
+      outsideRoots: true,
+      reason: ROOT_CONFINEMENT_REFUSAL,
+      logDetail: base.reason,
+    }
+  }
+  if (!base.ok) {
+    return {
+      ok: false,
+      abs: base.abs,
+      reason: NOT_A_CONNECTABLE_PROJECT_REFUSAL,
+      logDetail: base.reason,
+    }
+  }
+  return base
 }

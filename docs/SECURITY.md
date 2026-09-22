@@ -66,9 +66,20 @@ actually enforced in code today vs. what is **Roadmap**. See also
 | Enum params | `/impact` `type`, `/report` `format` + `flavor` | unknown value → `400` naming valid values |
 | Payload caps | `/explain` rejects bodies > 256 KB via `content-length` **and** actual byte count, before parsing or provider work | `413` in ~5 ms (measured — `docs/PERFORMANCE.md`); prompt context truncated at 48,000 chars with `contextTruncated` flag |
 | Method discipline | 405 responses carry the RFC 9110 `Allow` header (ENG-TCA-6a, ENG-TE-1) | clients can discover the correct method |
+| Workspace root confinement | `validateRegistrationPath` (`src/lib/wanyrix/register.ts`) on `POST /workspaces`, applied AFTER the absolute/stat/is-directory/basename validation layers: the realpath-resolved candidate must sit inside an approved root — `WANYRIX_WORKSPACE_ROOTS` (path-delimiter-separated absolute dirs) or, when unset, the documented defaults (this repo's `engine/` + `fixtures/` directories and the system temp dir) | outside roots → `400 path is outside the allowed workspace roots…` (one generic refusal naming the env remedy — no resolved-path echo, no existence information); a contained candidate that is not a scannable Rust project (missing / not a directory / no marker) → `404` with ONE shared message, specific reason server-log only — response differentials cannot enumerate the filesystem (QA-3-B-2) |
 
-There are no SQL, shell, or path-traversal inputs: routes read fixture data by id
-through typed getters; no user string is ever used as a file path or query.
+There are no SQL or shell inputs: routes read fixture data by id through typed
+getters, and the engine is spawned shell-free (`execFile` + argv array — no
+shell interpolation, no `spawn` with a command string). **One validated user
+string does become a filesystem path**, and this section states it precisely
+(the earlier blanket claim that "no user string is ever used as a file path"
+was contradicted by the QA-3 security audit and is superseded here):
+`POST /api/wanyrix/workspaces` accepts a caller-supplied project directory and
+passes it — only after the validation and workspace-root confinement layers
+above — as the engine's `--path` argv value. It never passes through a shell,
+the route never writes to that path (the engine scan is read-only), and any
+other route uses only ids resolved against the registry or the fixture data,
+never caller-supplied paths.
 
 ## 4. XSS posture
 

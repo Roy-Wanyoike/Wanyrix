@@ -10,8 +10,10 @@ import {
   resolveEngineBinary,
 } from '@/lib/wanyrix/engine-exec'
 import {
+  configuredWorkspaceRoots,
   hasRustProjectMarker,
-  validateCandidatePath,
+  NOT_A_CONNECTABLE_PROJECT_REFUSAL,
+  validateRegistrationPath,
   workspaceIdFor,
 } from '@/lib/wanyrix/register'
 import type { RegisteredWorkspace } from '@prisma/client'
@@ -31,7 +33,15 @@ import type { RegisteredWorkspaceSummary } from '@/lib/wanyrix/types'
  *   dogfood target).
  *
  * POST /api/wanyrix/workspaces { path } → connect a local project:
- *   1. validate the path (absolute, exists, is a directory) → 400 named reason
+ *   1. validate the path (absolute, exists, is a directory) then CONFINE it
+ *      to the approved workspace roots (QA-3-B-2): the realpath-resolved
+ *      candidate must sit inside `WANYRIX_WORKSPACE_ROOTS` (default: this
+ *      repo's `engine/` and `fixtures/` directories plus the system temp
+ *      dir). Outside roots → `400` with ONE generic refusal — no resolved
+ *      path, no existence information (the host-wide existence/type oracle
+ *      dies here). A contained candidate that is simply not a scannable Rust
+ *      project (missing / not a directory / no marker) → `404` with ONE
+ *      shared message; the specific reason goes to the server log only.
  *   2. require a Rust project marker (Cargo.toml / .wanyrix)  → 404 otherwise
  *   3. resolve the real engine binary                          → 503 otherwise
  *   4. run the REAL engine (doctor + graph, 20s each) against the path
@@ -43,13 +53,15 @@ import type { RegisteredWorkspaceSummary } from '@/lib/wanyrix/types'
  * DELETE /api/wanyrix/workspaces?id=…   → remove one registered project.
  *
  * Security: user input never passes through a shell (execFile + args array
- * only), only validated absolute paths are scanned, output buffers are
- * capped, and every spawn carries a timeout. Later scans (engine/doctor
- * `?workspace=`) only ever run paths stored in the DB here.
+ * only), only validated + root-confined absolute paths are scanned, output
+ * buffers are capped, and every spawn carries a timeout. Later scans
+ * (engine/doctor `?workspace=`) only ever run paths stored in the DB here.
+ * Response bodies never echo the resolved candidate path (QA-3-B-2 AC 1).
  *
- * Error contract: 400 malformed input · 404 not a Rust project / unknown id ·
- * 503 engine binary missing or store unavailable · 502 engine failure ·
- * 405 wrong methods carry `Allow: GET, POST, DELETE`.
+ * Error contract: 400 malformed input / outside the allowed workspace roots ·
+ * 404 no scannable Rust project directory at a CONTAINED path (one shared
+ * message) / unknown id · 503 engine binary missing or store unavailable ·
+ * 502 engine failure · 405 wrong methods carry `Allow: GET, POST, DELETE`.
  */
 
 /** Wire shape of one registered workspace (mirrors the Prisma row). */
@@ -131,10 +143,19 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  /* 1 — validate the candidate path (named, human-readable reasons). */
-  const check = await validateCandidatePath(rawPath)
+  /* 1 — validate the candidate path, then CONFINE it to the approved roots
+   * (QA-3-B-2). The `next dev` server runs from the repo root, so
+   * process.cwd() is the repo root for the default-roots computation. */
+  const roots = configuredWorkspaceRoots(process.env.WANYRIX_WORKSPACE_ROOTS, process.cwd())
+  const check = await validateRegistrationPath(rawPath, roots)
   if (!check.ok) {
-    return NextResponse.json({ error: check.reason }, { status: 400 })
+    if (check.logDetail !== undefined) {
+      // The SPECIFIC reason stays server-side only — response differentials
+      // must not enumerate the filesystem (QA-3-B-2).
+      console.warn('[workspaces] POST refused:', check.logDetail)
+    }
+    const status = check.outsideRoots || check.abs === undefined ? 400 : 404
+    return NextResponse.json({ error: check.reason }, { status })
   }
   const abs = check.abs as string
 
@@ -144,17 +165,16 @@ export async function POST(req: NextRequest) {
     entries = await readdir(abs)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    console.warn('[workspaces] POST readdir failed for', abs, ':', message)
     return NextResponse.json(
-      { error: 'path could not be read — registration refused', detail: message.slice(0, 200), path: abs },
+      { error: 'path could not be read — registration refused' },
       { status: 502 },
     )
   }
   if (!hasRustProjectMarker(entries)) {
+    console.warn('[workspaces] POST refused: no Cargo.toml or .wanyrix at', abs)
     return NextResponse.json(
-      {
-        error: `no Cargo.toml or .wanyrix at ${abs} — this does not look like a Rust project (run \`wanyrix init\` first if it is one)`,
-        path: abs,
-      },
+      { error: NOT_A_CONNECTABLE_PROJECT_REFUSAL },
       { status: 404 },
     )
   }

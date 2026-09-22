@@ -7,15 +7,20 @@
  * under test is pure by design (register.ts).
  */
 import { afterAll, describe, expect, test } from 'bun:test'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import {
+  configuredWorkspaceRoots,
   fnv1a8,
   hasRustProjectMarker,
+  isInsideApprovedRoots,
+  NOT_A_CONNECTABLE_PROJECT_REFUSAL,
+  ROOT_CONFINEMENT_REFUSAL,
   slugify,
   validateCandidatePath,
+  validateRegistrationPath,
   workspaceIdFor,
 } from '../../src/lib/wanyrix/register'
 
@@ -33,6 +38,11 @@ async function makeTempProject(): Promise<string> {
   tempRoots.push(dir)
   return dir
 }
+
+// CWD-independent repo root (the suite must pass no matter which directory
+// bun is invoked from — e.g. `cd tests && bun test …`). Module scope: the
+// QA-3-B-2 confinement describes below use it too.
+const repoRoot = path.resolve(import.meta.dir, '..', '..')
 
 /* ------------------------------------------------------------------ slug -- */
 
@@ -114,10 +124,6 @@ describe('workspaceIdFor', () => {
 /* -------------------------------------------------------- path validation -- */
 
 describe('validateCandidatePath (real filesystem fixtures)', () => {
-  // CWD-independent: the suite must pass no matter which directory bun is
-  // invoked from (e.g. `cd tests && bun test …` when the sandbox root is unhealthy).
-  const repoRoot = path.resolve(import.meta.dir, '..', '..')
-
   test('repo engine/ dir → ok, canonical abs path', async () => {
     const check = await validateCandidatePath(repoRoot + '/engine')
     expect(check.ok).toBe(true)
@@ -178,5 +184,161 @@ describe('hasRustProjectMarker', () => {
     await writeFile(path.join(dir, 'Cargo.toml'), '[package]\nname = "x"\n')
     const { readdir } = await import('node:fs/promises')
     expect(hasRustProjectMarker(await readdir(dir))).toBe(true)
+  })
+})
+
+/* --------------------------------------- workspace root confinement (QA-3-B-2) --- */
+
+describe('configuredWorkspaceRoots (QA-3-B-2)', () => {
+  test('env unset → documented defaults: repo engine/ + fixtures/ + system temp dir', () => {
+    const roots = configuredWorkspaceRoots(undefined, repoRoot)
+    expect(roots).toEqual([
+      path.resolve(repoRoot, 'engine'),
+      path.resolve(repoRoot, 'fixtures'),
+      path.resolve(tmpdir()),
+    ])
+  })
+
+  test('env blank (whitespace only) → treated as unset (defaults)', () => {
+    expect(configuredWorkspaceRoots('   ', repoRoot)).toEqual(configuredWorkspaceRoots(undefined, repoRoot))
+  })
+
+  test('env set → split on the path delimiter, trimmed, resolved absolute', () => {
+    const joined = [` ${repoRoot}/one `, path.join(repoRoot, 'two'), ''].join(path.delimiter)
+    const roots = configuredWorkspaceRoots(joined, repoRoot)
+    expect(roots).toEqual([path.resolve(repoRoot, 'one'), path.resolve(repoRoot, 'two')])
+  })
+
+  test('env set but unusable (only blank entries) → EMPTY list (refuse-everything, no silent fallback)', () => {
+    expect(configuredWorkspaceRoots(`  ${path.delimiter} ${path.delimiter} `, repoRoot)).toEqual([])
+  })
+})
+
+describe('isInsideApprovedRoots (QA-3-B-2)', () => {
+  test('a path inside an approved root → true; the root itself → true', async () => {
+    const root = await makeTempProject()
+    const nested = path.join(root, 'deep', 'deeper')
+    await mkdir(nested, { recursive: true })
+    expect(await isInsideApprovedRoots(nested, [root])).toBe(true)
+    expect(await isInsideApprovedRoots(root, [root])).toBe(true)
+  })
+
+  test('a sibling whose name merely shares the prefix → false (boundary is a path separator)', async () => {
+    const root = await makeTempProject()
+    const sibling = await makeTempProject()
+    expect(path.basename(sibling).startsWith(path.basename(root))).toBe(false) // test sanity
+    expect(await isInsideApprovedRoots(sibling, [root])).toBe(false)
+  })
+
+  test('a symlink resolving OUTSIDE the roots → false (realpath, not lexical)', async () => {
+    const root = await makeTempProject()
+    const outside = await makeTempProject() // exists, but not an approved root
+    const link = path.join(root, 'escape')
+    await symlink(outside, link)
+    expect(await isInsideApprovedRoots(link, [root])).toBe(false)
+    // the lexical path WOULD have passed — this is why containment is
+    // decided on realpath (QA-3-B-2 symlink-escape pin)
+    expect(link.startsWith(root)).toBe(true)
+  })
+})
+
+describe('validateRegistrationPath — composed validation + confinement (QA-3-B-2)', () => {
+  test('path inside an approved root → allowed with canonical abs', async () => {
+    const root = await makeTempProject()
+    const project = await mkdir(path.join(root, 'project'), { recursive: true }).then(() =>
+      path.join(root, 'project'),
+    )
+    const check = await validateRegistrationPath(`  ${project} `, [root])
+    expect(check.ok).toBe(true)
+    expect(check.abs).toBe(path.resolve(project))
+    expect(check.reason).toBeUndefined()
+    expect(check.logDetail).toBeUndefined()
+  })
+
+  test('`..` inside the roots resolves to a contained path → accepted', async () => {
+    const root = await makeTempProject()
+    const project = path.join(root, 'project')
+    await mkdir(project, { recursive: true })
+    const check = await validateRegistrationPath(path.join(root, 'sub', '..', 'project'), [root])
+    expect(check.ok).toBe(true)
+    expect(check.abs).toBe(project)
+  })
+
+  test('path outside the roots → ONE generic refusal, no path echo, no existence info', async () => {
+    const root = await makeTempProject()
+    const outside = await makeTempProject() // exists — but not approved
+    const check = await validateRegistrationPath(outside, [root])
+    expect(check.ok).toBe(false)
+    expect(check.outsideRoots).toBe(true)
+    expect(check.reason).toBe(ROOT_CONFINEMENT_REFUSAL)
+    // no resolved-path echo in the wire refusal (QA-3-B-2 AC 1)
+    expect(check.reason).not.toContain(outside)
+    // no filesystem state leak: the existing validator's 'does not exist' /
+    // 'not a directory' knowledge must not surface either
+    expect(check.reason).not.toContain('does not exist')
+    expect(check.reason).not.toContain('directory — pass')
+    // the candidate itself was perfectly valid — the refusal is pure policy,
+    // so there is no specific reason to log either
+    expect(check.logDetail).toBeUndefined()
+    // the existing validation still ran underneath: a nonexistent outside
+    // path carries the same generic refusal, with its specific reason logged
+    const missing = await validateRegistrationPath(path.join(outside, 'no-such-dir-xyz'), [root])
+    expect(missing.ok).toBe(false)
+    expect(missing.reason).toBe(ROOT_CONFINEMENT_REFUSAL)
+    expect(missing.reason).toBe(check.reason) // one message for ALL outside paths
+    expect(missing.logDetail).toContain('does not exist')
+  })
+
+  test('env unset → out-of-default-root path refused WITH named guidance (how to set the env)', async () => {
+    // repoRoot itself is outside the documented defaults (engine/, fixtures/,
+    // system temp dir), exists, and is a directory — the pure env-unset case.
+    const check = await validateRegistrationPath(repoRoot, configuredWorkspaceRoots(undefined, repoRoot))
+    expect(check.ok).toBe(false)
+    expect(check.outsideRoots).toBe(true)
+    expect(check.reason).toBe(ROOT_CONFINEMENT_REFUSAL)
+    expect(check.reason).toContain('WANYRIX_WORKSPACE_ROOTS')
+    expect(check.reason).toContain('path-delimiter-separated')
+  })
+
+  test('symlink escaping the root → refused via the resolved path, generic wire message', async () => {
+    const root = await makeTempProject()
+    const outside = await makeTempProject()
+    await mkdir(path.join(root, 'project'), { recursive: true })
+    await symlink(outside, path.join(root, 'project', 'escape'))
+    const check = await validateRegistrationPath(path.join(root, 'project', 'escape'), [root])
+    expect(check.ok).toBe(false)
+    expect(check.outsideRoots).toBe(true)
+    expect(check.reason).toBe(ROOT_CONFINEMENT_REFUSAL)
+    expect(check.reason).not.toContain(outside) // no echo of the resolved target
+  })
+
+  test('contained-but-invalid: nonexistent and file-not-dir share ONE 404-class message; specifics go to logDetail', async () => {
+    const root = await makeTempProject()
+    const missing = await validateRegistrationPath(path.join(root, 'no-such-dir-xyz'), [root])
+    expect(missing.ok).toBe(false)
+    expect(missing.outsideRoots).toBeUndefined()
+    expect(missing.reason).toBe(NOT_A_CONNECTABLE_PROJECT_REFUSAL)
+    expect(missing.reason).not.toContain('does not exist')
+    expect(missing.logDetail).toContain('does not exist')
+
+    const file = path.join(root, 'a-file.txt')
+    await writeFile(file, 'data')
+    const notDir = await validateRegistrationPath(file, [root])
+    expect(notDir.ok).toBe(false)
+    expect(notDir.reason).toBe(NOT_A_CONNECTABLE_PROJECT_REFUSAL)
+    expect(notDir.reason).toBe(missing.reason) // collapsed — no enumeration
+    expect(notDir.logDetail).toContain('not a directory')
+  })
+
+  test('input-shape refusals keep their named reasons (no fs state probed, no oracle value)', async () => {
+    const root = await makeTempProject()
+    const relative = await validateRegistrationPath('engine', [root])
+    expect(relative.ok).toBe(false)
+    expect(relative.reason).toContain('absolute')
+    expect(relative.logDetail).toBeUndefined()
+
+    const empty = await validateRegistrationPath('   ', [root])
+    expect(empty.ok).toBe(false)
+    expect(empty.reason).toContain('empty')
   })
 })
