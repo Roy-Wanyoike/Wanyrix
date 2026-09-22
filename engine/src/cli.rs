@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 
 use crate::analysis::{analyze, Finding};
 use crate::build::{self, BuildOptions};
+use crate::entitlement::LicenseCmd;
 use crate::graph::{build_graph, Graph};
 use crate::health::build_health;
 use crate::model::{EngineError, WorkspaceScan};
@@ -15,6 +16,8 @@ use crate::product;
 use crate::scan::{scan_workspace, scan_workspace_excluding};
 use crate::timestamp::iso8601_now;
 use crate::{daemon, store, synth, telemetry};
+
+pub use crate::entitlement::{activate_run, entitlement_run, license_run};
 
 #[derive(Parser)]
 #[command(
@@ -310,6 +313,37 @@ pub enum Command {
         /// to the artifact files so a fixed command re-runs byte-identical).
         #[arg(long)]
         pretty: bool,
+    },
+    /// Verify an ed25519-signed entitlement token OFFLINE and cache it under
+    /// `.wanyrix/entitlement.json` (issue #94). Zero network I/O — the key
+    /// argument is a token file path or the literal token JSON.
+    Activate {
+        /// Path to the signed token file, or the literal token JSON.
+        #[arg(long)]
+        key: String,
+        /// Emit the entitlement envelope instead of a human-readable summary.
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Report the cached entitlement (wanyrix.entitlement/v1): plan, seats
+    /// (measured on this machine), expiry, days-until-revalidation and the
+    /// tier-gated surface registry. No license is an honest
+    /// `not-activated` envelope — the free tier is never gated.
+    Entitlement {
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
+    },
+    /// Maintainer tooling: generate signing keypairs and mint signed
+    /// entitlement tokens (offline; private keys are NEVER committed).
+    License {
+        #[command(subcommand)]
+        cmd: LicenseCmd,
     },
     /// Serverless team sync over a git REGISTRY BRANCH (wanyrix.sync/v1,
     /// issue #92): a git branch IS the shared store. `push` commits the

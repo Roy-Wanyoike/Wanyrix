@@ -10,18 +10,25 @@ name = "wanyrix"
 path = "src/main.rs"
 
 # Dependency policy (engine phase-2): minimal by design — no network
-# anywhere (the daemon speaks only over a Unix domain socket; telemetry
+# anywhere (the daemon speaks only over a local Unix domain socket; telemetry
 # ingestion reads local JSON streams). `toml` is required to parse real
 # Cargo.toml manifests faithfully (inline tables, [[bin]], inheritance);
 # hand-rolling TOML would trade correctness for a smaller tree. `rusqlite`
 # (bundled — the C SQLite is compiled from source into the binary, so no
 # system library is ever probed) is required for local scan persistence;
 # it touches no network and stores only what `wanyrix doctor --json`
-# already measured. clap drives the CLI. No other dependencies — the
-# fingerprint, the daemon protocol and the secret scrubber are
-# hand-rolled to keep the tree auditable.
+# already measured. clap drives the CLI. `ed25519-dalek` is the ONE
+# deliberate dependency deviation from "hand-rolled to keep the tree
+# auditable": issue #94's offline entitlement tokens require a real
+# signature scheme, and hand-rolling ed25519 would be a security liability,
+# not an auditability win. It is a pure-Rust, no-std-capable crate used here
+# with default features disabled — no RNG trait, no zeroize, no serde glue:
+# exactly sign/verify over bytes, offline only. Deviation justified by and
+# scoped to issue #94; keygen randomness comes from /dev/urandom via
+# std::fs (no `rand` dependency). See engine/src/entitlement.rs.
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+ed25519-dalek = { version = "2", default-features = false }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

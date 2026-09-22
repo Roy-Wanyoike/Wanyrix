@@ -106,3 +106,57 @@ and integrations will consume).
 - **Cloud (when built)**: accounts exist only for sync/sharing — device
   auth (OAuth device flow, no passwords at rest), organization tenancy,
   opt-in off-by-default sync. Accounts gate sharing, never the product.
+
+## Local subscription licensing (issue #94)
+
+Shipped (engine E2 + web E1): a team can pay for Wanyrix and use it locally,
+with **only entitlements** ever touching the cloud — never data. The engine
+verifies licenses 100% OFFLINE (`wanyrix activate --key <token>` → ed25519
+signature check against the embedded public key → cached verbatim at
+`.wanyrix/entitlement.json`; `wanyrix entitlement --json` reports the state as
+`wanyrix.entitlement/v1`). Activation and verification open **zero sockets** —
+pinned by a source-level scan test — and any future `--fetch` revalidation
+mode is contractually pinned to an outbound payload of EXACTLY
+`{license_key_hash, engine_version, timestamp}` (nothing else ever leaves the
+machine).
+
+### Tiers → gated surfaces (the single mapping, `engine/src/entitlement.rs`)
+
+| Tier | Gets | Gated surfaces |
+| --- | --- | --- |
+| **Free** | Every core local surface, free forever: doctor, graph, health, analyze, dependencies, build, experiments, events, exports, local AI, full offline operation | **None — never gated, never a crippled trial (rule #1 above)** |
+| **Team** | Export sharing (sha256-bound artifacts), registry sync + CI referee (issue #92), team dashboards | `sync.push`, `sync.pull` → require `team` |
+| **Enterprise** | SSO/SAML/OIDC/SCIM, audit logs, on-prem entitlement server (own signing key; machines still verify offline) | Everything Team has, plus Enterprise-only surfaces as they land (roadmap #66) |
+
+A missing, deleted or expired license refuses **premium surfaces by name**
+(`EngineError::SubscriptionRequired { surface, plan_required }`) — measured
+core data on disk is never hidden, corrupted or rewritten (gates never touch
+history). An expired token keeps working through a visible **30-day
+revalidation grace** window (`status: grace` in the envelope); beyond it, the
+refusal names the expiry date.
+
+### Sandbox issuance honesty label
+
+Until a payment backend exists, the web Plans view (`Plans`) issues REAL,
+offline-verifiable tokens locally and labels every action **`estimated`**:
+sandbox-local issuance, **no payment method collected, no charge made, never a
+simulated purchase**. The 14-day trial requires no payment method; issued
+tokens carry UTC day-count expiry (`trial` = 14 days, `team` = 365) and are
+activatable with `wanyrix activate --key`. Without the operator-configured dev
+signing key (`WANYRIX_SIGNING_KEY`) the issuer answers an honest 503 — it
+never simulates a license. Prices remain deliberately unpublished (validated
+only after customer discovery).
+
+### ed25519 at release signing
+
+Tokens verify against an embedded ed25519 public key
+(`RELEASE_PUBLIC_KEY_HEX`). The repository intentionally ships the
+`PENDING_RELEASE_KEY` placeholder: the real keypair is generated **at release
+signing**, the private half lives only in the release signing environment
+(never committed, never in the repo), and the public half is embedded into the
+binary. Until then (and for Enterprise on-prem entitlement servers and tests)
+the documented `WANYRIX_ACTIVATION_PUBKEY` override names the trusted key.
+`ed25519-dalek` (default features off) is the one deliberate dependency
+deviation from the hand-rolled-crypto policy — hand-rolling signatures would
+be a security liability, not an auditability win (documented in
+`engine/Cargo.toml`).

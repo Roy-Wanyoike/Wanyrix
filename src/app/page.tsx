@@ -20,13 +20,15 @@ import AiView from '@/components/wanyrix/views/ai-view'
 import ScorecardView from '@/components/wanyrix/views/scorecard-view'
 import IssuesView from '@/components/wanyrix/views/issues-view'
 import OrganizationView from '@/components/wanyrix/views/organization-view'
+import PlansView from '@/components/wanyrix/views/plans-view'
 import SettingsView from '@/components/wanyrix/views/settings-view'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import type { ViewId } from '@/lib/wanyrix/types'
 
 /**
  * View registry — one entry per ViewId (AUDIT-I3: 14 required surfaces +
- * 4 pre-existing surfaces that keep their nav entries).
+ * 4 pre-existing surfaces that keep their nav entries + `plans`, the local
+ * subscription surface, issue #94 E1).
  * Naming note: `graph` renders graph-view.tsx (the band-layout dependency
  * backbone, formerly dependencies-view.tsx); `dependencies` renders the
  * version/duplicate/risk surface.
@@ -49,6 +51,7 @@ const VIEWS: Record<ViewId, React.ComponentType<{ onNavigate?: (v: ViewId) => vo
   scorecard: ScorecardView,
   issues: IssuesView,
   organization: OrganizationView,
+  plans: PlansView,
   settings: SettingsView,
 }
 

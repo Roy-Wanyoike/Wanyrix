@@ -673,7 +673,8 @@ export interface EngineWhatChangedReport {
  * dependencies, graph, findings, architecture, experiments, runtime,
  * history, ai, scorecard (Policies), organization, settings.
  * `diagnostics`, `prs`, `simulator` and `issues` are pre-existing surfaces —
- * they keep their nav entries so nothing regresses.
+ * they keep their nav entries so nothing regresses. `plans` is the local
+ * subscription surface (issue #94 E1).
  */
 export type ViewId =
   | 'overview'
@@ -693,6 +694,7 @@ export type ViewId =
   | 'scorecard'
   | 'issues'
   | 'organization'
+  | 'plans'
   | 'settings'
 
 // ---------------------------------------------------------------------------
