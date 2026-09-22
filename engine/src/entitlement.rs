@@ -81,6 +81,9 @@ pub const TOKEN_SCHEMA: &str = "wanyrix.entitlement.token/v1";
 pub const CACHE_SCHEMA: &str = "wanyrix.entitlement.cache/v1";
 /// Keygen report envelope (maintainer tooling).
 pub const KEYGEN_SCHEMA: &str = "wanyrix.license-keygen/v1";
+/// The private-key handling note carried verbatim in the keygen envelope
+/// and the human output (one fact, two flavors — never diverging).
+pub const KEYGEN_MODE_NOTE: &str = "private key file mode 0600 on unix — NEVER commit, never share";
 /// Token format version (bumped when the field set or algorithm changes).
 pub const TOKEN_VERSION: u32 = 1;
 /// Days a past-expiry entitlement still works, with a visible grace label.
@@ -367,6 +370,35 @@ pub struct KeygenOutcome {
     pub private_key_path: PathBuf,
     pub public_key_path: PathBuf,
     pub public_key_hex: String,
+}
+
+/// The `wanyrix.license-keygen/v1` envelope (`license keygen --json`):
+/// machine-readable paths + the PUBLIC half only. The private seed never
+/// leaves its 0600 file — the envelope carries its PATH, never the bytes.
+/// Deliberately has NO wall-clock field: keys are entropy-nondeterministic
+/// by design, the envelope itself is fully deterministic.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeygenReport {
+    pub schema: &'static str,
+    pub private_key_path: String,
+    pub public_key_path: String,
+    pub public_key_hex: String,
+    pub mode_note: &'static str,
+}
+
+impl KeygenReport {
+    /// Build the envelope from a keygen outcome (paths echoed exactly as
+    /// the operator passed them — no absolute-path fabrication).
+    fn from_outcome(outcome: &KeygenOutcome) -> KeygenReport {
+        KeygenReport {
+            schema: KEYGEN_SCHEMA,
+            private_key_path: outcome.private_key_path.display().to_string(),
+            public_key_path: outcome.public_key_path.display().to_string(),
+            public_key_hex: outcome.public_key_hex.clone(),
+            mode_note: KEYGEN_MODE_NOTE,
+        }
+    }
 }
 
 const PRIV_FILE: &str = "wanyrix-license-priv.hex";
@@ -1102,8 +1134,13 @@ fn entitlement_human(report: &EntitlementReport) -> String {
 /// `wanyrix license keygen|issue` — maintainer tooling.
 pub fn license_run(cmd: LicenseCmd) -> Result<String, EngineError> {
     match cmd {
-        LicenseCmd::Keygen { out } => {
+        LicenseCmd::Keygen { out, json, pretty } => {
             let outcome = keygen(&out)?;
+            if json {
+                // Machine flavor (docs/CLI.md row 23): the versioned
+                // wanyrix.license-keygen/v1 envelope — paths + public half.
+                return crate::cli::serialize_json(&KeygenReport::from_outcome(&outcome), pretty);
+            }
             Ok(format!(
                 "wanyrix license keygen — new ed25519 signing keypair\n  private key: {} (mode 0600 on unix — NEVER commit, never share)\n  public key:  {}\n  public key hex: {}\n  note: activation trusts the EMBEDDED release key — a keypair is authoritative only once its public half is embedded (dev) or distributed to the on-prem verifier (WANYRIX_ACTIVATION_PUBKEY)\n",
                 outcome.private_key_path.display(),
@@ -1182,6 +1219,14 @@ pub enum LicenseCmd {
         /// Output directory (created).
         #[arg(long)]
         out: PathBuf,
+        /// Emit the wanyrix.license-keygen/v1 envelope (paths + public half
+        /// only — the private seed never appears on stdout) instead of the
+        /// human summary.
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
     },
     /// Mint a signed entitlement token (`wanyrix.entitlement.token/v1`).
     Issue {

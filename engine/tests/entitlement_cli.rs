@@ -110,6 +110,131 @@ fn license_keygen_writes_a_keypair_once_and_refuses_to_clobber() {
 }
 
 #[test]
+fn license_keygen_json_emits_the_documented_envelope() {
+    // QA-4-B-2: docs/CLI.md row 23 promises `wanyrix.license-keygen/v1`
+    // behind `--json`; the envelope must be reachable with the documented
+    // fields (private key path, public key path, public key hex, mode note).
+    let root = temp_dir("keygen-json");
+    let dir = root.join("keys-json");
+    let (stdout, stderr, ok) = run_in(
+        &root,
+        &[],
+        &[
+            "license",
+            "keygen",
+            "--out",
+            dir.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    assert!(ok, "stderr: {stderr}");
+    let report: Value =
+        serde_json::from_str(stdout.trim()).expect("--json stdout is exactly the envelope");
+    assert_eq!(
+        report["schema"],
+        wanyrix_engine::entitlement::KEYGEN_SCHEMA,
+        "the documented schema id"
+    );
+    // Field discipline: paths + public half + mode note — and NOTHING else
+    // (no wall-clock field: keygen nondeterminism is the entropy, the
+    // envelope itself is deterministic).
+    let expected = [
+        "schema",
+        "privateKeyPath",
+        "publicKeyPath",
+        "publicKeyHex",
+        "modeNote",
+    ];
+    let actual: Vec<&str> = report
+        .as_object()
+        .expect("envelope is a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let mut sorted_expected = expected.to_vec();
+    sorted_expected.sort_unstable();
+    let mut sorted_actual = actual.clone();
+    sorted_actual.sort_unstable();
+    assert_eq!(sorted_actual, sorted_expected, "exact envelope field set");
+
+    let priv_path = report["privateKeyPath"].as_str().unwrap();
+    let pub_path = report["publicKeyPath"].as_str().unwrap();
+    assert!(priv_path.ends_with("wanyrix-license-priv.hex"));
+    assert!(pub_path.ends_with("wanyrix-license-pub.hex"));
+    let pub_hex = report["publicKeyHex"].as_str().unwrap();
+    assert_eq!(pub_hex.len(), 64, "ed25519 public half as 64 hex chars");
+    assert!(pub_hex.chars().all(|c| c.is_ascii_hexdigit()));
+    let note = report["modeNote"].as_str().unwrap();
+    assert!(note.contains("0600"), "mode note travels: {note}");
+    assert!(note.contains("NEVER commit"));
+
+    // The envelope's paths are REAL: the files exist and the public file's
+    // content matches the envelope's hex (measured, not asserted into being).
+    assert!(root.join(priv_path).exists(), "private key file exists");
+    let pub_on_disk = std::fs::read_to_string(root.join(pub_path)).unwrap();
+    assert_eq!(pub_on_disk.trim(), pub_hex, "public half matches on disk");
+
+    // Key-material discipline: the PRIVATE seed is on stdout in NEITHER
+    // flavor — only its path is.
+    let priv_hex = std::fs::read_to_string(root.join(priv_path)).unwrap();
+    assert!(
+        !stdout.contains(priv_hex.trim()),
+        "the private seed must never appear on stdout"
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn license_keygen_human_output_unchanged_and_envelope_reachable() {
+    // QA-4 measured the contract's 22 machine schemas at 21/22 reachable —
+    // keygen --json was the dead one. This pin is the flip to 22/22: the
+    // default human flavor stays byte-comparable to the pre-fix text, and
+    // the SAME invocation with --json emits the documented envelope.
+    let root = temp_dir("keygen-human");
+    let human_dir = root.join("keys-human");
+    let (human, stderr, ok) = run_in(
+        &root,
+        &[],
+        &["license", "keygen", "--out", human_dir.to_str().unwrap()],
+    );
+    assert!(ok, "stderr: {stderr}");
+    assert!(
+        human.starts_with("wanyrix license keygen — new ed25519 signing keypair\n"),
+        "human headline unchanged: {human}"
+    );
+    assert!(human.contains("  private key: "));
+    assert!(human.contains(" (mode 0600 on unix — NEVER commit, never share)"));
+    assert!(human.contains("  public key:  "));
+    assert!(human.contains("  public key hex: "));
+    assert!(human.contains("  note: activation trusts the EMBEDDED release key"));
+    assert!(
+        serde_json::from_str::<Value>(human.trim()).is_err(),
+        "default output stays human text, not JSON"
+    );
+
+    let json_dir = root.join("keys-json2");
+    let (stdout, stderr, ok) = run_in(
+        &root,
+        &[],
+        &[
+            "license",
+            "keygen",
+            "--out",
+            json_dir.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    assert!(ok, "stderr: {stderr}");
+    let report: Value = serde_json::from_str(stdout.trim()).expect("envelope reachable");
+    assert_eq!(
+        report["schema"],
+        wanyrix_engine::entitlement::KEYGEN_SCHEMA,
+        "QA-4 envelope sweep: 21/22 -> 22/22"
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn license_issue_json_prints_exactly_the_signed_token() {
     let root = temp_dir("issue");
     let (priv_hex, pub_hex) = mint_keypair(&root, "issue");
