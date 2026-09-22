@@ -360,7 +360,7 @@ function FindingCard({
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
               {f.confidence}%
             </span>
-            <span className="font-mono text-[10px] text-muted-foreground/80">
+            <span className="font-mono text-[10px] text-muted-foreground/90">
               detector: {f.detection}
             </span>
           </div>

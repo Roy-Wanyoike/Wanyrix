@@ -39,7 +39,7 @@ const MARKDOWN_COMPONENTS: Components = {
   em: ({ children }) => <em className="text-muted-foreground">{children}</em>,
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-4">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-4">{children}</ol>,
-  li: ({ children }) => <li className="pl-0.5 marker:text-muted-foreground/50">{children}</li>,
+  li: ({ children }) => <li className="pl-0.5 marker:text-muted-foreground/90">{children}</li>,
   code: ({ children }) => (
     <code className="rounded bg-white/[0.08] px-1 py-0.5 font-mono text-[11.5px] text-primary">{children}</code>
   ),

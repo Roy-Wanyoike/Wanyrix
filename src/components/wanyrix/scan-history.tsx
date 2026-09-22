@@ -338,7 +338,7 @@ export function ScanHistoryPanel({
       {history.length === 0 ? (
         <div className="flex h-28 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-center">
           <p className="text-sm text-muted-foreground">No scans recorded yet.</p>
-          <p className="font-mono text-[10.5px] text-muted-foreground/70">
+          <p className="font-mono text-[10.5px] text-muted-foreground/90">
             run wanyrix doctor — from here, the topbar, or ⌘K
           </p>
         </div>
@@ -395,7 +395,7 @@ export function ScanHistoryPanel({
               )
             })}
             {triggerFilter !== 'all' && (
-              <span className="ml-auto font-mono text-[9.5px] text-muted-foreground/70">
+              <span className="ml-auto font-mono text-[9.5px] text-muted-foreground/90">
                 {filtered.length} of {history.length} shown
               </span>
             )}
@@ -495,7 +495,7 @@ export function ScanHistoryPanel({
                       </>
                     )}
                   </span>
-                  <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground/70">
+                  <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground/90">
                     {(h.durationMs / 1000).toFixed(1)}s wall clock
                   </span>
                   <button
@@ -504,7 +504,7 @@ export function ScanHistoryPanel({
                       e.stopPropagation()
                       copyRunId(h.id)
                     }}
-                    className="rounded p-1 text-muted-foreground/50 opacity-0 transition-all hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    className="rounded p-1 text-muted-foreground/90 opacity-0 transition-all hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                     aria-label={`Copy run id ${h.id}`}
                     title={h.id}
                   >
@@ -518,7 +518,7 @@ export function ScanHistoryPanel({
                     <MeasurementBadge status={delta < 0 ? 'measured' : 'estimated'} />
                   )}
                   {notMeasured && (
-                    <span className="rounded border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground/80">
+                    <span className="rounded border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground/90">
                       not-measured
                     </span>
                   )}

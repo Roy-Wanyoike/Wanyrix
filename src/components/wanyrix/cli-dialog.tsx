@@ -82,19 +82,37 @@ function CommandRow({ cmd, maps, ai }: { cmd: string; maps: string; ai?: boolean
   )
 }
 
+/**
+ * Issue #131 — dialog focus restoration. Radix's default close-focus behavior
+ * targets the element registered via DialogTrigger; this dialog is opened by
+ * external state (`open`/`onOpenChange` from app-shell), so no trigger is
+ * registered and Escape/close/overlay-dismiss landed focus on <body>. The
+ * invoking control (the sidebar "view CLI contract" button) is handed to the
+ * dialog as a ref instead: `onCloseAutoFocus` cancels Radix's default and
+ * moves focus back to it. Escape, the ✕ button and overlay clicks all funnel
+ * through onCloseAutoFocus, so every close path is covered.
+ */
+export function restoreFocusToTrigger(event: Event, trigger: HTMLElement | null | undefined): void {
+  if (!trigger || !trigger.isConnected) return
+  event.preventDefault()
+  trigger.focus()
+}
+
 export function CliContractDialog({
   open,
   onOpenChange,
-  trigger,
+  triggerRef,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
-  trigger?: React.ReactNode
+  triggerRef?: React.RefObject<HTMLElement | null>
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {trigger && <span onClick={() => onOpenChange(true)}>{trigger}</span>}
-      <DialogContent className="max-w-lg sm:max-w-2xl">
+      <DialogContent
+        className="max-w-lg sm:max-w-2xl"
+        onCloseAutoFocus={(event) => restoreFocusToTrigger(event, triggerRef?.current)}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TerminalSquare className="size-4 text-primary" aria-hidden />
@@ -116,7 +134,7 @@ export function CliContractDialog({
         </ul>
 
         <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/90">
             exit codes (as implemented)
           </p>
           <div className="mt-2 grid grid-cols-1 gap-1.5">

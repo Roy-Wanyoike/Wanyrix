@@ -202,7 +202,7 @@ export default function DependenciesView({ onNavigate }: ViewProps) {
                           </Button>
                         </div>
                       ) : (
-                        <span className="font-mono text-[10px] text-muted-foreground/70">no upgrade scenario catalogued</span>
+                        <span className="font-mono text-[10px] text-muted-foreground/90">no upgrade scenario catalogued</span>
                       )}
                     </TableCell>
                   </TableRow>

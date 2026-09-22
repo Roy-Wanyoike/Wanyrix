@@ -45,10 +45,10 @@ const TONE_DOT: Record<Signal['tone'], string> = {
 }
 
 const TONE_TEXT: Record<Signal['tone'], string> = {
-  red: 'text-red-300',
-  amber: 'text-amber-300',
-  teal: 'text-teal-300',
-  emerald: 'text-emerald-300',
+  red: 'text-red-700 dark:text-red-300',
+  amber: 'text-amber-800 dark:text-amber-300',
+  teal: 'text-teal-700 dark:text-teal-300',
+  emerald: 'text-emerald-700 dark:text-emerald-300',
 }
 
 export function NotificationsPopover({

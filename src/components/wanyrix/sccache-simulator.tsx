@@ -152,7 +152,7 @@ export function SccacheSimulator({
               className="mt-3"
               aria-label="Cache hit rate"
             />
-            <div className="mt-1 flex justify-between font-mono text-[9.5px] text-muted-foreground/70">
+            <div className="mt-1 flex justify-between font-mono text-[9.5px] text-muted-foreground/90">
               <span>0%</span>
               <span>
                 {sliderMax === 90
@@ -238,7 +238,7 @@ export function SccacheSimulator({
                 {telemetry.artifactsFresh}/{telemetry.artifactsTotal} artifacts fresh · rate{' '}
                 {telemetry.cacheHitRate}/100 · {telemetry.binaryVersion}
               </p>
-              <p className="mt-0.5 font-mono text-[9.5px] text-muted-foreground/75">
+              <p className="mt-0.5 font-mono text-[9.5px] text-muted-foreground/90">
                 {telemetry.buildSuccess ? (
                   <>
                     build succeeded · measured {WHEN_FMT.format(telemetry.measuredAt)} · workspace “

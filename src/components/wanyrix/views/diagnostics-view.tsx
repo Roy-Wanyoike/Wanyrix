@@ -106,7 +106,7 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
                     <span
                       className={cn(
                         'w-8 shrink-0 select-none pr-2 text-right font-mono text-[10px] tabular-nums leading-6',
-                        errActive ? 'text-red-400' : isActiveLine ? 'text-primary' : 'text-muted-foreground/60',
+                        errActive ? 'text-red-400' : isActiveLine ? 'text-primary' : 'text-muted-foreground/90',
                       )}
                     >
                       {i + 1}
@@ -152,7 +152,7 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
                   <span className={cn('min-w-0 flex-1 truncate text-[13px] font-medium', isActive ? 'text-foreground' : 'text-muted-foreground')}>
                     {step.title}
                   </span>
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">L{step.line}</span>
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground/90">L{step.line}</span>
                 </button>
               )
             })}
@@ -272,7 +272,7 @@ function BorrowCheckerTab({ borrow }: { borrow: BorrowScenario }) {
                 <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
                   <Scale className="mt-0.5 size-3 shrink-0 text-amber-300/80" />
                   <span>
-                    <span className="text-muted-foreground/70">Trade-off:</span> {sol.tradeOff}
+                    <span className="text-muted-foreground/90">Trade-off:</span> {sol.tradeOff}
                   </span>
                 </p>
               </AccordionContent>
@@ -426,7 +426,7 @@ function AsyncFlowTab({ request, onNavigate }: { request: DiagnosticsPayload['re
                   <p className="truncate text-xs font-medium">{seg.label}</p>
                   <p className="truncate font-mono text-[10px] text-muted-foreground">{seg.span}</p>
                   {seg.note && (
-                    <p className={cn('flex items-center gap-1 truncate text-[10px]', concurrent ? 'text-amber-300/80' : isBlocked ? 'text-red-300/80' : 'text-muted-foreground/70')}>
+                    <p className={cn('flex items-center gap-1 truncate text-[10px]', concurrent ? 'text-amber-300/80' : isBlocked ? 'text-red-300/80' : 'text-muted-foreground/90')}>
                       {concurrent && <GitBranch className="size-2.5 shrink-0" />}
                       {seg.note}
                     </p>

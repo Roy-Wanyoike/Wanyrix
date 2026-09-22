@@ -47,7 +47,7 @@ function IssueCard({ issue }: { issue: IssueItem }) {
             #{issue.ghIssue}
             <ExternalLink className="size-3" aria-hidden />
           </a>
-          <span className="text-muted-foreground/40">·</span>
+          <span className="text-muted-foreground/90">·</span>
           <h3 className="text-[13.5px] font-medium leading-snug">{issue.title}</h3>
         </div>
 

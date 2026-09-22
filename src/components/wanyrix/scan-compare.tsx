@@ -172,7 +172,7 @@ export function ScanComparePanel({
       {allZero ? (
         <p className="py-1 font-mono text-[11px] text-muted-foreground">
           no measurable change across any metric — the two runs recorded identical figures
-          <span className="text-muted-foreground/70"> (expected when the engine replays the same telemetry)</span>
+          <span className="text-muted-foreground/90"> (expected when the engine replays the same telemetry)</span>
         </p>
       ) : (
         <>
@@ -198,11 +198,11 @@ export function ScanComparePanel({
               format={(v) => (v / 1000).toFixed(1)}
             />
           </div>
-          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[9.5px] text-muted-foreground/75">
+          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[9.5px] text-muted-foreground/90">
             {pct(base.findings, d.findings) && <span>{pct(base.findings, d.findings)} findings</span>}
             {pct(base.buildTime, d.buildTime) && <span>{pct(base.buildTime, d.buildTime)} build</span>}
             {pct(base.durationMs, d.durationMs) && <span>{pct(base.durationMs, d.durationMs)} wall clock</span>}
-            <span className="text-muted-foreground/60">
+            <span className="text-muted-foreground/90">
               est. range A {base.estimatedFrom}–{base.estimatedTo}s → B {target.estimatedFrom}–{target.estimatedTo}s
             </span>
           </p>
@@ -348,7 +348,7 @@ function FindingsDiffSection({
       {changed === 0 ? (
         <p className="mt-1.5 font-mono text-[10.5px] text-muted-foreground">
           all {diff.stable.length} finding fingerprints unchanged between A and B
-          <span className="text-muted-foreground/70"> (expected when the engine replays the same telemetry)</span>
+          <span className="text-muted-foreground/90"> (expected when the engine replays the same telemetry)</span>
         </p>
       ) : (
         <div className="mt-2 grid gap-2.5 sm:grid-cols-2">

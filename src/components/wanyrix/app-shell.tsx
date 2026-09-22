@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTheme } from 'next-themes'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -128,6 +128,10 @@ export function AppShell({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [diffOpen, setDiffOpen] = useState(false)
   const [cliOpen, setCliOpen] = useState(false)
+  /* issue #131: the sidebar "view CLI contract" control is the dialog's invoking
+     trigger — the dialog restores keyboard focus here on EVERY close path
+     (Escape / ✕ / overlay) via onCloseAutoFocus + this ref. */
+  const cliTriggerRef = useRef<HTMLButtonElement | null>(null)
   /* issue #99 P3: F8 opens/closes the engine-signals (notifications) surface —
      the same hotkey the toast viewport advertises, now wired to the popover */
   const [signalsOpen, setSignalsOpen] = useState(false)
@@ -297,7 +301,7 @@ export function AppShell({
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Wanyrix views">
           {NAV.map((group, gi) => (
             <div key={group.group} className={gi > 0 ? 'border-t border-border/40 pt-4' : undefined}>
-              <p className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+              <p className="px-2 pb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/90">
                 {group.group}
               </p>
               <ul className="space-y-0.5">
@@ -331,6 +335,7 @@ export function AppShell({
 
         <div className="border-t border-border/70 px-4 py-3">
           <button
+            ref={cliTriggerRef}
             type="button"
             onClick={() => setCliOpen(true)}
             className="w-full rounded-md px-1 py-0.5 text-left font-mono text-[10px] leading-relaxed text-muted-foreground transition-colors hover:text-foreground"
@@ -340,7 +345,7 @@ export function AppShell({
             wanyrix engine v{ENGINE_VERSION}
             <br />
             local-first · AI optional
-            <span className="mt-1 flex items-center gap-1 text-primary/80">
+            <span className="mt-1 flex items-center gap-1 text-primary">
               <TerminalSquare className="size-3" aria-hidden />
               view CLI contract
             </span>
@@ -372,7 +377,7 @@ export function AppShell({
               <button
                 type="button"
                 onClick={() => setPaletteOpen(true)}
-                className="hit-44 relative hidden h-8 w-52 items-center gap-2 rounded-md border border-input bg-card pl-8 pr-2 text-left text-xs text-muted-foreground/80 transition-colors hover:border-primary/30 hover:text-foreground md:flex"
+                className="hit-44 relative hidden h-8 w-52 items-center gap-2 rounded-md border border-input bg-card pl-8 pr-2 text-left text-xs text-muted-foreground/90 transition-colors hover:border-primary/30 hover:text-foreground md:flex"
                 aria-label="Open command palette (Ctrl+K)"
               >
                 <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" />
@@ -598,7 +603,7 @@ export function AppShell({
           pendingDiffs={pendingDiffs}
         />
         <DiffQueueSheet open={diffOpen} onOpenChange={setDiffOpen} />
-        <CliContractDialog open={cliOpen} onOpenChange={setCliOpen} />
+        <CliContractDialog open={cliOpen} onOpenChange={setCliOpen} triggerRef={cliTriggerRef} />
       </div>
     </div>
   )

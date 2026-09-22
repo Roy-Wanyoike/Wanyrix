@@ -220,7 +220,7 @@ export default function ArchitectureView({ onNavigate }: ViewProps) {
                       inferred hotspot
                     </Badge>
                   ) : (
-                    <span className="font-mono text-[10px] text-muted-foreground/60">—</span>
+                    <span className="font-mono text-[10px] text-muted-foreground/90">—</span>
                   )}
                 </TableCell>
               </TableRow>

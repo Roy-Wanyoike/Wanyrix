@@ -135,6 +135,7 @@ export function Panel({
   children,
   className,
   bodyClassName,
+  scrollableLabel,
 }: {
   title?: React.ReactNode
   subtitle?: React.ReactNode
@@ -142,6 +143,8 @@ export function Panel({
   children: React.ReactNode
   className?: string
   bodyClassName?: string
+  /** Set on scrollable bodies (overflow-y-auto) so keyboard users can reach the scroll port (axe: scrollable-region-focusable). */
+  scrollableLabel?: string
 }) {
   return (
     <section
@@ -163,7 +166,12 @@ export function Panel({
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={cn('p-4', bodyClassName)}>{children}</div>
+      <div
+        className={cn('p-4', bodyClassName)}
+        {...(scrollableLabel ? { tabIndex: 0, role: 'region', 'aria-label': scrollableLabel } : {})}
+      >
+        {children}
+      </div>
     </section>
   )
 }

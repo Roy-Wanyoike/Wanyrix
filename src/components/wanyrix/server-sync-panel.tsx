@@ -97,7 +97,7 @@ function FingerprintTag({ ids, truncated }: { ids?: string[]; truncated?: boolea
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-0.5 rounded border border-border/50 bg-card px-1 py-0.5 font-mono text-[8.5px] tabular-nums',
-        truncated ? 'text-amber-300/90' : 'text-muted-foreground/80',
+        truncated ? 'text-amber-300/90' : 'text-muted-foreground/90',
       )}
       title={
         truncated
@@ -149,7 +149,7 @@ function LocalRunRow({ run, state, index }: { run: ScanRunRecord; state: RunSync
         <span className="size-1 rounded-full bg-teal-300" aria-hidden />
         {run.severityCounts.info}
       </span>
-      <span className="ml-auto font-mono text-[9.5px] tabular-nums text-muted-foreground/70">
+      <span className="ml-auto font-mono text-[9.5px] tabular-nums text-muted-foreground/90">
         {(run.durationMs / 1000).toFixed(1)}s
       </span>
       <FingerprintTag ids={run.findingIds} truncated={run.findingIdsTruncated} />
@@ -177,7 +177,7 @@ function ServerRunRow({ run, index }: { run: ServerScanRun; index: number }) {
       <span className="font-mono text-[10px] text-muted-foreground">
         <span className="tabular-nums text-foreground/85">{run.findingCount}</span> findings
       </span>
-      <span className="ml-auto font-mono text-[9.5px] tabular-nums text-muted-foreground/70">
+      <span className="ml-auto font-mono text-[9.5px] tabular-nums text-muted-foreground/90">
         {(run.durationMs / 1000).toFixed(1)}s
       </span>
       <FingerprintTag ids={run.findingIds} truncated={run.findingIdsTruncated} />
@@ -289,14 +289,14 @@ export function ServerSyncPanel() {
             count={runs.length}
           />
           {runs.length > 0 && (
-            <p className="mb-2 font-mono text-[9.5px] text-muted-foreground/70">
+            <p className="mb-2 font-mono text-[9.5px] text-muted-foreground/90">
               {syncedCount}/{runs.length} confirmed on server
             </p>
           )}
           {localRows.length === 0 ? (
             <div className="flex h-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-center">
               <p className="text-xs text-muted-foreground">No local runs yet.</p>
-              <p className="font-mono text-[9.5px] text-muted-foreground/70">
+              <p className="font-mono text-[9.5px] text-muted-foreground/90">
                 run wanyrix doctor to populate the log
               </p>
             </div>
@@ -317,7 +317,7 @@ export function ServerSyncPanel() {
             count={server.isLoading ? null : serverRuns.length}
           />
           {serverRuns.length > 0 && (
-            <p className="mb-2 font-mono text-[9.5px] text-muted-foreground/70">
+            <p className="mb-2 font-mono text-[9.5px] text-muted-foreground/90">
               survives browser wipes · POSTed by real sessions only
             </p>
           )}
@@ -329,14 +329,14 @@ export function ServerSyncPanel() {
           ) : server.isError ? (
             <div className="flex h-24 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-red-400/30 bg-red-400/5 text-center">
               <p className="text-xs text-red-300">Server log unavailable.</p>
-              <p className="font-mono text-[9.5px] text-muted-foreground/70">
+              <p className="font-mono text-[9.5px] text-muted-foreground/90">
                 {(server.error as Error).message}
               </p>
             </div>
           ) : serverRuns.length === 0 ? (
             <div className="flex h-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-center">
               <p className="text-xs text-muted-foreground">Nothing synced yet.</p>
-              <p className="font-mono text-[9.5px] text-muted-foreground/70">
+              <p className="font-mono text-[9.5px] text-muted-foreground/90">
                 runs POST here automatically at scan completion
               </p>
             </div>

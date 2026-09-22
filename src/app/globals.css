@@ -57,7 +57,10 @@
   --secondary: oklch(0.945 0.008 80);
   --secondary-foreground: oklch(0.3 0.015 60);
   --muted: oklch(0.945 0.008 80);
-  --muted-foreground: oklch(0.5 0.015 65);
+  /* issue #131: 0.5→0.47 (deeper warm gray, same hue family) — lifts the full
+     token to ≥5.68:1 on every light surface and raises every opacity-composited
+     variant (the axe-confirmed nav/sidebar contrast failures) toward AA. */
+  --muted-foreground: oklch(0.47 0.02 60);
   --accent: oklch(0.935 0.02 75);
   --accent-foreground: oklch(0.3 0.015 60);
   --destructive: oklch(0.505 0.213 27.518);
@@ -92,7 +95,9 @@
   --secondary: oklch(0.245 0.008 60);
   --secondary-foreground: oklch(0.955 0.005 80);
   --muted: oklch(0.235 0.008 60);
-  --muted-foreground: oklch(0.68 0.012 70);
+  /* issue #131: 0.68→0.72 (lighter warm gray) — ≥6.07:1 on every dark surface,
+     headroom for the /85+ opacity variants used by muted chrome text. */
+  --muted-foreground: oklch(0.72 0.015 70);
   --accent: oklch(0.27 0.02 50);
   --accent-foreground: oklch(0.93 0.03 60);
   --destructive: oklch(0.62 0.2 25);

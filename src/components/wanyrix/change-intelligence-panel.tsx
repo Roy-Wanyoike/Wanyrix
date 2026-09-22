@@ -84,19 +84,19 @@ function EngineErrorBlock({ err }: { err: EngineExecError }) {
           : err.status === 504
             ? 'Engine timed out'
             : 'Engine execution failed'}
-        <span className="font-mono text-[9.5px] text-muted-foreground/70">HTTP {err.status}</span>
+        <span className="font-mono text-[9.5px] text-muted-foreground/90">HTTP {err.status}</span>
       </p>
       <p className="text-[11px] leading-relaxed text-muted-foreground">{err.message}</p>
       {err.detail && (
         <p
-          className="max-h-16 overflow-y-auto rounded border border-border/50 bg-card p-2 font-mono text-[9.5px] leading-relaxed text-muted-foreground/80"
+          className="max-h-16 overflow-y-auto rounded border border-border/50 bg-card p-2 font-mono text-[9.5px] leading-relaxed text-muted-foreground/90"
           aria-label="Engine stderr, quoted verbatim"
         >
           {err.detail}
         </p>
       )}
       {err.hint && (
-        <p className="font-mono text-[10px] text-muted-foreground/80">hint: {err.hint}</p>
+        <p className="font-mono text-[10px] text-muted-foreground/90">hint: {err.hint}</p>
       )}
     </div>
   )
@@ -153,12 +153,12 @@ function FindingList({
           {icon}
         </span>
         {label}
-        <span className="font-mono tabular-nums text-[10px] text-muted-foreground/70">
+        <span className="font-mono tabular-nums text-[10px] text-muted-foreground/90">
           {entries.length}
         </span>
       </p>
       {entries.length === 0 ? (
-        <p className="mt-1 rounded border border-dashed border-border/60 px-2 py-1 text-[11px] text-muted-foreground/70">
+        <p className="mt-1 rounded border border-dashed border-border/60 px-2 py-1 text-[11px] text-muted-foreground/90">
           none
         </p>
       ) : (
@@ -170,7 +170,7 @@ function FindingList({
             >
               <SeverityBadge severity={asSeverity(f.severity)} />
               {f.id && (
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground/80">
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground/90">
                   {f.id}
                 </span>
               )}
@@ -178,7 +178,7 @@ function FindingList({
                 {f.title ?? f.id}
               </span>
               {f.previousSeverity && (
-                <span className="shrink-0 font-mono text-[9.5px] text-muted-foreground/70">
+                <span className="shrink-0 font-mono text-[9.5px] text-muted-foreground/90">
                   {f.previousSeverity} → {f.severity}
                 </span>
               )}
@@ -212,7 +212,7 @@ function ImpactResult({ data }: { data: EngineImpactPayload }) {
         <span className="text-xs text-muted-foreground">
           of workspace
           {crates > 0 && (
-            <span className="text-muted-foreground/70">
+            <span className="text-muted-foreground/90">
               {' '}
               (≈{(perMille / 10).toFixed(1)}% · {crates} crates measured)
             </span>
@@ -229,7 +229,7 @@ function ImpactResult({ data }: { data: EngineImpactPayload }) {
       <div className="grid gap-1.5 sm:grid-cols-3">
         {kindRows.map(({ kind, names }) => (
           <div key={kind} className="rounded-lg border border-border/70 bg-card/60 p-2">
-            <p className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground/70">
+            <p className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground/90">
               {kind} dependents
             </p>
             <p className="mt-0.5 font-mono text-sm font-semibold tabular-nums">{names.length}</p>
@@ -250,12 +250,12 @@ function ImpactResult({ data }: { data: EngineImpactPayload }) {
         <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
           <ArrowRight className="size-3" aria-hidden />
           transitive dependents
-          <span className="font-mono tabular-nums text-[10px] text-muted-foreground/70">
+          <span className="font-mono tabular-nums text-[10px] text-muted-foreground/90">
             {r.transitiveDependents?.length ?? 0}
           </span>
         </p>
         {(r.transitiveDependents?.length ?? 0) === 0 ? (
-          <p className="mt-1 rounded border border-dashed border-border/60 px-2 py-1 text-[11px] text-muted-foreground/70">
+          <p className="mt-1 rounded border border-dashed border-border/60 px-2 py-1 text-[11px] text-muted-foreground/90">
             none — nothing else rebuilds when this crate changes
           </p>
         ) : (
@@ -277,7 +277,7 @@ function ImpactResult({ data }: { data: EngineImpactPayload }) {
 
       {/* engine's own honesty note */}
       {r.note && (
-        <p className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-muted-foreground/80">
+        <p className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-muted-foreground/90">
           <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
           {r.note}
         </p>
@@ -392,7 +392,7 @@ export function ChangeIntelligencePanel() {
         {/* -------------------------------------------------- impact section */}
         <section aria-label="Rebuild impact" className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/90">
               impact — rebuild blast radius
             </p>
             <div className="ml-auto flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-xs">
@@ -422,7 +422,7 @@ export function ChangeIntelligencePanel() {
           {/* quick picks: crates the git surface just measured as changed */}
           {changedCrates.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5" aria-label="Changed crates">
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground/60">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground/90">
                 changed:
               </span>
               {changedCrates.map((c) => (
@@ -439,7 +439,7 @@ export function ChangeIntelligencePanel() {
                 >
                   {c.crateName}
                   {typeof c.changedFiles === 'number' && (
-                    <span className="ml-1 text-muted-foreground/70">{c.changedFiles}f</span>
+                    <span className="ml-1 text-muted-foreground/90">{c.changedFiles}f</span>
                   )}
                 </Button>
               ))}
@@ -463,10 +463,10 @@ export function ChangeIntelligencePanel() {
 
         {/* ------------------------------------------------- changes section */}
         <section aria-label="What changed" className="space-y-2 border-t border-border/60 pt-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/90">
             what-changed — findings vs stored baseline
             {wcReport?.workspace && (
-              <span className="ml-2 normal-case tracking-normal text-muted-foreground/60">
+              <span className="ml-2 normal-case tracking-normal text-muted-foreground/90">
                 workspace {wcReport.workspace}
               </span>
             )}
@@ -505,7 +505,7 @@ export function ChangeIntelligencePanel() {
                   {(delta.critical ?? 0) === 0 &&
                     (delta.warning ?? 0) === 0 &&
                     (delta.info ?? 0) === 0 && (
-                      <span className="text-[11px] text-muted-foreground/70">
+                      <span className="text-[11px] text-muted-foreground/90">
                         no severity movement vs baseline
                       </span>
                     )}

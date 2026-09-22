@@ -372,8 +372,9 @@ function TopFindingsCard({ onNavigate }: ViewProps) {
             <span key={f.id} className="flex items-center gap-2">
               <span
                 className={`size-2 shrink-0 rounded-full ${SEVERITY_DOT_CLASS[f.severity]}`}
-                aria-label={f.severity}
+                aria-hidden="true"
               />
+              <span className="sr-only">{f.severity}: </span>
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{f.title}</span>
               <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{f.id}</span>
             </span>
@@ -864,7 +865,7 @@ export default function OverviewView({ onNavigate }: ViewProps) {
 
           {/* insight strip — payload-driven copy (issue #34) */}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-            <p className="flex items-start gap-2 text-[12.5px] leading-snug text-amber-200">
+            <p className="flex items-start gap-2 text-[12.5px] leading-snug text-amber-800 dark:text-amber-200">
               <Lightbulb className="mt-0.5 size-4 shrink-0 text-amber-400" />
               {health.insight?.text ?? 'Build telemetry refreshed — open the Build Doctor for the latest evidence.'}
             </p>
@@ -877,7 +878,7 @@ export default function OverviewView({ onNavigate }: ViewProps) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="gap-1 text-xs text-amber-300 hover:text-amber-200"
+                className="gap-1 text-xs text-amber-700 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200"
                 onClick={() => onNavigate?.('doctor')}
               >
                 View findings →
@@ -934,7 +935,7 @@ export default function OverviewView({ onNavigate }: ViewProps) {
                       {crate.name}
                     </span>
                     {crate.downstream > 0 && (
-                      <span className="shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                      <span className="shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-800 dark:text-amber-400">
                         {crate.downstream} downstream
                       </span>
                     )}
@@ -980,7 +981,7 @@ export default function OverviewView({ onNavigate }: ViewProps) {
             </Button>
           </Panel>
 
-          <Panel title="Live activity" subtitle="engine signals as they land" bodyClassName="max-h-[340px] overflow-y-auto">
+          <Panel title="Live activity" subtitle="engine signals as they land" bodyClassName="max-h-[340px] overflow-y-auto" scrollableLabel="Live activity feed">
             <ol className="relative space-y-4">
               {health.activity.map((event, i) => {
                 const Icon = KIND_ICONS[event.kind]
@@ -994,8 +995,9 @@ export default function OverviewView({ onNavigate }: ViewProps) {
                   >
                     <span
                       className={`mt-1.5 size-2 shrink-0 rounded-full ${SEVERITY_DOT_CLASS[event.severity]}`}
-                      aria-label={event.severity}
+                      aria-hidden="true"
                     />
+                    <span className="sr-only">{event.severity}: </span>
                     <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
