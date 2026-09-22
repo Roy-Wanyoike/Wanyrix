@@ -17,7 +17,12 @@
 #   docs/PRIVACY.md, docs/ARCHITECTURE.md, docs/USER_GUIDE.md (document the
 #     controlled ferrix.* → wanyrix.* storage-migration protocol),
 #   src/components/wanyrix/views/settings-view.tsx (live migration-status panel
-#     in Settings — surfaces the migration honestly to users).
+#     in Settings — surfaces the migration honestly to users),
+#   scripts/github/lib.sh, scripts/github/README.md (the GitHub automation
+#     kit's bootstrap rename path: WANYRIX_OLD_REPO defaults to the pre-rename
+#     Roy-Wanyoike/ferrix slug so bootstrap.sh can still rename a repo that
+#     was created under the old name — a functional migration reference,
+#     not stray legacy content; consumed by scripts/github/bootstrap.sh).
 #
 # Usage: bash scripts/check-branding.sh   (prints PASS / violations; exit 0 / 1)
 
@@ -59,10 +64,11 @@ while IFS= read -r path; do
   path="${path#./}"
 
   case "$path" in
-    worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh|tests/unit/legacy-migration.test.ts|docs/PRIVACY.md|docs/ARCHITECTURE.md|docs/USER_GUIDE.md|src/components/wanyrix/views/settings-view.tsx)
+    worklog.md|README.md|src/lib/wanyrix/legacy-migration.ts|scripts/check-branding.sh|tests/unit/legacy-migration.test.ts|docs/PRIVACY.md|docs/ARCHITECTURE.md|docs/USER_GUIDE.md|src/components/wanyrix/views/settings-view.tsx|scripts/github/lib.sh|scripts/github/README.md)
       # Intentional legacy references — skip. The list is deliberately
-      # minimal: every entry documents the rename or implements its
-      # storage-migration protocol.
+      # minimal: every entry documents the rename, implements its
+      # storage-migration protocol, or implements the repo-rename
+      # bootstrap path (scripts/github/).
       continue
       ;;
   esac

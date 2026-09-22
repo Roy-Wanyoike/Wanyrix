@@ -246,6 +246,28 @@ pub enum EngineError {
         /// The minimum plan the surface requires (e.g. `team`).
         plan_required: String,
     },
+    /// The sync surface (registry-branch team sync, issue #92) could not
+    /// reach the remote at all: the path does not exist, the target is not
+    /// a git repository, the clone/transport failed, or the registry push
+    /// was refused by the remote. The git transport detail is preserved
+    /// verbatim — never swallowed, never retried silently.
+    SyncRemoteUnavailable(String),
+    /// The registry branch is missing on the remote (pull before any
+    /// push), or a branch-level git operation refused. Remediation is
+    /// always stated: run `wanyrix sync push` first.
+    SyncBranch(String),
+    /// The sync merge REFUSED because the evidence to merge is
+    /// self-inconsistent: registry content violates its own `index.json`
+    /// sha256 digest binding (tampered/corrupt), or a peer envelope is
+    /// malformed (missing `measurementStatus`, findings not an array).
+    /// CONTENT conflicts between peers are NOT this — they are named
+    /// findings in the `wanyrix.sync/v1` envelope (local content kept,
+    /// never silently overwritten).
+    SyncConflict(String),
+    /// The sync surface refused an operator input: an absolute `--path`
+    /// (sync artifacts and workspace ids must be machine-independent, the
+    /// export relative-paths-only contract), or an empty remote value.
+    Sync(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -282,6 +304,10 @@ impl std::fmt::Display for EngineError {
                 f,
                 "surface '{surface}' requires the {plan_required} plan — no qualifying entitlement is activated (activate with: wanyrix activate --key <token>; core local surfaces are never gated — docs/COMMERCIAL.md rule #1)"
             ),
+            EngineError::SyncRemoteUnavailable(e) => write!(f, "sync remote unavailable: {e}"),
+            EngineError::SyncBranch(e) => write!(f, "sync registry branch unavailable: {e}"),
+            EngineError::SyncConflict(e) => write!(f, "sync conflict: {e}"),
+            EngineError::Sync(e) => write!(f, "sync error: {e}"),
         }
     }
 }

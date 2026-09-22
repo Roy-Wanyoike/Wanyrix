@@ -1,5 +1,11 @@
 name: CI
 
+# The engine gates (fmt · build · clippy · tests) MOVED to wanyrix.yml
+# (issue #92): its referee job runs the SAME gates AND publishes the
+# measured envelopes (analyze + impact) as the job summary/artifact —
+# exactly one engine gate job, no duplicated identical jobs. This file
+# keeps the web platform job.
+
 on:
   push:
     branches: [main]
@@ -31,32 +37,3 @@ jobs:
 
       - name: Brand gate (legacy-token guard)
         run: bash scripts/check-branding.sh
-
-  engine:
-    name: Rust engine (build · clippy · tests)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: engine
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: engine
-
-      - name: Format check
-        run: cargo fmt --check
-
-      - name: Build
-        run: cargo build --locked
-
-      - name: Clippy (deny warnings)
-        run: cargo clippy --locked -- -D warnings
-
-      - name: Tests
-        run: cargo test --locked

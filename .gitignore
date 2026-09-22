@@ -66,6 +66,7 @@ download/
 # Local-only working artifacts (never published)
 .local/
 engine/target/
+wanyrix-envelope/
 db/*.db
 .zscripts/
 Caddyfile
@@ -84,3 +85,4 @@ wanyrix-license-pub.hex
 # Local-only working artifact: master validation prompt (never published)
 /pending-task.md
 .wanyrix/
+dev.pid

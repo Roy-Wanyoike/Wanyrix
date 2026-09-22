@@ -159,5 +159,6 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
         Command::Activate { key, json, pretty } => cli::activate_run(&key, json, pretty),
         Command::Entitlement { json, pretty } => cli::entitlement_run(json, pretty),
         Command::License { cmd } => cli::license_run(cmd),
+        Command::Sync { cmd } => cli::sync_run(cmd),
     }
 }

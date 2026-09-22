@@ -73,6 +73,12 @@
 //!   tooling and the premium-surface gate + registry. ZERO network I/O —
 //!   only entitlements may touch the cloud, and this slice does not; core
 //!   measured surfaces are never gated (docs/COMMERCIAL.md rule #1)
+//! - [`sync`] — serverless team sync (issue #92): a git REGISTRY BRANCH is
+//!   the shared store; push commits the export bundle as exactly one
+//!   deterministic commit (byte-identical re-pushes are no-ops), pull
+//!   merges by (workspace id, finding id) + content hash with conflicts as
+//!   named findings and evidence tiers that never upgrade
+//!   (`wanyrix.sync/v1`)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
 pub mod ai;
@@ -94,6 +100,7 @@ pub mod product;
 pub mod report;
 pub mod scan;
 pub mod store;
+pub mod sync;
 pub mod synth;
 pub mod telemetry;
 pub mod timestamp;
@@ -104,7 +111,7 @@ pub use entitlement::{
     EntitlementReport, EntitlementState, GateGrant, Plan, SignedToken, TokenPayload,
     ENTITLEMENT_SCHEMA, REVALIDATION_GRACE_DAYS, SURFACE_REGISTRY, TOKEN_SCHEMA,
 };
-pub use export::{ExportArtifact, ExportManifest, EXPORT_SCHEMA};
+pub use export::{sha256_hex, ExportArtifact, ExportBundle, ExportManifest, EXPORT_SCHEMA};
 pub use graph::{Graph, GraphEdge, GraphNode};
 pub use model::{
     Band, CrateInfo, Edge, EdgeKind, EngineError, NodeKind, PathDepRecord, WorkspaceScan,
@@ -112,6 +119,7 @@ pub use model::{
 pub use report::{DoctorReport, GraphReport, HealthReport};
 pub use scan::{scan_workspace, scan_workspace_excluding};
 pub use store::{SaveOutcome, ScanRow, STORE_SCHEMA_VERSION};
+pub use sync::{workspace_id, SyncPullReport, SyncPushReport, SYNC_SCHEMA};
 pub use synth::{SynthOutcome, SynthPlan, DEFAULT_SEED, MAX_CRATES};
 pub use telemetry::{TelemetryReport, TELEMETRY_SCHEMA};
 
