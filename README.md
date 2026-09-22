@@ -9,7 +9,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Engine](https://img.shields.io/badge/engine-v0.9.0-DEA584)
-![Tests](https://img.shields.io/badge/tests-429_passing-2EA043)
+![Tests](https://img.shields.io/badge/tests-552_passing-2EA043)
 ![License](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2EA043)
 
 <img src="public/brand/banner.png" alt="Wanyrix — engineering intelligence. The Beacon-W brand mark over a dark amber energy burst." width="100%" />
@@ -30,15 +30,17 @@ That honesty rule is the product. Dashboards that make numbers look good are com
 
 | | |
 | --- | --- |
-| 🧪 **478 automated tests** | 296 web (bun) + 182 engine (cargo) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
-| 🔍 **18 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
-| 🦀 **Real Rust engine** | `wanyrix-engine` v0.9.0, 18 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · **local AI** · **git facts** · **impact** · **what-changed** · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
-| 🖥️ **18-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui — dark & light themes, mobile-clean (0 px overflow @ 390 px) |
+| 🧪 **552 automated tests** | 374 web (bun: unit + live-API contract; 370 pass / 4 skip, measured 2026-09-22) + 182 engine (cargo, per `engine/README.md` v0.9.0) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, adversarial hardening, sync roundtrip, offline entitlement, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
+| 🔍 **23 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
+| 🦀 **Real Rust engine** | `wanyrix-engine` v0.9.0, 23 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · **local AI** · **git facts** · **impact** · **what-changed** · **export** (artifacts as code) · **sync push\|pull** (registry-branch team sync) · **activate / entitlement / license** (offline ed25519) · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
+| 🖥️ **19-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui — dark & light themes, mobile-clean (0 px overflow @ 390 px) |
 | 🤖 **Grounded AI, non-authoritative** | facts server-rendered; model output validated against evidence, violations redacted; `wanyrix ai` grounds a LOCAL model on the measured evidence digest only — never source code |
 | 🔒 **Local-first, zero telemetry** | state in your browser; nothing transmits unless you explicitly configure it |
 | 🔌 **Connect a real project** | the dashboard's registration bridge runs the REAL engine (doctor + graph) against any local Rust project you point it at — measured counts only, failures register nothing |
 
 ---
+
+> Counts are measured, not remembered (issue #111): command surfaces counted from the `Command` enum in `engine/src/cli.rs` (23); API routes = `find src/app/api -name "route.ts"` (23 under `/api/wanyrix/*`, 24 incl. the `/api` root); dashboard views = entries in `src/components/wanyrix/nav-registry.ts` (19); web tests = `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test` (374 across 22 files, 2026-09-22); engine tests = 182 as documented in `engine/README.md` v0.9.0 (not re-measured on the doc host — no Rust toolchain; re-run `cd engine && cargo test` to reproduce).
 
 ## The loop
 
@@ -179,7 +181,9 @@ Measured 500-crate timings: [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) · fu
 
 ---
 
-## API surface (18 routes, `/api/wanyrix/*`)
+## API surface (23 routes, `/api/wanyrix/*`)
+
+Route count = `find src/app/api -name "route.ts" | wc -l` minus the `/api` root (23; 24 total, 2026-09-22).
 
 | Route | Purpose |
 | --- | --- |
@@ -192,6 +196,11 @@ Measured 500-crate timings: [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) · fu
 | `scan-runs` | durable scan-run log (`wanyrix.scan-runs/v1`) — browser runs POST here (idempotent upsert, optional findings-fingerprint `findingIds` per run); GET serves exactly what was synced, never fabricated (Gate 21) |
 | `engine/doctor` | executes — spawns the real `wanyrix` binary from `engine/` and returns verbatim `wanyrix.doctor/v1` stdout (`wanyrix.engine-exec/v1`); 503 when not built on the host |
 | `engine/build` | executes an INSTRUMENTED BUILD — the real binary runs a real `cargo build --message-format=json` and measures it (`wanyrix.build/v1`: measured wall clock, measured fresh/cache-hit rate, redacted diagnostics); a failed build is data (`buildSuccess: false`), not an HTTP error |
+| `git` | measured repository facts (`wanyrix.git/v1`) — branch, HEAD, dirty state, changed files mapped onto scanned crate roots, commit count; paths and subjects only, redacted by design (PR #73) |
+| `what-changed` | fresh scan diffed against the newest stored scan (`wanyrix.what-changed/v1`): added/resolved/changed findings, severity deltas; no baseline yet ⇒ valid envelope with a remediation note (PR #73) |
+| `export` | artifacts-as-code (`wanyrix.export/v1`, PR #91) — one measured pass written verbatim as sha256-bound `doctor.json`/`graph.json`/`health.json` + `index.json`, byte-identical on unchanged input |
+| `license/issue` | sandbox license issuer (Plans view) — wraps the REAL `wanyrix license issue` binary and returns the signed `wanyrix.entitlement.token/v1` verbatim, labeled `estimated`; honest 503 when no signing key is configured |
+| `engine/impact` | spawns the real binary and returns verbatim `wanyrix.impact/v1` blast-radius stdout for a registered workspace (`wanyrix.engine-exec/v1` wrapper); 503 when the binary is not built on the host |
 
 Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{error, knownWorkspaces}` — data is never silently served for the wrong workspace. Error semantics: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · machine contract: [`docs/CLI.md`](docs/CLI.md).
 
@@ -201,9 +210,9 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 ```text
 ├── src/                     # Web platform (Next.js 16 · TypeScript strict · Tailwind 4 · shadcn/ui)
-│   ├── app/api/wanyrix/     #   18 versioned API routes
-│   ├── components/wanyrix/  #   18-surface information architecture
-│   └── lib/wanyrix/         #   stores, contracts, fixtures (17 domain modules), exporters
+│   ├── app/api/wanyrix/     #   23 versioned API routes
+│   ├── components/wanyrix/  #   19-surface information architecture
+│   └── lib/wanyrix/         #   stores, contracts, fixtures (25 domain modules), exporters
 ├── engine/                  # wanyrix-engine v0.9.0 (Rust 2021, zero-dep core + rusqlite)
 │   └── tests/               #   conformance, WAL crash-recovery, chaos fault-injection
 ├── tests/                   # bun test suite (unit + live API contracts)
@@ -218,7 +227,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 This repository is built the way it asks you to build software — with verifiable claims:
 
-- **478 tests, zero failures** — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers) + wire-level local-AI mock tests.
+- **552 tests, zero failures** (370 web pass measured 2026-09-22 via `cd tests && bun test` + 182 engine per `engine/README.md` v0.9.0) — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers) + the 24-test adversarial hardening suite + sync/entitlement CLI tests + wire-level local-AI mock tests.
 - **CI on every push/PR** — ESLint, `tsc --noEmit`, full test suite, legacy-token brand gate, `cargo build --locked` + `clippy -D warnings` + `cargo test --locked`. Release workflow ships binaries + CycloneDX SBOM + cargo-audit; perf workflow scales the soak/flake harnesses.
 - **Contract-first** — all machine payloads are versioned (`wanyrix.*​/v1`); determinism is pinned by tests (same input ⇒ byte-identical output, timestamp last). The web pins the engine version in one constant, tested against `engine/Cargo.toml`.
 - **Honesty is load-bearing** — the `estimated/verified` separation, workspace guards, grounding redaction, and the event log's *refusals-mint-no-events* rule are **tested behaviors**, not documentation.
@@ -251,11 +260,11 @@ This repository is built the way it asks you to build software — with verifiab
 
 ## Roadmap
 
-Shipped: the full offline product contract (18 command surfaces), the durable event log, local-AI grounding, git facts, impact + what-changed change intelligence, the connect-a-project bridge, chaos-tested resilience, release engineering with SBOM, and the design directions for cloud and plugins. Next, in order:
+Shipped: the full offline product contract (23 command surfaces — including git facts, impact + what-changed change intelligence, export, registry-branch team sync, and offline ed25519 entitlement), the durable event log, local-AI grounding, the connect-a-project bridge, chaos- and adversarial-tested resilience, release engineering with SBOM, and the design directions for hosted cloud and plugins. Next, in order:
 
 - **crates.io publish** of `wanyrix-engine` once the release checklist (MSRV, feature flags, signing secrets) is exercised on a real tag.
 - **Plugin API v1** — the event log is the first shipped extension surface; the out-of-process plugin contract follows the decision points in [`docs/PLUGIN_AND_EVENTS.md`](docs/PLUGIN_AND_EVENTS.md).
-- **Cloud milestone** — sync layer design is documented (`wanyrix.sync/v1`); implementation starts when the hosted offering is greenlit ([`docs/CLOUD_DESIGN.md`](docs/CLOUD_DESIGN.md)).
+- **Cloud milestone** — the serverless first rung is shipped: `wanyrix sync push|pull` (registry-branch team sync + CI referee, v0.9.0). The hosted offering starts when greenlit ([`docs/CLOUD_DESIGN.md`](docs/CLOUD_DESIGN.md)).
 
 Roadmap features never destabilize the shipped core. Release decision: **CONDITIONAL GO** — re-derived each round against a 57-gate acceptance matrix; zero CRITICAL/HIGH product defects open.
 

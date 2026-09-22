@@ -1,7 +1,8 @@
 # Wanyrix User Guide
 
 Task-oriented guide for the Wanyrix web platform. Everything here matches the shipped UI
-(18-item navigation). Engine-only or future capabilities are labeled **Roadmap**.
+(19-item navigation — entries in `src/components/wanyrix/nav-registry.ts`, issue #111).
+Engine-only or future capabilities are labeled **Roadmap**.
 
 ## Install & run
 
@@ -15,16 +16,17 @@ network required for the deterministic core.
 
 ## Layout
 
-Six navigation groups / 18 views (⌘K opens the command palette):
+Six navigation groups / 19 views (⌘K opens the command palette; group names as shipped in
+`nav-registry.ts`):
 
 | Group | Views |
 | --- | --- |
-| Analyze | Overview · Repositories · Builds·Doctor · Findings |
-| Map | Dependencies · Engineering Graph · Architecture · Impact Simulator |
-| Debug | Diagnostics · PR Analysis · Experiments |
-| Observe | Runtime · History |
-| Assist | AI · Policies·Gates · Issues & PRs |
-| Manage | Organization · Settings |
+| Intelligence | Overview · Repositories · Builds·Doctor · Findings |
+| Structure | Dependencies · Engineering Graph · Architecture · Impact Simulator |
+| Verification | Diagnostics · PR Analysis · Experiments |
+| Observability | Runtime · History |
+| Reasoning & Governance | AI · Policies·Gates · Issues & PRs |
+| Workspace | Organization · Plans · Settings |
 
 ## Your first analysis
 
@@ -66,8 +68,9 @@ delta. **All simulator output is `estimated`** — planning input, not measureme
 The honesty loop: `estimated → (run experiment) → measured → verified`.
 
 1. **Experiments**: pick a finding marked experiment-eligible (e.g. `FER-BLD-001`).
-2. Baseline → candidate → measured delta is recorded (fixture demonstrates the flow;
-   real measurement is **Roadmap** with the Rust engine — AUDIT-I8).
+2. Baseline → candidate → measured delta is recorded (the dashboard board is
+   fixture-backed; the shipped in-repo engine v0.9.0 measures REAL builds via
+   `wanyrix experiment measure` — see [`docs/CLI.md`](CLI.md)).
 3. Verified claims appear with `verified` status across surfaces.
 
 ## Safe patches (diff queue)
@@ -133,10 +136,15 @@ with explicit approval semantics (Gate 19: new-proposal, no fabricated removals)
   envelope is served over HTTP: `GET /api/wanyrix/report?flavor=scorecard&ws=…`).
 - **Issues & PRs**: traceability board — every issue fixed by a PR.
 
-## Organization & settings
+## Organization, Plans & settings
 
 - **Organization** (fixture data, badged): plan overview incl. the 90-day trial model and
   a live policy summary from the gates API.
+- **Plans**: tiers & licensing — the permanently free local core plus the paid
+  Team/Enterprise structure; sandbox license issuance returns the REAL ed25519-signed
+  token verbatim, honestly labeled `estimated` (no payment method — never a simulated
+  purchase), with an honest 503 when no signing key is configured; includes the offline
+  `wanyrix activate` hint for issued tokens (engine v0.9.0, PR #94).
 - **Settings**: theme (light/dark), workspace preference, live legacy
   `ferrix.* → wanyrix.*` migration status, data & privacy pointers, read-only AI status.
 
@@ -174,11 +182,18 @@ the project audit history).
 **Does AI upgrade estimates to verified?** Never. Only a recorded experiment does
 (Gate 21), and the AI layer is post-validated against exactly that rule.
 
-**Where does the engine live?** Not in this repo — the web platform encodes engine
-contracts via fixtures/versioned flavors (AUDIT-I8). CLI/daemon surfaces: **Roadmap** —
-but the CLI contract itself (commands, `--json`, exit codes) is already pinned by the
-in-app **CLI contract** dialog and documented in [`docs/CLI.md`](CLI.md), so the future
-engine binary plugs into a stable spec.
+**Where does the engine live?** In this repo — `engine/` carries `wanyrix-engine` v0.9.0:
+the real Rust binary with 23 command surfaces (`doctor · graph · health · analyze ·
+dependencies · build · experiment · events · ai · git · impact · what-changed · export ·
+sync · activate · entitlement · license · store · daemon · telemetry · synth · init ·
+status`), documented command-by-command in [`docs/CLI.md`](CLI.md) and buildable with
+`cd engine && cargo build --release`. The web platform mirrors the same versioned payloads
+over HTTP, and the in-app **CLI contract** dialog pins the command set, the flags, and the
+exit codes.
 
-**Is it free?** The local deterministic core is free/local-first. Commercial tiers
-(Team, Enterprise) are **Roadmap** — nothing is billed today.
+**Is it free?** The local deterministic core is free/local-first. The Plans view shows the
+tier structure (Team, Enterprise); nothing is billed today.
+
+**Counts methodology:** views (19) = entries in `src/components/wanyrix/nav-registry.ts`;
+engine command surfaces (23) = the `Command` enum in `engine/src/cli.rs`; both measured
+2026-09-22 for issue #111.
