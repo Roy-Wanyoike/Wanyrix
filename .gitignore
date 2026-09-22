@@ -66,6 +66,7 @@ download/
 # Local-only working artifacts (never published)
 .local/
 engine/target/
+wanyrix-envelope/
 db/*.db
 .zscripts/
 Caddyfile
