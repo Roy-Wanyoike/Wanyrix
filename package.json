@@ -3,8 +3,9 @@
   "license": "MIT OR Apache-2.0",
   "version": "0.2.1",
   "private": true,
+  "//": "SECURITY GUARD (QA-3-B-1): the dev server serves an unauthenticated mutating + engine-executing API surface, so the `dev` script must keep binding the loopback interface explicitly (`-H 127.0.0.1`). Do NOT remove the -H flag or widen the bind to all interfaces; see docs/SECURITY.md §1 (network boundary). JSON has no comment syntax — this key is the guard.",
   "scripts": {
-    "dev": "next dev -p 3000 2>&1 | tee dev.log",
+    "dev": "next dev -H 127.0.0.1 -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",

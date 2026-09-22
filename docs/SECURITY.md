@@ -26,6 +26,21 @@ actually enforced in code today vs. what is **Roadmap**. See also
   /api/wanyrix/storage/{rebuild,reclaim}` mutate in-process simulated state only.
   All durable writes land in the local SQLite file on the machine running the server —
   see [`docs/PRIVACY.md`](PRIVACY.md) for exactly what is stored.
+- **Network boundary (QA-3-B-1): the dev server binds loopback only.** The
+  `dev` script starts the server as `next dev -H 127.0.0.1 -p 3000`
+  (guarded in `package.json` by the `//` security-guard key directly above
+  `scripts`), so the unauthenticated surface above is reachable only from
+  the machine itself — matching the "local machine" wording used throughout
+  this document. Two honesty notes: (1) the binding is start-time config —
+  the dev server that was running when this fix landed had been started
+  from the pre-fix script and held the wildcard bind (`ss -tlnp` →
+  `*:3000`, measured 2026-09-22 before it was restarted); the loopback bind
+  is enforced from the first start AFTER this change. (2) The guarded
+  script is the enforced default — a deployment that starts the server
+  through any other harness must pass an equivalent loopback hostname, and
+  if it does not, the reachable set widens beyond what this document
+  claims. Production serving (`next start` of the standalone build) is out
+  of scope for the local-first demonstrator (Roadmap, §8).
 - `POST /explain` remains a pure reasoning endpoint that writes nothing. GET-only
   routes enforce method discipline: `POST/PUT/DELETE/PATCH` return `405` carrying the
   RFC 9110 `Allow` header (ENG-TCA-6a, ENG-TE-1).
