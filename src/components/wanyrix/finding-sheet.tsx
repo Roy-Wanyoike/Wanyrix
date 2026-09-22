@@ -249,7 +249,7 @@ export function FindingSheet({
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                           {ev.label}
                         </p>
-                        <p className="shrink-0 font-mono text-[9.5px] italic text-muted-foreground/80">
+                        <p className="shrink-0 font-mono text-[9.5px] italic text-muted-foreground/90">
                           {ev.source}
                         </p>
                       </div>

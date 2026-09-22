@@ -100,7 +100,7 @@ function BuildKpi({
       >
         {value}
       </p>
-      {sub && <p className="truncate font-mono text-[8.5px] text-muted-foreground/70">{sub}</p>}
+      {sub && <p className="truncate font-mono text-[8.5px] text-muted-foreground/90">{sub}</p>}
     </div>
   )
 }
@@ -145,7 +145,7 @@ function BuildModeView({ data }: { data: EngineBuildPayload }) {
             · exit {r.exitCode ?? 'signal'} · workspace “{r.workspace ?? '—'}”
           </span>
         </p>
-        <span className="ml-auto font-mono text-[9.5px] text-muted-foreground/70">
+        <span className="ml-auto font-mono text-[9.5px] text-muted-foreground/90">
           wanyrix.build/v1
         </span>
       </div>
@@ -216,7 +216,7 @@ function BuildModeView({ data }: { data: EngineBuildPayload }) {
                   <span className="truncate text-foreground/85" title={a.package}>
                     {a.package ?? '—'}
                   </span>
-                  <span className="shrink-0 text-muted-foreground/60">
+                  <span className="shrink-0 text-muted-foreground/90">
                     {a.targetKinds?.join(',') ?? ''}
                   </span>
                   <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
@@ -236,7 +236,7 @@ function BuildModeView({ data }: { data: EngineBuildPayload }) {
               ))}
             </ul>
           )}
-          <p className="border-t border-border/50 px-3 py-1.5 text-[9.5px] leading-relaxed text-muted-foreground/75">
+          <p className="border-t border-border/50 px-3 py-1.5 text-[9.5px] leading-relaxed text-muted-foreground/90">
             arrivalDeltaMs = measured delta between consecutive cargo messages — cargo runs
             parallel jobs, so these overlap and are NOT per-crate build times. wall clock is the
             only exact duration.
@@ -468,7 +468,7 @@ export function EngineExecPanel() {
           <p className="text-xs text-muted-foreground">
             The web demo mirrors the CLI — this button runs the real thing.
           </p>
-          <p className="font-mono text-[9.5px] text-muted-foreground/70">
+          <p className="font-mono text-[9.5px] text-muted-foreground/90">
             {mode === 'doctor'
               ? 'spawn · measure · return stdout verbatim (wanyrix.engine-exec/v1)'
               : 'spawn cargo · measure · return stdout verbatim (wanyrix.engine-build/v1)'}
@@ -497,16 +497,16 @@ export function EngineExecPanel() {
               : err.status === 504
                 ? 'Engine timed out'
                 : 'Engine execution failed'}
-            <span className="font-mono text-[9.5px] text-muted-foreground/70">HTTP {err.status}</span>
+            <span className="font-mono text-[9.5px] text-muted-foreground/90">HTTP {err.status}</span>
           </p>
           <p className="text-[11px] leading-relaxed text-muted-foreground">{err.message}</p>
           {err.detail && (
-            <p className="max-h-16 overflow-y-auto rounded border border-border/50 bg-card p-2 font-mono text-[9.5px] leading-relaxed text-muted-foreground/80">
+            <p className="max-h-16 overflow-y-auto rounded border border-border/50 bg-card p-2 font-mono text-[9.5px] leading-relaxed text-muted-foreground/90">
               {err.detail}
             </p>
           )}
           {err.hint && (
-            <p className="font-mono text-[10px] text-muted-foreground/80">hint: {err.hint}</p>
+            <p className="font-mono text-[10px] text-muted-foreground/90">hint: {err.hint}</p>
           )}
         </div>
       )}
@@ -588,7 +588,7 @@ function DoctorView({
         </div>
       </div>
 
-      <p className="font-mono text-[9.5px] text-muted-foreground/75">
+      <p className="font-mono text-[9.5px] text-muted-foreground/90">
         workspace “{data.report.workspace ?? '—'}” · profile {data.binary.profile} · scanned{' '}
         {data.scanTarget} · {new Date(data.executedAt).toLocaleTimeString()}
       </p>

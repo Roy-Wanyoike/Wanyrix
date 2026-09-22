@@ -348,7 +348,7 @@ function RunningCard({ experiment }: { experiment: Experiment }) {
           <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-amber-500/25 bg-amber-500/5 p-4">
             <Skeleton className="h-9 w-28 bg-amber-500/10" />
             <p className="font-mono text-[11px] text-muted-foreground">awaiting candidate</p>
-            <p className="text-center text-[10px] leading-snug text-muted-foreground/70">
+            <p className="text-center text-[10px] leading-snug text-muted-foreground/90">
               no improvement number exists yet — nothing is claimed
             </p>
           </div>

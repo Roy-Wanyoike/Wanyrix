@@ -165,7 +165,7 @@ export default function PlansView() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-auto text-[11px] leading-relaxed text-muted-foreground/80">{tier.footnote}</p>
+              <p className="mt-auto text-[11px] leading-relaxed text-muted-foreground/90">{tier.footnote}</p>
 
               {tier.id === 'team' && (
                 <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
@@ -234,7 +234,7 @@ export default function PlansView() {
             </p>
             <p>
               expires <span className="font-mono text-foreground/85">{dayToIso(issued.token.expiryDay)}</span>{' '}
-              <span className="text-muted-foreground/70">(UTC day-count{issued.plan === 'trial' ? ' — 14-day trial' : ''})</span>
+              <span className="text-muted-foreground/90">(UTC day-count{issued.plan === 'trial' ? ' — 14-day trial' : ''})</span>
             </p>
             <p className="flex items-start gap-1.5">
               <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-400" aria-hidden />
@@ -245,13 +245,13 @@ export default function PlansView() {
             {JSON.stringify(issued.token, null, 2)}
           </pre>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] leading-relaxed text-muted-foreground/80">{issued.honestyNote}</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground/90">{issued.honestyNote}</p>
             <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={copyToken}>
               {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
               {copied ? 'copied' : 'Copy token JSON'}
             </Button>
           </div>
-          <p className="mt-2 border-t border-border/60 pt-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground/80">
+          <p className="mt-2 border-t border-border/60 pt-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground/90">
             {ACTIVATION_HINT}
           </p>
         </Panel>

@@ -145,7 +145,7 @@ export default function RuntimeView({ onNavigate }: ViewProps) {
                   <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
                     {seg.durationMs.toFixed(1)}ms
                   </span>
-                  <span className="hidden w-24 shrink-0 truncate font-mono text-[10px] text-muted-foreground/70 lg:block">
+                  <span className="hidden w-24 shrink-0 truncate font-mono text-[10px] text-muted-foreground/90 lg:block">
                     {seg.span}
                   </span>
                 </div>
@@ -256,7 +256,7 @@ export default function RuntimeView({ onNavigate }: ViewProps) {
             <div className="flex h-36 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center">
               <Cpu className="size-5 text-muted-foreground/60" aria-hidden />
               <p className="text-sm text-muted-foreground">Not instrumented in this environment.</p>
-              <p className="max-w-[26ch] font-mono text-[10.5px] leading-relaxed text-muted-foreground/70">
+              <p className="max-w-[26ch] font-mono text-[10.5px] leading-relaxed text-muted-foreground/90">
                 engine daemon telemetry (CPU · RSS · p95/p99 · soak) — tracked in AUDIT-I8
               </p>
             </div>

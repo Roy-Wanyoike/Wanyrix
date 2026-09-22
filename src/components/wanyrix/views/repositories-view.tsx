@@ -193,7 +193,7 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
                     <TableCell className="text-right font-mono text-xs tabular-nums">{w.edges}</TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">{w.findings}</TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">
-                      {health ? `${health.cacheHitRate}%` : <span className="text-muted-foreground/60">…</span>}
+                      {health ? `${health.cacheHitRate}%` : <span className="text-muted-foreground/90">…</span>}
                     </TableCell>
                     <TableCell className="font-mono text-[11px] text-muted-foreground">{w.toolchain}</TableCell>
                     <TableCell className="text-right font-mono text-[11px] text-muted-foreground">
@@ -261,7 +261,7 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
                     <dd>{timeAgo(w.lastScan)}</dd>
                   </div>
                 </dl>
-                <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground/80">
+                <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground/90">
                   {w.status === 'live' ? (
                     <>
                       <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden /> live

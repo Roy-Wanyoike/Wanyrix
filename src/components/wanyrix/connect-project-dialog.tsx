@@ -262,7 +262,7 @@ export function ConnectProjectDialog({ trigger }: { trigger?: React.ReactNode })
 
         {/* registered projects */}
         <div className="space-y-1.5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/90">
             connected projects
           </p>
           {registered.isLoading && (

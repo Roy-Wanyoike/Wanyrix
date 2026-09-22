@@ -619,7 +619,7 @@ function DuplicatesPanel({
 
       {resolvable.length > 0 && (
         <div className="mt-3 space-y-2">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/90">
             simulated resolutions · routed to the impact simulator
           </p>
           {resolvable.map((d) => (

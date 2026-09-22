@@ -90,7 +90,7 @@ export default function OrganizationView() {
               <CalendarClock className="size-3.5 shrink-0 text-amber-400" aria-hidden />
               Trial ends <span className="font-mono text-foreground/85">{new Date(org.trialEndsAt).toLocaleDateString()}</span>
             </p>
-            <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+            <p className="text-[11px] leading-relaxed text-muted-foreground/90">
               Fixture dates — the commercial model is a 90-day free trial; core local/offline analysis never requires
               payment.
             </p>
@@ -221,7 +221,7 @@ export default function OrganizationView() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/80">
+        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/90">
           Tier capabilities mirror the documented commercial model; this environment has no payment backend, so no
           upgrade actions are offered here — by design, not by omission.
         </p>
