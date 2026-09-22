@@ -43,7 +43,7 @@ import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { mergeWorkspaceRegistry } from '@/lib/wanyrix/registered-workspace'
 import { NAV_ITEMS } from './nav-registry'
 import { WorkspaceProvenanceBadge } from './shared'
-import type { ViewId } from '@/lib/wanyrix/types'
+import type { ViewId, WorkspaceSummary } from '@/lib/wanyrix/types'
 
 /* Navigation comes from ./nav-registry (AUDIT-I3) — same source as the
    sidebar, so the palette always covers every view, 19/19.
@@ -200,28 +200,15 @@ export function CommandPalette({
           {/* QA-5-B-1: registered LOCAL projects first, fixtures after — the
               same merged registry the topbar selector renders. */}
           {mergeWorkspaceRegistry(wsData).map((w) => (
-            <CommandItem
+            <WorkspacePaletteRow
               key={w.id}
-              value={`workspace ${w.name}`}
-              disabled={w.id === activeWs}
+              workspace={w}
+              isCurrent={w.id === activeWs}
               onSelect={() => {
                 close()
                 setActiveWs(w.id)
               }}
-              className="gap-2.5"
-            >
-              <Database className={`size-4 ${w.accent === 'emerald' ? 'text-emerald-400' : 'text-primary'}`} />
-              <span>{w.name}</span>
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {w.crates} crates · {w.findings} findings
-              </span>
-              {/* QA-5-B-4: provenance travels with the option — fixtures are
-                  demo data, never LIVE (title carries the explanation). */}
-              <WorkspaceProvenanceBadge fixtureOnly={w.fixtureOnly} />
-              {w.id === activeWs && (
-                <Check className="ml-auto size-3.5 text-emerald-400" aria-label="active" />
-              )}
-            </CommandItem>
+            />
           ))}
         </CommandGroup>
         <CommandSeparator />
@@ -331,6 +318,60 @@ export function CommandPalette({
         </CommandGroup>
       </CommandList>
     </CommandDialog>
+  )
+}
+
+/**
+ * One "Switch workspace" palette row (QA-1 F-2).
+ *
+ * Used to render the CURRENT workspace as a disabled cmdk item: typing the
+ * active workspace's name showed a single [disabled] row whose Enter was a
+ * silent no-op. Disabled rows are un-selectable AND skipped by cmdk keyboard
+ * handling, so there was no feedback at all. The row is now always actionable:
+ *   - a non-current row switches via the same store the topbar selector uses;
+ *   - the current row is labeled "current workspace" in text (the bare Check
+ *     icon was not legible as a reason) and selecting it re-applies the active
+ *     id (an idempotent store write) and closes the palette — Enter acknowledges
+ *     instead of dying silently.
+ */
+export function WorkspacePaletteRow({
+  workspace,
+  isCurrent,
+  onSelect,
+}: {
+  workspace: WorkspaceSummary
+  isCurrent: boolean
+  onSelect: () => void
+}) {
+  return (
+    <CommandItem
+      value={`workspace ${workspace.name}`}
+      onSelect={onSelect}
+      className="gap-2.5"
+      title={
+        isCurrent
+          ? `${workspace.name} is the current workspace — selecting it re-applies it`
+          : `Switch to ${workspace.name}`
+      }
+    >
+      <Database
+        className={`size-4 ${workspace.accent === 'emerald' ? 'text-emerald-400' : 'text-primary'}`}
+      />
+      <span>{workspace.name}</span>
+      <span className="font-mono text-[10px] text-muted-foreground">
+        {workspace.crates} crates · {workspace.findings} findings
+      </span>
+      {/* F-2: the visible reason the current workspace needs no switch. */}
+      {isCurrent && (
+        <span className="font-mono text-[10px] uppercase text-emerald-400">current</span>
+      )}
+      {/* QA-5-B-4: provenance travels with the option — fixtures are
+          demo data, never LIVE (title carries the explanation). */}
+      <WorkspaceProvenanceBadge fixtureOnly={workspace.fixtureOnly} />
+      {isCurrent && (
+        <Check className="ml-auto size-3.5 text-emerald-400" aria-label="active" />
+      )}
+    </CommandItem>
   )
 }
 
