@@ -167,9 +167,11 @@ field-for-field to the shapes in `src/lib/wanyrix/types.ts` (pinned by
    `summary.developerBuild/ciBuild/diskUsage`) are deliberately NOT emitted —
    engine v1 measures no build times, and fabricating them would violate the
    honesty gates. Findings inside remain fully conformant.
-2. **`meta.scope` is `"full-manifest-graph"`**, not the web demo's
-   `'backbone-subset'` literal — the engine serves the complete measured
-   graph. The TS literal needs widening when the API is wired up.
+2. ~~**`meta.scope` is `"full-manifest-graph"`**, not the web demo's
+   `'backbone-subset'` literal~~ **RESOLVED** (QA-5-B-1 round): the TS literal at
+   `src/lib/wanyrix/types.ts` now accepts both `'backbone-subset' | 'full-manifest-graph'`,
+   and registered-project payloads emit `full-manifest-graph` with the conformance
+   pinned in `tests/unit/registered-workspaces.test.ts`.
 3. **Health `lastScan` is served as top-level `generatedAt`** (same instant;
    renamed so the deterministic payload can be audited independently).
 4. **Additive node extras**: `buildTimeStatus`, `changeFreqStatus`,
