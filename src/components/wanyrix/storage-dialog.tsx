@@ -19,6 +19,35 @@ import { useToast } from '@/hooks/use-toast'
 
 const ROW_ICONS = [Database, Layers, HardDrive, History, ScrollText]
 
+/**
+ * QA-1 F-3 — state of the "Simulate scan rebuild" CTA.
+ *
+ * The button used to be disabled whenever the reclaimable rows were already
+ * at their baseline (rebuildableMB < 1) with NO visible reason — the raw
+ * `title` was the only hint and disabled buttons often suppress tooltips.
+ * The disabled gate was over-strict anyway: POST /api/wanyrix/storage/rebuild
+ * accepts an at-baseline rebuild and answers HONESTLY (rebuiltMB 0, empty
+ * detail → the dialog's "Caches are already at their working-set size"
+ * toast), so the condition was satisfiable and the right fix is to enable the
+ * CTA and let the server label the no-op. Disabled now means pending only.
+ * The label keeps the honest `+N MB` suffix when a rebuild would add real MB,
+ * and stays plain (never "+0 MB") when it would not.
+ */
+export function rebuildCtaState(input: {
+  rebuildableMB: number
+  rebuildPending: boolean
+  reclaimPending: boolean
+}): { disabled: boolean; label: string; hint: string } {
+  const { rebuildableMB, rebuildPending, reclaimPending } = input
+  return {
+    disabled: rebuildPending || reclaimPending,
+    label: `Simulate scan rebuild${rebuildableMB >= 1 ? ` (+${rebuildableMB} MB)` : ''}`,
+    hint:
+      'Simulate scans repopulating the reclaimable caches (Gate 21: simulated). ' +
+      'If the caches are already at their working-set size the rebuild adds 0 MB and says so.',
+  }
+}
+
 /** Accent per row family — mirrors the storage semantics (durable vs ephemeral). */
 function rowAccent(row: StorageRow): { bar: string; chip: string } {
   if (row.label.startsWith('Database')) return { bar: 'from-amber-500/80 to-amber-400/50', chip: 'text-amber-300' }
@@ -93,6 +122,12 @@ export function StorageDialog({ children }: { children: React.ReactNode }) {
       },
     })
   }
+
+  const rebuildCta = rebuildCtaState({
+    rebuildableMB,
+    rebuildPending: rebuild.isPending,
+    reclaimPending: reclaim.isPending,
+  })
 
   return (
     <Dialog>
@@ -200,11 +235,11 @@ export function StorageDialog({ children }: { children: React.ReactNode }) {
                   variant="ghost"
                   className="h-7 gap-1.5 text-xs text-muted-foreground"
                   onClick={onRebuild}
-                  disabled={rebuild.isPending || reclaim.isPending || rebuildableMB < 1}
-                  title="Simulate scans repopulating the reclaimable caches (Gate 21: simulated)"
+                  disabled={rebuildCta.disabled}
+                  title={rebuildCta.hint}
                 >
                   <Hammer className="size-3" />
-                  Simulate scan rebuild{rebuildableMB >= 1 ? ` (+${rebuildableMB} MB)` : ''}
+                  {rebuildCta.label}
                 </Button>
                 <Button
                   size="sm"
