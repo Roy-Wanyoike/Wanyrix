@@ -39,6 +39,13 @@ model ScanRun {
   findingIds          String? // JSON string[] — sorted, unique, capped at 400
   findingIdsTruncated Boolean @default(false) // true when the source list exceeded the 400 cap
 
+  // Issue #128 (honesty): true when the run REPLAYED the stored doctor report
+  // (doctor view / topbar / ⌘K — the engine binary was not invoked by those
+  // flows). Persisted verbatim from the client's POST; the server never
+  // derives it. Additive + default(false) — pre-existing rows are real
+  // engine-exec or legacy runs and simply render without the REPLAY badge.
+  replay Boolean @default(false)
+
   @@index([workspaceId, startedAt])
 }
 

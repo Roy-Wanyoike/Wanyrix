@@ -216,7 +216,9 @@ export function AppShell({
     const wsName = activeSummary?.name ?? 'the active workspace'
     toast({
       title: 'Scan running…',
-      description: `Wanyrix engine is re-collecting cargo + git telemetry for ${wsName}.`,
+      // issue #128: honest at the point of the action — this flow replays the
+      // stored doctor report; the engine binary is not invoked by it.
+      description: `Replaying the stored doctor report for ${wsName} — engine binary not invoked in this flow.`,
     })
 
     const startedAt = Date.now()

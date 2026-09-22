@@ -86,6 +86,12 @@ export interface ScanHistoryRunFlavor {
    * time is a visible zero — never on measured demo rows (additive key).
    */
   buildTimeStatus?: 'not-measured'
+  /**
+   * Issue #128: present (and `true`) only on runs whose figures replayed the
+   * stored doctor report (no engine binary invoked) — additive key so every
+   * export carries the replay marking, not just the History view.
+   */
+  replay?: boolean
 }
 
 export interface ScanHistoryFlavor {
@@ -207,6 +213,9 @@ export function toScanHistoryRunFlavor(entry: ScanHistoryEntry): ScanHistoryRunF
     // R8: the not-measured build-time marker travels with the row so every
     // export surfaces the visible zero AS a visible zero (additive key).
     ...(entry.buildTimeStatus === 'not-measured' ? { buildTimeStatus: 'not-measured' as const } : {}),
+    // Issue #128: the replay marker travels with the row so every export
+    // carries the replay disclosure (additive key — legacy entries omit it).
+    ...(entry.replay === true ? { replay: true as const } : {}),
   }
 }
 

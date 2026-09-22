@@ -23,7 +23,13 @@ import type {
   WorkspacesPayload,
 } from './types'
 import { useWorkspaceStore } from './workspace-store'
-import { useScanStore, type ScanRunInput, type ScanRunRecord, type ScanTrigger } from './scan-store'
+import {
+  useScanStore,
+  type ScanHistoryEntry,
+  type ScanRunInput,
+  type ScanRunRecord,
+  type ScanTrigger,
+} from './scan-store'
 import { capFindingIds } from './finding-diff'
 import { useSyncStatusStore } from './sync-status-store'
 
@@ -388,6 +394,8 @@ export interface ServerScanRun {
   /** R7 findings fingerprint — present only on runs POSTed with one. */
   findingIds?: string[]
   findingIdsTruncated?: boolean
+  /** Issue #128 — `true` on runs whose figures replayed the stored report. */
+  replay?: boolean
 }
 
 /** GET /api/wanyrix/scan-runs envelope. */
@@ -826,11 +834,79 @@ export function useRecordScanRun(): (input: RecordScanRunInput) => ScanRunRecord
 }
 
 /**
+ * Issue #128 — pure record construction for ONE completed doctor run.
+ *
+ * Every run recorded through this builder REPLAYS the stored doctor report
+ * (`GET /api/wanyrix/doctor` serves the stored fixture payload; the engine
+ * binary is NOT invoked by the doctor view / topbar / ⌘K flows — the real
+ * binary lives behind the "Real engine binary" panel, which records via
+ * {@link useRecordScanRun} with trigger `'engine-exec'` and never sets the
+ * replay flag). Both produced records therefore carry `replay: true` so the
+ * History surfaces can badge the replay honestly at the point of storage,
+ * not only in a distant footnote.
+ *
+ * Pure (no React, no store, clock injected) so the flag plumbing is pinned
+ * by unit tests (tests/unit/doctor-replay.test.ts).
+ */
+export function buildDoctorRunRecords(input: {
+  report: DoctorReport
+  trigger: ScanTrigger
+  startedAt: number
+  durationMs: number
+  /** epoch ms for id/at stamping (inject the clock — determinism in tests) */
+  now: number
+  workspaceId: string
+}): { entry: ScanHistoryEntry; run: ScanRunInput } {
+  const { report, trigger, startedAt, durationMs, now, workspaceId } = input
+  const fingerprint = capFindingIds(report.findings.map((f) => f.id))
+  const critical = report.findings.filter((f) => f.severity === 'critical').length
+  const warning = report.findings.filter((f) => f.severity === 'warning').length
+  const info = report.findings.filter((f) => f.severity === 'info').length
+  return {
+    entry: {
+      id: `scan-${now}`,
+      workspace: workspaceId,
+      at: now,
+      durationMs,
+      findings: report.findings.length,
+      critical,
+      warning,
+      info,
+      buildTime: report.buildTime,
+      estimatedFrom: report.estimatedRange[0],
+      estimatedTo: report.estimatedRange[1],
+      trigger,
+      findingIds: fingerprint.ids,
+      ...(fingerprint.truncated ? { findingIdsTruncated: true } : {}),
+      // issue #128: this run replayed the stored report — mark it as such.
+      replay: true,
+    },
+    run: {
+      workspaceId,
+      startedAt,
+      finishedAt: now,
+      durationMs,
+      findingCount: report.findings.length,
+      severityCounts: { critical, warning, info },
+      trigger,
+      findingIds: fingerprint.ids,
+      findingIdsTruncated: fingerprint.truncated,
+      // issue #128: replay marker rides along to the durable server log.
+      replay: true,
+    },
+  }
+}
+
+/**
  * Records ONE completed doctor run end-to-end (issue #37 + Task 3-b): appends
  * the History entry AND the structured scan-run record (which fire-and-forget
  * POSTs to the durable server log). Shared by the doctor view (its own button
  * + auto-run) and the app shell (topbar / ⌘K headless runs, issue #99) so the
  * entry shape can never drift between the two recorders.
+ *
+ * Issue #128: every run through this recorder is a REPLAY of the stored
+ * doctor report (no engine invocation) — {@link buildDoctorRunRecords}
+ * stamps `replay: true` on both records.
  *
  * Callers must gate on `useScanStore.getState().claimRunRecording(tick)` so a
  * single scan event is recorded exactly once.
@@ -846,36 +922,16 @@ export function useRecordDoctorRun(): (input: {
   const recordScanRun = useRecordScanRun()
   return useCallback(
     ({ report, trigger, startedAt, durationMs }) => {
-      const fingerprint = capFindingIds(report.findings.map((f) => f.id))
-      const critical = report.findings.filter((f) => f.severity === 'critical').length
-      const warning = report.findings.filter((f) => f.severity === 'warning').length
-      const info = report.findings.filter((f) => f.severity === 'info').length
-      addScanEntry(activeWs, {
-        id: `scan-${Date.now()}`,
-        workspace: activeWs,
-        at: Date.now(),
-        durationMs,
-        findings: report.findings.length,
-        critical,
-        warning,
-        info,
-        buildTime: report.buildTime,
-        estimatedFrom: report.estimatedRange[0],
-        estimatedTo: report.estimatedRange[1],
+      const { entry, run } = buildDoctorRunRecords({
+        report,
         trigger,
-        findingIds: fingerprint.ids,
-        ...(fingerprint.truncated ? { findingIdsTruncated: true } : {}),
-      })
-      return recordScanRun({
         startedAt,
-        finishedAt: Date.now(),
         durationMs,
-        findingCount: report.findings.length,
-        severityCounts: { critical, warning, info },
-        trigger,
-        findingIds: fingerprint.ids,
-        findingIdsTruncated: fingerprint.truncated,
+        now: Date.now(),
+        workspaceId: activeWs,
       })
+      addScanEntry(activeWs, entry)
+      return recordScanRun(run)
     },
     [activeWs, addScanEntry, recordScanRun],
   )

@@ -100,8 +100,12 @@ function HistoryBody() {
           <li className="flex min-w-0 items-start gap-2">
             <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
             <span className="min-w-0 flex-1">
-              The engine replays the same telemetry each run in this demo environment — history tracks what the CLI
-              would report across runs, honestly labeled as such in every export.
+              Runs triggered from the doctor view, the topbar or the ⌘K palette REPLAY the stored
+              doctor report (the engine binary is not invoked by those flows) and are marked{' '}
+              <span className="font-mono text-amber-800 dark:text-amber-400">REPLAY</span> on the
+              entry itself; only runs recorded via the{' '}
+              <span className="font-mono text-foreground/85">Real engine binary</span> panel carry
+              the real binary&apos;s data.
             </span>
           </li>
         </ul>

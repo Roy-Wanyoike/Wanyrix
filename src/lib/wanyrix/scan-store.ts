@@ -69,6 +69,15 @@ export interface ScanHistoryEntry {
    */
   findingIds?: string[]
   findingIdsTruncated?: boolean
+  /**
+   * Issue #128 (additive, honesty): present (and `true`) ONLY on rows whose
+   * figures come from REPLAYING the stored doctor report — the doctor view,
+   * topbar and ⌘K flows re-stream `GET /api/wanyrix/doctor` and never invoke
+   * the engine binary. Runs recorded by the REAL binary (trigger
+   * `engine-exec`) omit the key. Legacy persisted entries predate it.
+   * Rendered as a REPLAY badge in the History surfaces.
+   */
+  replay?: boolean
 }
 
 const CAP = 20
@@ -104,6 +113,14 @@ export interface ScanRunRecord {
    */
   findingIds?: string[]
   findingIdsTruncated?: boolean
+  /**
+   * Issue #128 (additive, honesty): `true` marks a run whose figures were
+   * REPLAYED from the stored doctor report (no engine binary invoked). The
+   * key is omitted entirely on real engine-exec runs and legacy records so
+   * the pinned shapes stay byte-compatible; synced verbatim to the durable
+   * server log (`wanyrix.scan-runs/v1`).
+   */
+  replay?: boolean
 }
 
 /**
@@ -113,9 +130,9 @@ export interface ScanRunRecord {
  * defaults to `'manual'`.
  */
 export type ScanRunInput = Partial<
-    Pick<ScanRunRecord, 'id' | 'durationMs' | 'trigger' | 'findingIds' | 'findingIdsTruncated'>
+    Pick<ScanRunRecord, 'id' | 'durationMs' | 'trigger' | 'findingIds' | 'findingIdsTruncated' | 'replay'>
   > &
-  Omit<ScanRunRecord, 'id' | 'durationMs' | 'trigger' | 'findingIds' | 'findingIdsTruncated'>
+  Omit<ScanRunRecord, 'id' | 'durationMs' | 'trigger' | 'findingIds' | 'findingIdsTruncated' | 'replay'>
 
 /** Max persisted scan runs per workspace (oldest evicted). */
 export const SCAN_RUNS_CAP = 50
@@ -222,6 +239,9 @@ export const useScanStore = create<ScanState>()(
           record.findingIds = run.findingIds
           if (run.findingIdsTruncated) record.findingIdsTruncated = true
         }
+        // Issue #128: the replay marker is included ONLY when explicitly true
+        // — real engine-exec runs and legacy records keep their exact shape.
+        if (run.replay === true) record.replay = true
         set((s) => ({
           runs: {
             ...s.runs,
