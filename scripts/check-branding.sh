@@ -32,6 +32,16 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 
 PATTERN='ferrix|f-eir|f_eir|FER-[0-9]'
 
+# AUD-12: ripgrep is the fast default, but Ubuntu runners do not ship it —
+# the brand gate must still run. Plain grep (with binary skipping and the
+# same ERE pattern) is the exact fallback; the gate never silently passes
+# because a tool is missing.
+if command -v rg >/dev/null 2>&1; then
+  SCAN_TOOL=rg
+else
+  SCAN_TOOL=grep
+fi
+
 # Track a violation counter.
 violations=0
 
@@ -46,13 +56,27 @@ else
 fi
 
 scan() {
-  if [ "${#FILES[@]}" -gt 0 ]; then
-    printf '%s\0' ${FILES[@]+"${FILES[@]}"} |
-      xargs -0 -r rg -il "$PATTERN" 2>/dev/null
+  if [ "$SCAN_TOOL" = rg ]; then
+    if [ "${#FILES[@]}" -gt 0 ]; then
+      printf '%s\0' ${FILES[@]+"${FILES[@]}"} |
+        xargs -0 -r rg -il "$PATTERN" 2>/dev/null
+    else
+      rg -il "$PATTERN" \
+        -g '!node_modules/**' -g '!.next/**' -g '!.git/**' -g '!dev.log' \
+        -g '!tool-results/**' -g '!bun.lock' -g '!db/**' . 2>/dev/null
+    fi
   else
-    rg -il "$PATTERN" \
-      -g '!node_modules/**' -g '!.next/**' -g '!.git/**' -g '!dev.log' \
-      -g '!tool-results/**' -g '!bun.lock' -g '!db/**' . 2>/dev/null
+    # grep fallback (AUD-12): -I skips binaries like rg does; -r scan mirrors
+    # the rg glob excludes; `-e` keeps the pattern safe from path-like args.
+    if [ "${#FILES[@]}" -gt 0 ]; then
+      printf '%s\0' ${FILES[@]+"${FILES[@]}"} |
+        xargs -0 -r grep -i -I -l -E -e "$PATTERN" 2>/dev/null
+    else
+      grep -i -I -r -l -E -e "$PATTERN" \
+        --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git \
+        --exclude-dir=tool-results --exclude-dir=db \
+        --exclude=dev.log --exclude=bun.lock . 2>/dev/null
+    fi
   fi
 }
 
@@ -74,7 +98,11 @@ while IFS= read -r path; do
   esac
 
   echo "BRANDING VIOLATION: $path"
-  rg -in "$PATTERN" "$path" 2>/dev/null | head -5 | sed 's/^/    > /'
+  if [ "$SCAN_TOOL" = rg ]; then
+    rg -in "$PATTERN" "$path" 2>/dev/null | head -5 | sed 's/^/    > /'
+  else
+    grep -i -I -n -E -e "$PATTERN" -- "$path" 2>/dev/null | head -5 | sed 's/^/    > /'
+  fi
   violations=$((violations + 1))
 done < <(scan)
 

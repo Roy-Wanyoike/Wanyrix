@@ -1,3 +1,4 @@
+# HONESTY LABEL (issue #92 — see wanyrix.yml for the full label): GitHub Actions is BILLING-LOCKED on this repository; this workflow has NEVER executed on hosted runners and is validated LOCALLY ONLY (YAML parse + local step dry-runs). Keep current when editing; retire after the first hosted run.
 name: Perf & Resilience (manual)
 
 # Performance + resilience gates (issues #64/#65): the opt-in measurement

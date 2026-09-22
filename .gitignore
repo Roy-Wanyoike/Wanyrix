@@ -45,23 +45,20 @@ local-*
 .claude
 .z-ai-config
 *.log
-dev.log
 dev.out.log
-test
-prompt
+# AUD-12: anchored — these name REPO-ROOT entries, not any file/dir called
+# test/prompt anywhere in the tree
+/test
+/prompt
 
-server.log
-# Skills directory
-/skills/
+# AUD-12: dedupe — dev.log/server.log are covered by *.log; skills/ lives in
+# the Wanyrix sandbox block below
 # Wanyrix sandbox (never commit secrets or local artifacts)
 upload/
-dev.log
-server.log
 worklog.md
 agent-ctx/
 skills/
 download/
-*.tsbuildinfo
 
 # Local-only working artifacts (never published)
 .local/

@@ -6,8 +6,10 @@
 #   bash scripts/github/create-prs.sh
 #
 # Branch/issue wiring comes from BRANCHES below (issue numbers resolved from
-# the map file written by create-issues.sh). Add entries as new fix branches land.
-
+# the map file written by create-issues.sh). Add a row when a fix branch
+# lands; DELETE the row once its PR is merged and the branch is gone (AUD-12:
+# the finished pr/final-1/pr/final-2 rows are removed — they shipped long
+# ago and only produced SKIP noise).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 source "$(dirname "$0")/lib.sh"
@@ -16,8 +18,6 @@ source "$(dirname "$0")/lib.sh"
 
 # branch|record-id|pr-title
 BRANCHES=(
-  "pr/final-1-investor-overview|FINAL-1|docs: investor overview (closes FINAL-1, gate #56)"
-  "pr/final-2-registry-index|FINAL-2|docs: index ENG-T3A-1 in issue registry (closes FINAL-2, AUDIT-I10 chain half)"
 )
 
 echo "== Opening linked PRs =="
@@ -41,13 +41,13 @@ for row in "${BRANCHES[@]}"; do
     fi
     gh pr create -R "$WANYRIX_REPO" --base main --head "$branch" \
       --title "$title" \
-      --body "Resolves the gap recorded in \`docs/audits/issues/$rid.md\`.
+      --body "Resolves the gap recorded in \`issues/$rid.md\`.
 
 Closes #$number
 
 ## Evidence
 - Local gates re-run green at the tip of this branch (see branch commits).
-- Full audit trail: \`docs/audits/issues/ISSUE_REGISTRY.md\`."
+- Full audit trail: \`issues/README.md\`."
     echo "OPENED PR for $rid (branch $branch, closes #$number)"
     opened=$((opened+1))
   else
