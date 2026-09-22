@@ -9,7 +9,9 @@ set -euo pipefail
 
 WANYRIX_REPO="${WANYRIX_REPO:-Roy-Wanyoike/wanyrix}"
 WANYRIX_OLD_REPO="${WANYRIX_OLD_REPO:-Roy-Wanyoike/ferrix}"
-ISSUES_DIR="${ISSUES_DIR:-.local/audits/issues}"
+# AUD-12: ONE ledger location — the ops ledger at issues/ (mirrors the
+# GitHub issue template 1:1). The former .local/audits/issues split is gone.
+ISSUES_DIR="${ISSUES_DIR:-issues}"
 MAP_FILE="${MAP_FILE:-.local/audits/CREATED_ISSUES.md}"
 
 die() { echo "FATAL: $*" >&2; exit 1; }

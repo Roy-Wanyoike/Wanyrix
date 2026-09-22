@@ -10,7 +10,7 @@
  * same row instead of duplicating it, and DELETE-by-id stays unambiguous.
  */
 
-import { stat, realpath } from 'node:fs/promises'
+import { lstat, stat, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -87,6 +87,14 @@ export interface PathCheck {
  *   3. exists on disk (stat)
  *   4. is a directory
  *   5. has a non-empty basename (rejects a bare filesystem root)
+ *   6. is not itself a symlink (AUD-8: the candidate's FINAL component must
+ *      be a real directory — symlinked project dirs are refused at the web
+ *      layer with a named reason instead of surfacing later as an engine
+ *      502; symlinked ANCESTORS stay fine, containment is decided on the
+ *      realpath in `isInsideApprovedRoots`)
+ *
+ * Any fs error (ENOENT, ENOTDIR, ENAMETOOLONG, garbage bytes) is folded into
+ * a typed PathCheck — a raw fs exception never escapes this function.
  *
  * Returns `abs = path.resolve(trimmed)` when the input could be resolved;
  * every failure carries a HUMAN-NAMED reason surfaced verbatim to the UI.
@@ -106,10 +114,18 @@ export async function validateCandidatePath(raw: string): Promise<PathCheck> {
   const abs = path.resolve(trimmed)
 
   let st: Awaited<ReturnType<typeof stat>>
+  let lst: Awaited<ReturnType<typeof lstat>>
   try {
     st = await stat(abs)
-  } catch {
+    lst = await lstat(abs)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException | null)?.code === 'ENAMETOOLONG') {
+      return { ok: false, abs, reason: PATH_TOO_LONG_REFUSAL }
+    }
     return { ok: false, abs, reason: 'path does not exist — nothing to scan there (check for typos)' }
+  }
+  if (lst.isSymbolicLink()) {
+    return { ok: false, abs, reason: SYMLINKED_PATH_REFUSAL }
   }
   if (!st.isDirectory()) {
     return { ok: false, abs, reason: 'path is not a directory — pass the project directory, not a file' }
@@ -125,9 +141,39 @@ export async function validateCandidatePath(raw: string): Promise<PathCheck> {
  * can scan: a `Cargo.toml` manifest, or a `.wanyrix` directory (created by
  * `wanyrix init`). Anything else is refused at registration — the engine
  * would only report zero manifests, which is data, not a connectable project.
+ *
+ * Callers MUST pass the entry list through `rustMarkerEntries` first (AUD-8):
+ * this string-level check cannot see entry TYPES, so a planted symlink named
+ * `.wanyrix`/`Cargo.toml` must be dropped before it gets here.
  */
 export function hasRustProjectMarker(entries: string[]): boolean {
   return entries.includes('Cargo.toml') || entries.includes('.wanyrix')
+}
+
+/** Named web-layer refusal when the candidate's final component is a symlink. */
+export const SYMLINKED_PATH_REFUSAL =
+  'path is a symlink — pass the real project directory (the engine scans real directories only)'
+
+/** Named refusal when the candidate exceeds the filesystem name/path limit. */
+export const PATH_TOO_LONG_REFUSAL =
+  'path is too long — it exceeds the filesystem PATH_MAX/NAME_MAX limit'
+
+/**
+ * Type-filters a `readdir(abs, { withFileTypes: true })` listing down to the
+ * Rust-marker entries (AUD-8): `Cargo.toml` only as a REGULAR file, `.wanyrix`
+ * only as a REAL directory. A symlinked marker name is dropped — a planted
+ * alias must not satisfy the marker check for a directory the engine would
+ * refuse to scan.
+ */
+export function rustMarkerEntries(
+  dirents: readonly { name: string; isFile(): boolean; isDirectory(): boolean }[],
+): string[] {
+  return dirents
+    .filter(
+      (d) =>
+        (d.isFile() && d.name === 'Cargo.toml') || (d.isDirectory() && d.name === '.wanyrix'),
+    )
+    .map((d) => d.name)
 }
 
 /* ------------------------------------------------ workspace root confinement (QA-3-B-2) --- */

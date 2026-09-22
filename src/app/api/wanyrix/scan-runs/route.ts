@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { methodNotAllowed, resolveWorkspace, WORKSPACE_IDS } from '@/lib/wanyrix/api'
+import {
+  methodNotAllowed,
+  workspaceParam,
+  WORKSPACE_IDS,
+} from '@/lib/wanyrix/api'
+import { isRegisteredWorkspaceId } from '@/lib/wanyrix/register'
+import { resolveScanRunWorkspace } from '@/lib/wanyrix/registered-workspace'
 import { isValidFindingIdList, FINDING_IDS_CAP } from '@/lib/wanyrix/finding-diff'
+import { WORKSPACES_DEFAULT } from '@/lib/wanyrix/data'
 
 /**
  * Server-side scan-run log — `wanyrix.scan-runs/v1`.
@@ -25,6 +32,16 @@ import { isValidFindingIdList, FINDING_IDS_CAP } from '@/lib/wanyrix/finding-dif
  * Error contract (ENG-TCA series): unknown `ws`/`workspaceId` → 404
  * `{ error, knownWorkspaces }` (never a silent substitution); malformed body
  * → 400 with a named reason; wrong methods → 405 carrying `Allow`.
+ *
+ * AUD-14: the workspace resolution covers the FULL registry — the demo
+ * fixtures AND the registered local projects (QA-5-B-1 made them
+ * first-class everywhere else; the durable sync was the one fixture-only
+ * holdout). The ids come from the SAME store GET /api/wanyrix/workspaces
+ * serves (`db.registeredWorkspace` — mergeWorkspaceRegistry's source of
+ * truth); `knownWorkspaces` on a 404 lists registered ids first (merge
+ * order), then fixtures. A registered-SHAPED id (`ws-local-…`) that cannot
+ * be checked because the store is down answers 503 — it is never invented
+ * into a 404.
  */
 
 const SCHEMA = 'wanyrix.scan-runs/v1'
@@ -32,6 +49,64 @@ const TRIGGERS = new Set(['manual', 'topbar', 'palette', 'engine-exec'])
 
 /** Body cap — scan-run payloads are tiny; 64 KB is generous. */
 const MAX_BODY_BYTES = 64 * 1024
+
+/** Wire refusal when a registered-shaped id cannot be checked (AUD-14). */
+const REGISTERED_STORE_UNAVAILABLE =
+  'registered-workspace store unavailable — registered workspace ids cannot be resolved right now'
+
+/**
+ * AUD-14 — the registered ids, from the SAME rows GET /api/wanyrix/workspaces
+ * serves. Returns null when the store is unavailable; the caller answers 503
+ * for a registered-SHAPED id (it could be real — no invented 404) and 404
+ * with the fixture list for a non-registered-shaped id (those can never be
+ * registered — the prefix is a documented invariant, register.ts).
+ */
+async function registeredWorkspaceIds(): Promise<string[] | null> {
+  try {
+    const rows = await db.registeredWorkspace.findMany({
+      select: { id: true },
+      orderBy: { registeredAt: 'asc' },
+    })
+    return rows.map((r) => r.id)
+  } catch (err) {
+    console.error('[scan-runs] registered-workspace lookup failed:', err)
+    return null
+  }
+}
+
+/** The #129 404 envelope — registered ids first (merge order), then fixtures. */
+function unknownWorkspaceResponse(id: string, registeredIds: string[]): NextResponse {
+  const { knownWorkspaces } = resolveScanRunWorkspace(id, WORKSPACE_IDS, registeredIds)
+  return NextResponse.json(
+    { error: `unknown workspace '${id}'`, knownWorkspaces },
+    { status: 404 },
+  )
+}
+
+/**
+ * AUD-14 resolution, shared by GET (param) and POST (body):
+ *   - a known fixture id needs no db round-trip;
+ *   - otherwise the registered ids are fetched and the decision is made by
+ *     the pure `resolveScanRunWorkspace` (registered-workspace.ts);
+ *   - a registered-shaped id with the store down → 503 (never a fake 404);
+ *   - a truly-unknown id → the #129 404 envelope.
+ * Returns the resolved workspace id, or the pre-built error response.
+ */
+async function resolveScanWorkspaceId(raw: string): Promise<{ ws: string } | { error: NextResponse }> {
+  if (WORKSPACE_IDS.includes(raw)) return { ws: raw }
+  const prefixShaped = isRegisteredWorkspaceId(raw)
+  const registeredIds = await registeredWorkspaceIds()
+  if (registeredIds === null) {
+    if (prefixShaped) {
+      return { error: NextResponse.json({ error: REGISTERED_STORE_UNAVAILABLE }, { status: 503 }) }
+    }
+    // no prefix ⇒ can never be registered ⇒ the 404 is exact even store-down
+    return { error: unknownWorkspaceResponse(raw, []) }
+  }
+  const { known } = resolveScanRunWorkspace(raw, WORKSPACE_IDS, registeredIds)
+  if (known) return { ws: raw }
+  return { error: unknownWorkspaceResponse(raw, registeredIds) }
+}
 
 /** Wire shape of one persisted run (mirrors `ScanRunRecord`). */
 interface ScanRunDto {
@@ -114,8 +189,13 @@ function toDto(r: {
 /* ------------------------------------------------------------------ GET --- */
 
 export async function GET(req: NextRequest) {
-  const { ws, error } = resolveWorkspace(req)
-  if (error) return error
+  const raw = workspaceParam(req)
+  let ws = raw ?? WORKSPACES_DEFAULT
+  if (raw !== null && raw !== '') {
+    const resolved = await resolveScanWorkspaceId(raw)
+    if ('error' in resolved) return resolved.error
+    ws = resolved.ws
+  }
 
   let rows: Awaited<ReturnType<typeof db.scanRun.findMany>> = []
   try {
@@ -167,10 +247,14 @@ export async function POST(req: NextRequest) {
 
   const { workspaceId } = body
   if (typeof workspaceId !== 'string' || !WORKSPACE_IDS.includes(workspaceId)) {
-    return NextResponse.json(
-      { error: `unknown workspace '${String(workspaceId)}'`, knownWorkspaces: WORKSPACE_IDS },
-      { status: 404 },
-    )
+    if (typeof workspaceId !== 'string') {
+      return NextResponse.json(
+        { error: `unknown workspace '${String(workspaceId)}'`, knownWorkspaces: WORKSPACE_IDS },
+        { status: 404 },
+      )
+    }
+    const resolved = await resolveScanWorkspaceId(workspaceId)
+    if ('error' in resolved) return resolved.error
   }
 
   const { startedAt, finishedAt, findingCount, severityCounts, trigger, id, durationMs } = body

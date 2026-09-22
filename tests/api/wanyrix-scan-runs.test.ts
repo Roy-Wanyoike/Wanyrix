@@ -13,14 +13,20 @@
  *               malformed JSON / non-object / bad fields → 400 (named),
  *               body > 64 KB → 413, wrong methods → 405 + Allow;
  *   R7 + #128:  findingIds fingerprint round-trip + cap refusal, replay
- *               marker round-trip.
+ *               marker round-trip;
+ *   AUD-14:     a REGISTERED workspace id resolves (durable sync is no
+ *               longer fixture-only) — capability-probed, because the
+ *               shared dev server serves the MAIN checkout and still runs
+ *               pre-merge code; the unknown-registered-shape 404 branch is
+ *               pinned unconditionally (old and new code agree on it).
  *
- * Ids are QA-scoped (`run-aud2-…`) so runs never collide with real syncs;
- * the ScanRun log is append/upsert-only by design (no DELETE route exists).
+ * Ids are QA-scoped (`run-aud2-…`/`run-aud14-…`) so runs never collide with
+ * real syncs; the ScanRun log is append/upsert-only by design (no DELETE
+ * route exists).
  */
 import { beforeAll, describe, expect } from 'bun:test'
 
-import { errorOf, expectJson, fetchJson, test } from './harness'
+import { errorOf, expectJson, fetchJson, makeGatedTest, serverUp, test } from './harness'
 
 const WS = 'helios-platform'
 const NOW = () => Date.now()
@@ -45,6 +51,35 @@ let id: string
 beforeAll(() => {
   id = `run-aud2-${NOW()}-${Math.floor(Math.random() * 1e6)}`
 })
+
+/* --------------------------------------------------------------- AUD-14 --
+ * Capability probe for the registered-id resolution: the ids must come from
+ * the SAME registry the workspaces route serves, and the POST must actually
+ * resolve (201) — otherwise the server predates AUD-14 and the live pins
+ * register as visible, counted SKIPS (never a vacuous green).
+ * The probe id is FIXED (upsert ⇒ no duplicate rows) and QA-scoped. */
+let registeredIds: string[] = []
+let aud14Live = false
+if (serverUp) {
+  try {
+    const registry = await fetchJson('/api/wanyrix/workspaces')
+    registeredIds = ((registry.body as { registered?: { id: string }[] | null })?.registered ?? [])
+      .map((r) => r.id)
+      .filter((x) => typeof x === 'string')
+    if (registeredIds.length > 0) {
+      const probe = await fetchJson(PATH, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(runBody({ id: 'run-aud14-probe', workspaceId: registeredIds[0] })),
+      })
+      aud14Live = probe.status === 201
+    }
+  } catch {
+    // probe failures simply gate the AUD-14 live pins off — the harness
+    // counts them as visible skips below
+  }
+}
+const aud14Test = makeGatedTest(aud14Live)
 
 describe('POST /api/wanyrix/scan-runs — the durable write (AUD-2)', () => {
   test('happy POST → 201 wanyrix.scan-runs/v1 envelope with the run echoed', async () => {
@@ -243,4 +278,55 @@ describe('scan-runs method discipline', () => {
       expect(res.headers.get('allow')).toBe('GET, POST')
     })
   }
+})
+
+describe('AUD-14 — registered workspace ids resolve on scan-runs', () => {
+  test('unknown REGISTERED-SHAPED id → 404 {error, knownWorkspaces} (branch old/new code agree on)', async () => {
+    const res = await fetchJson(PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(runBody({ workspaceId: 'ws-local-nobody-00000000' })),
+    })
+    expect(res.status).toBe(404)
+    expect(errorOf(res)).toContain('unknown workspace')
+    const known = (res.body as { knownWorkspaces?: string[] })?.knownWorkspaces
+    expect(Array.isArray(known)).toBe(true)
+    expect(known?.length).toBeGreaterThan(0)
+  })
+
+  aud14Test('POST with a REGISTERED id (from the workspaces registry) → 201', async () => {
+    const res = await fetchJson(PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(
+        runBody({ id: `run-aud14-${NOW()}`, workspaceId: registeredIds[0] }),
+      ),
+    })
+    expect(res.status).toBe(201)
+    expectJson(res)
+    expect((res.body as { run?: { workspaceId?: string } })?.run?.workspaceId).toBe(
+      registeredIds[0],
+    )
+  })
+
+  aud14Test('GET ?ws=<registered id> → 200 envelope scoped to the registered id', async () => {
+    const res = await fetchJson(`${PATH}?ws=${registeredIds[0]}`)
+    expect(res.status).toBe(200)
+    expectJson(res)
+    const body = res.body as { schema?: string; workspace?: string; count?: number }
+    expect(body.schema).toBe('wanyrix.scan-runs/v1')
+    expect(body.workspace).toBe(registeredIds[0])
+    expect(body.count).toBeGreaterThan(0)
+  })
+
+  aud14Test('unknown registered-shaped 404 lists the registered ids in knownWorkspaces', async () => {
+    const res = await fetchJson(PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(runBody({ workspaceId: 'ws-local-nobody-00000000' })),
+    })
+    expect(res.status).toBe(404)
+    const known = (res.body as { knownWorkspaces?: string[] })?.knownWorkspaces ?? []
+    expect(known).toContain(registeredIds[0])
+  })
 })
