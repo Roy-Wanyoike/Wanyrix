@@ -51,28 +51,42 @@ the root, measured 2026-09-22, issue #111).
 `storage/reclaim` · `what-changed` · `workspaces`
 
 (Added since the last audit of this list: `export` — PR #91; `git`, `what-changed` — PR #75;
-`engine/impact`, `license/issue` — PR #94.)
+`engine/impact`, `license/issue` — PR #94. Route count unchanged by #129, which unified the
+workspace-param contract across the existing surfaces.)
 
 ### Error semantics
 
 | Status | When |
 | --- | --- |
 | `400` | by-design contract violations: `explain` without `context`+`question`, with an unknown finding ID, with an unknown `kind`, or with invalid JSON; `report` with unknown `format` or unknown `flavor`; `impact` with unknown `type` or a missing `target` |
-| `404` | `impact` with an unknown target; **any workspace-scoped route with an unknown `ws`** → `{error, knownWorkspaces}` (ENG-TCA-1 — silent default-substitution is impossible) |
+| `404` | `impact` with an unknown target; **any fixture-scoped route with an unknown workspace id under EITHER accepted spelling** (`?ws=` / `?workspace=` — issue #129) → `{error, knownWorkspaces}` (ENG-TCA-1 — silent default-substitution is impossible); engine-exec routes with an unknown registered-workspace id → `{error}` naming the id |
 | `405` | wrong method on GET-only or POST-only surfaces; every 405 carries the RFC 9110 `Allow` header (ENG-TCA-6a; `explain` GET → 405 `Allow: POST` — ENG-TE-1) |
 | `413` | `explain` body > 256 KB (rejected before any processing; limit named in the error) |
 | `200` | everything else; JSON endpoints always answer `application/json` |
 
-Workspace scoping: every `ws`-accepting surface resolves the param through the shared
-`workspaceGuard` (`src/lib/wanyrix/api.ts`) against the same registry `/workspaces` serves
-— `doctor`, `graph`, `health`, `diagnostics`, `pr`, `experiments`, `impact`, and `report`
-(9 ws-scoped surfaces across 8 route directories: report counts twice for its two
-`format` branches; every `flavor` is scoped too). An absent/empty `ws` falls back to the
-registry default; `storage`, `gates`, `issues`, and `workspaces` are workspace-independent.
+Workspace param contract (issue #129): every ws-accepting surface accepts BOTH spellings —
+`?ws=<id>` (canonical) and `?workspace=<id>` (documented alias); when both are present,
+`ws` wins. The reader is centralized in `workspaceParam` (`src/lib/wanyrix/api.ts`) — no
+route reads the param inline. Fixture-scoped surfaces resolve it through `workspaceGuard`
+against the same registry `/workspaces` serves — `doctor`, `graph`, `health`, `diagnostics`,
+`pr`, `experiments`, `impact`, `report` (twice: both `format` branches; every `flavor` is
+scoped too), and `scan-runs` (GET query; its POST body `workspaceId` is validated against
+the same id set with the same 404 envelope). An absent/empty param falls back to the
+registry default; an unknown id under EITHER spelling → `404 {error, knownWorkspaces}` —
+never default-workspace data (ENG-TCA-1; the #129 bug where `health?workspace=` was ignored
+and leaked the default payload is closed). `storage`, `gates`, `issues`, and `workspaces`
+are workspace-independent.
 The engine-exec family (`engine/doctor`, `engine/build`, `engine/impact`, `git`,
-`what-changed`, `export`) resolves `?ws=`/`?workspace=` against the REGISTERED-workspace
-bridge instead (absent → the repo engine crate itself) — same never-wrong-workspace
-posture, different registry.
+`what-changed`, `export`) resolves the same two spellings against the REGISTERED-workspace
+bridge instead (absent → the repo engine crate itself) — same never-wrong-workspace posture,
+different registry; its unknown-id 404 names the id (`no registered workspace with id …`).
+
+Fixture vs exec-capable ids (issue #129): `GET /workspaces` marks every demo entry
+`fixtureOnly: true` — fixture ids (e.g. `helios-platform`) serve the web-demo fixtures only
+and 404 on the engine-exec routes (they have no scan target); every registered row carries
+`fixtureOnly: false`, and top-level `execCapableIds` lists the registered ids the exec
+surfaces can actually scan. The pre-existing fields (`workspaces`, `default`, `registered`)
+are unchanged.
 
 Deterministic GET routes are byte-identical across calls minus timestamps/storage GC
 fields. Graph aggregates (`fanIn`/`fanOut`/`downstream`, blast radius, `recompileCrates`)

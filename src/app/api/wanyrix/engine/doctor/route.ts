@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import path from 'node:path'
 import { db } from '@/lib/db'
+import { workspaceParam } from '@/lib/wanyrix/api'
 import {
   ENGINE_DIR,
   EXEC_TIMEOUT_MS,
@@ -21,10 +22,11 @@ import {
  * Two scan targets (Task 2-b):
  *   - default (no params)  → the engine crate itself — the tool dogfoods on
  *     its own source;
- *   - `?workspace=<id>`    → a REGISTERED local project (the workspace
- *     registration bridge). The id must exist in the RegisteredWorkspace
- *     store; only registered paths are ever scanned — arbitrary request
- *     paths are never passed to the binary.
+ *   - `?workspace=<id>` or the `?ws=` alias (issue #129: both spellings on
+ *     every ws-scoped surface, `ws` wins when both are present) → a
+ *     REGISTERED local project (the workspace registration bridge). The id
+ *     must exist in the RegisteredWorkspace store; only registered paths are
+ *     ever scanned — arbitrary request paths are never passed to the binary.
  *
  * Honesty contract (Gate 21 / Gate 7):
  *   - `report` is exactly what the binary measured and emitted — the route
@@ -156,13 +158,14 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now()
 
   /* ------------------------------------------------ registered-workspace? -- */
-  // `?workspace=<id>` scans a REGISTERED local project; absent/empty → the
-  // dogfood default (ENG-TCA-1 convention: empty param = param absent).
-  const workspaceParam = req.nextUrl.searchParams.get('workspace')
+  // `?workspace=<id>` (or the `?ws=` alias, issue #129) scans a REGISTERED
+  // local project; absent/empty → the dogfood default (ENG-TCA-1 convention:
+  // empty param = param absent).
+  const workspaceParamValue = workspaceParam(req)
   let registered: Awaited<ReturnType<typeof db.registeredWorkspace.findUnique>> = null
-  if (workspaceParam !== null && workspaceParam !== '') {
+  if (workspaceParamValue !== null && workspaceParamValue !== '') {
     try {
-      registered = await db.registeredWorkspace.findUnique({ where: { id: workspaceParam } })
+      registered = await db.registeredWorkspace.findUnique({ where: { id: workspaceParamValue } })
     } catch (err) {
       console.error('[engine/doctor] registered-workspace lookup failed:', err)
       return NextResponse.json(
@@ -172,7 +175,7 @@ export async function GET(req: NextRequest) {
     }
     if (!registered) {
       return NextResponse.json(
-        { error: `no registered workspace with id ${workspaceParam}` },
+        { error: `no registered workspace with id ${workspaceParamValue}` },
         { status: 404 },
       )
     }

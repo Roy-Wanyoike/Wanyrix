@@ -538,6 +538,13 @@ export interface WorkspaceSummary {
   status: 'live' | 'archived'
   findings: number
   lastScan: string
+  /**
+   * Issue #129 — set by GET /api/wanyrix/workspaces on served entries:
+   * true = web-demo fixture. Fixture ids resolve on the fixture routes and
+   * are REJECTED (404) by the engine-exec routes — they have no executable
+   * scan target. The fixture registry itself (data.ts) does not set this.
+   */
+  fixtureOnly?: boolean
 }
 
 /** GET /api/wanyrix/workspaces */
@@ -551,6 +558,12 @@ export interface WorkspacesPayload {
    * it now (empty array = nothing connected).
    */
   registered?: RegisteredWorkspaceSummary[]
+  /**
+   * Issue #129 — the ids the engine-exec routes can actually scan (the
+   * registered rows). Fixture ids never appear here. Empty = nothing
+   * connected; the exec routes still serve a bare request (dogfood target).
+   */
+  execCapableIds?: string[]
 }
 
 /**
@@ -572,6 +585,8 @@ export interface RegisteredWorkspaceSummary {
   warning: number
   info: number
   toolchain: string
+  /** Issue #129 — always false on registered rows: they ARE exec-capable. */
+  fixtureOnly?: boolean
 }
 
 /** POST /api/wanyrix/explain */

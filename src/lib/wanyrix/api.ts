@@ -5,9 +5,17 @@ import { WORKSPACES, WORKSPACES_DEFAULT } from './data'
  * Shared API-route contract helpers.
  *
  * ENG-TCA-1: workspace-scoped routes MUST NOT silently substitute the default
- * workspace for an unknown/misspelled `ws` parameter. Every route that accepts
- * `ws` resolves it through `workspaceGuard` below, which validates against the
- * SAME registry the /api/wanyrix/workspaces route serves.
+ * workspace for an unknown/misspelled workspace parameter. Every fixture-scoped
+ * route resolves the param through `workspaceGuard` below, which validates
+ * against the SAME registry the /api/wanyrix/workspaces route serves.
+ *
+ * Issue #129 — ONE param contract across every ws-scoped surface:
+ *   - both spellings are accepted everywhere: `?ws=<id>` (canonical) and
+ *     `?workspace=<id>` (documented alias);
+ *   - `workspaceParam` is the single reader — no route may call
+ *     `searchParams.get('ws' | 'workspace')` on its own;
+ *   - an unknown id under EITHER spelling ⇒ the established 404 envelope
+ *     `{ error, knownWorkspaces }` — never default-workspace data.
  */
 
 /** The known workspace ids — same source the workspaces route serves. */
@@ -35,15 +43,29 @@ export function workspaceGuard(raw: string | null): NextResponse | null {
 }
 
 /**
- * Resolves the effective workspace for a request: validates an explicit `ws`
- * param (404 on unknown — see workspaceGuard) and falls back to the registry
- * default when the param is absent/empty.
+ * THE workspace-param reader (issue #129): accepts both spellings on every
+ * ws-scoped route, `ws` first. If both are present, `ws` wins (documented in
+ * docs/ARCHITECTURE.md — the fixture routes have always been `ws`-scoped, so
+ * it is the canonical spelling; `workspace` is the accepted alias).
+ *
+ * Returns null when neither spelling is present (the caller applies its
+ * default — empty = absent, ENG-TCA-1).
+ */
+export function workspaceParam(req: NextRequest): string | null {
+  return req.nextUrl.searchParams.get('ws') ?? req.nextUrl.searchParams.get('workspace')
+}
+
+/**
+ * Resolves the effective workspace for a request: validates an explicit
+ * `ws`/`workspace` param (404 on unknown under EITHER spelling — see
+ * workspaceGuard) and falls back to the registry default when both are
+ * absent/empty.
  *
  * Throws never; returns `{ ws, error }` where `error` is a pre-built 404
  * response the route must return verbatim.
  */
 export function resolveWorkspace(req: NextRequest): { ws: string; error: NextResponse | null } {
-  const raw = req.nextUrl.searchParams.get('ws')
+  const raw = workspaceParam(req)
   const error = workspaceGuard(raw)
   if (error) return { ws: '', error }
   return { ws: raw ?? WORKSPACES_DEFAULT, error: null }

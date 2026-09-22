@@ -5,6 +5,12 @@
  * via WANYRIX_TEST_BASE_URL). By-design error contracts are pinned:
  *   - every ws-scoped route → 404 `{ error, knownWorkspaces }` for unknown `ws`
  *     (ENG-TCA-1 — no silent default-workspace substitution)
+ *   - issue #129: the SAME contract under the accepted `?workspace=` alias on
+ *     every ws-scoped surface (both spellings happy-path, unknown ⇒ 404 per
+ *     spelling) + the fixture/exec marking on /workspaces. Those pins are
+ *     capability-probed (SERVER_HAS_129_FIX): a server predating the #129
+ *     merge skips them with a stated reason while the unit suite proves the
+ *     logic server-free.
  *   - /api/wanyrix/impact  → 400 unknown `type` · 400 missing `target` (ENG-TCA-6b)
  *                            · 404 unknown `target`
  *   - /api/wanyrix/explain → 400 without `context`+`question` · 400 unknown
@@ -104,6 +110,32 @@ if (serverUp) {
 const WS_IDS = (registry?.workspaces ?? []).map((w) => w.id)
 const PRIMARY = registry?.workspaces.find((w) => w.status === 'live') ?? registry?.workspaces[0]
 const PRIMARY_ID = PRIMARY?.id ?? ''
+
+/* ------------------------------------------------ issue #129 capability -- */
+
+// The unified workspace-param contract (both `ws` and `workspace` accepted;
+// unknown ⇒ 404 under EITHER spelling) shipped with issue #129. The dev
+// server under test may predate the merge — probe it honestly: a pre-fix
+// server answers `health?workspace=<unknown>` with 200 + default-workspace
+// data (the exact bug #129 removes), a fixed server answers 404. Pins that
+// need the fix skip with that reason stated; the same logic is proven
+// without a server by tests/unit/wanyrix-workspace-param.test.ts (direct
+// handler invocation).
+const UNKNOWN_129 = 'does-not-exist-129'
+const SERVER_HAS_129_FIX = serverUp
+  ? (
+      await fetchJson(`/api/wanyrix/health?workspace=${encodeURIComponent(UNKNOWN_129)}`)
+    ).status === 404
+  : false
+
+if (serverUp && !SERVER_HAS_129_FIX) {
+  console.warn(
+    '[wanyrix-api] server predates the issue #129 workspace-param contract — ' +
+      'the #129 live pins are skipped (logic proven by tests/unit/wanyrix-workspace-param.test.ts).',
+  )
+}
+
+const describe129 = describe.skipIf(!SERVER_HAS_129_FIX)
 
 /* -------------------------------------------------------------- contracts -- */
 
@@ -567,6 +599,133 @@ describeServer('Wanyrix API — unknown workspace → 404 on every ws-scoped rou
   })
 })
 
+describeServer('Wanyrix API — fixture ids are NOT exec-capable (issue #129 marking)', () => {
+  // Always true (pre- and post-#129): the engine-exec surfaces resolve
+  // against the REGISTERED store, so a demo-fixture id 404s there even though
+  // it is "known" to the fixture routes. GET /workspaces marks this — see the
+  // #129 block below.
+  test(`engine/doctor?workspace=${PRIMARY_ID} (a fixture id) → 404 named error, never a scan`, async () => {
+    const res = await fetchJson(`/api/wanyrix/engine/doctor?workspace=${encodeURIComponent(PRIMARY_ID)}`)
+    expect(res.status).toBe(404)
+    expectJson(res)
+    expect((res.body as { error: string }).error).toContain(
+      `no registered workspace with id ${PRIMARY_ID}`,
+    )
+  })
+})
+
+describe129('Wanyrix API — unified workspace-param contract (issue #129)', () => {
+  // Both spellings on every ws-scoped surface; unknown ⇒ 404 under EITHER.
+  // Skipped (with a stated reason) when the server predates the #129 merge;
+  // the same logic is proven server-free by tests/unit/wanyrix-workspace-param.test.ts.
+
+  test(`health happy path under BOTH spellings → 200 echoing ${PRIMARY_ID}`, async () => {
+    for (const spelling of ['ws', 'workspace'] as const) {
+      const res = await fetchJson(`/api/wanyrix/health?${spelling}=${encodeURIComponent(PRIMARY_ID)}`)
+      expect(res.status).toBe(200)
+      expectJson(res)
+      expect((res.body as { workspace?: string }).workspace).toBe(PRIMARY_ID)
+    }
+  })
+
+  test('graph + doctor happy path under ?workspace= (the alias reaches the whole family)', async () => {
+    for (const route of ['graph', 'doctor']) {
+      // NOTE: only some fixture routes echo the resolved id in the payload
+      // (doctor does; graph's payload is the scoped graph itself). The honest
+      // happy-path pin for BOTH: the alias serves the byte-identical payload
+      // of the canonical spelling (deterministic GET routes — ARCHITECTURE),
+      // i.e. fixtures resolve identically under either spelling.
+      const alias = await fetchJson(`/api/wanyrix/${route}?workspace=${encodeURIComponent(PRIMARY_ID)}`)
+      expect(alias.status).toBe(200)
+      expectJson(alias)
+      const canonical = await fetchJson(`/api/wanyrix/${route}?ws=${encodeURIComponent(PRIMARY_ID)}`)
+      expect(canonical.status).toBe(200)
+      expectJson(canonical)
+      expect(alias.body).toEqual(canonical.body)
+    }
+    // …and where the contract DOES echo the id, it echoes it under the alias too
+    const doctor = await fetchJson(`/api/wanyrix/doctor?workspace=${encodeURIComponent(PRIMARY_ID)}`)
+    expect((doctor.body as { workspace?: string }).workspace).toBe(PRIMARY_ID)
+  })
+
+  test(`health?workspace=${UNKNOWN_129} → 404 knownWorkspaces envelope (THE #129 bug: was 200 + default data)`, async () => {
+    const res = await fetchJson(`/api/wanyrix/health?workspace=${encodeURIComponent(UNKNOWN_129)}`)
+    expect(res.status).toBe(404)
+    expectJson(res)
+    const body = res.body as { error: string; knownWorkspaces: string[]; workspace?: string }
+    expect(body.error).toBe(`unknown workspace '${UNKNOWN_129}'`)
+    expect(body.knownWorkspaces).toEqual(WS_IDS)
+    // no payload leaks under a bogus workspace id, under any spelling
+    expect(body.workspace).toBeUndefined()
+  })
+
+  test(`health 404 envelope is byte-identical under ?ws= and ?workspace=`, async () => {
+    for (const spelling of ['ws', 'workspace'] as const) {
+      const res = await fetchJson(`/api/wanyrix/health?${spelling}=${encodeURIComponent(UNKNOWN_129)}`)
+      expect(res.status).toBe(404)
+      const body = res.body as { error: string; knownWorkspaces: string[] }
+      expect(body.error).toBe(`unknown workspace '${UNKNOWN_129}'`)
+      expect(body.knownWorkspaces).toEqual(WS_IDS)
+    }
+  })
+
+  test('?workspace= unknown 404s across the fixture-scoped family (same envelope as ?ws=)', async () => {
+    for (const route of ['doctor', 'graph', 'diagnostics', 'pr', 'experiments', 'report?format=json']) {
+      const sep = route.includes('?') ? '&' : '?'
+      const res = await fetchJson(`/api/wanyrix/${route}${sep}workspace=${encodeURIComponent(UNKNOWN_129)}`)
+      expect(res.status).toBe(404)
+      expectJson(res)
+      const body = res.body as { error: string; knownWorkspaces: string[] }
+      expect(body.error).toBe(`unknown workspace '${UNKNOWN_129}'`)
+      expect(body.knownWorkspaces).toEqual(WS_IDS)
+    }
+  })
+
+  test('precedence: both spellings present → ?ws= wins (documented canonical)', async () => {
+    const atlas = WS_IDS.find((id) => id !== PRIMARY_ID) ?? PRIMARY_ID
+    const res = await fetchJson(
+      `/api/wanyrix/health?ws=${encodeURIComponent(atlas)}&workspace=${encodeURIComponent(PRIMARY_ID)}`,
+    )
+    expect(res.status).toBe(200)
+    expect((res.body as { workspace?: string }).workspace).toBe(atlas)
+  })
+
+  test('engine-exec family: unknown id 404s under BOTH spellings (engine/doctor accepts ?ws= now)', async () => {
+    for (const spelling of ['ws', 'workspace'] as const) {
+      const doc = await fetchJson(
+        `/api/wanyrix/engine/doctor?${spelling}=${encodeURIComponent('ws-local-not-a-real-row-129')}`,
+      )
+      expect(doc.status).toBe(404)
+      expectJson(doc)
+      expect((doc.body as { error: string }).error).toContain(
+        'no registered workspace with id ws-local-not-a-real-row-129',
+      )
+    }
+  })
+
+  test('GET /workspaces marks fixture ids fixtureOnly:true + serves execCapableIds (issue #129)', async () => {
+    const res = await fetchJson('/api/wanyrix/workspaces')
+    expect(res.status).toBe(200)
+    expectJson(res)
+    const body = res.body as {
+      workspaces: { id: string; fixtureOnly?: boolean }[]
+      registered?: { id: string; fixtureOnly?: boolean }[]
+      execCapableIds?: string[]
+    }
+    expect(body.workspaces.length).toBeGreaterThan(0)
+    // every demo entry is marked fixture-only — it has no executable scan target
+    for (const w of body.workspaces) expect(w.fixtureOnly).toBe(true)
+    // the exec-capable set is exactly the registered rows (never a fixture id)
+    expect(Array.isArray(body.execCapableIds)).toBe(true)
+    expect(body.execCapableIds).toEqual((body.registered ?? []).map((r) => r.id))
+    for (const id of body.workspaces.map((w) => w.id)) {
+      expect(body.execCapableIds).not.toContain(id)
+    }
+    // registered rows are marked exec-capable
+    for (const r of body.registered ?? []) expect(r.fixtureOnly).toBe(false)
+  })
+})
+
 describeServer('Wanyrix API — REST hygiene (ENG-TCA-6)', () => {
   test('405 responses carry an Allow header naming the allowed method (ENG-TCA-6a)', async () => {
     // NOTE: `workspaces` implements GET+POST+DELETE since the registration
@@ -846,8 +1005,14 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
 
     // The row is served back through GET
     const listed = await fetchJson('/api/wanyrix/workspaces')
-    const rows = (listed.body as { registered: { id: string }[] }).registered ?? []
+    const rows = (listed.body as { registered: { id: string; fixtureOnly?: boolean }[] }).registered ?? []
     expect(rows.some((r) => r.id === body.workspace.id)).toBe(true)
+
+    // issue #129: the registered row is marked exec-capable (fixtureOnly:false)
+    if (SERVER_HAS_129_FIX) {
+      const listedRow = rows.find((r) => r.id === body.workspace.id)
+      expect(listedRow?.fixtureOnly).toBe(false)
+    }
 
     // RE-SCAN through the guarded exec surface (only DB-stored paths are scanned)
     const rescan = await fetchJson(
@@ -865,6 +1030,17 @@ describeServer('Wanyrix API — workspace registration bridge (Task 2-b)', () =>
     expect(rescanBody.workspaceId).toBe(body.workspace.id)
     expect(rescanBody.scanTarget).toBe(body.workspace.path)
     expect(rescanBody.report.schema).toBe('wanyrix.doctor/v1')
+
+    // issue #129: engine/doctor accepts the ?ws= alias too. Pre-fix servers
+    // ignore it (→ dogfood scan, no workspaceId) — the alias pin needs the fix.
+    if (SERVER_HAS_129_FIX) {
+      const alias = await fetchJson(
+        `/api/wanyrix/engine/doctor?ws=${encodeURIComponent(body.workspace.id)}`,
+      )
+      expect(alias.status).toBe(200)
+      expectJson(alias)
+      expect((alias.body as { workspaceId?: string }).workspaceId).toBe(body.workspace.id)
+    }
 
     // Unknown id on the exec surface → 404 (never scans arbitrary request paths)
     const unknown = await fetchJson(
