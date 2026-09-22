@@ -96,7 +96,7 @@ ENG-TCA-3 fix) — no hand-typed counts.
 ## Fixture & contract versioning
 
 - Fixtures live in `src/lib/wanyrix/data.ts` (workspaces `helios-platform` 47 crates /
-  `atlas-consortium`; findings `FER-BLD-001…FER-ASY-012`; issues `WAN-*`; experiments
+  `atlas-consortium`; findings `WAN-*` (e.g. `WAN-BLD-001`); issues `WAN-*`; experiments
   `EXP-*`; gates). `report.ts` assembles workspace reports from the same getters the
   routes serve — no duplicated data paths.
 - Versioned machine flavors (all served over HTTP by `/report` — ENG-TCA-2):

@@ -92,7 +92,8 @@ tests/
     wanyrix-license.test.ts     # POST /api/wanyrix/license/issue contract (PR #94)
     wanyrix-scan-runs.test.ts   # POST/GET /api/wanyrix/scan-runs route contracts (AUD-2)
     wanyrix-storage-mutations.test.ts # POST /api/wanyrix/storage/{rebuild,reclaim} contracts (AUD-3)
-engine/tests/                   # 22 Rust suites — `cargo test --workspace --offline` (engine/)
+engine/tests/                   # 22 Rust suites — `cargo test --workspace --offline`
+                                # (302 tests / 0 fail / 2 opt-in probes ignored, measured 2026-09-22)
   adversarial.rs                # hostile-input hardening: unicode paths, symlinks, huge/deep trees (issue #71, PR #74)
   ai_cli.rs                     # wanyrix ai — digest-only grounding, https refusal, named errors
   binary_matrix.rs              # release-binary matrix checks (PR #89)

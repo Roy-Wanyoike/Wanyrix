@@ -67,7 +67,7 @@ delta. **All simulator output is `estimated`** — planning input, not measureme
 
 The honesty loop: `estimated → (run experiment) → measured → verified`.
 
-1. **Experiments**: pick a finding marked experiment-eligible (e.g. `FER-BLD-001`).
+1. **Experiments**: pick a finding marked experiment-eligible (e.g. `WAN-BLD-001`).
 2. Baseline → candidate → measured delta is recorded (the dashboard board is
    fixture-backed; the shipped in-repo engine v0.9.0 measures REAL builds via
    `wanyrix experiment measure` — see [`docs/CLI.md`](CLI.md)).
