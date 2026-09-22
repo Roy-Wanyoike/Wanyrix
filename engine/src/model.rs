@@ -230,6 +230,22 @@ pub enum EngineError {
     /// Named refusals only — export never silently rewrites an operator
     /// path, and the transport detail is preserved verbatim.
     Export(String),
+    /// The entitlement surface (issue #94) refused: a malformed, tampered,
+    /// expired-beyond-grace or unreadable license state. The precise reason
+    /// is preserved verbatim — a tampered token is a named signature
+    /// refusal, never a silent pass.
+    Entitlement(String),
+    /// A PREMIUM surface was refused because no qualifying entitlement is
+    /// activated (no license, deleted cache, or a plan below the tier the
+    /// surface requires — see `engine/src/entitlement.rs`'s registry).
+    /// Core measured surfaces are never gated (docs/COMMERCIAL.md rule #1);
+    /// this error exists only for registered premium surfaces.
+    SubscriptionRequired {
+        /// The premium surface that was refused (e.g. `sync.push`).
+        surface: String,
+        /// The minimum plan the surface requires (e.g. `team`).
+        plan_required: String,
+    },
 }
 
 impl std::fmt::Display for EngineError {
@@ -258,6 +274,14 @@ impl std::fmt::Display for EngineError {
             EngineError::Impact(e) => write!(f, "impact error: {e}"),
             EngineError::InvalidExclude(e) => write!(f, "invalid --exclude value: {e}"),
             EngineError::Export(e) => write!(f, "export error: {e}"),
+            EngineError::Entitlement(e) => write!(f, "entitlement error: {e}"),
+            EngineError::SubscriptionRequired {
+                surface,
+                plan_required,
+            } => write!(
+                f,
+                "surface '{surface}' requires the {plan_required} plan — no qualifying entitlement is activated (activate with: wanyrix activate --key <token>; core local surfaces are never gated — docs/COMMERCIAL.md rule #1)"
+            ),
         }
     }
 }

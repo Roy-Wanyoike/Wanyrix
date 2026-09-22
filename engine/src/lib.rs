@@ -67,6 +67,12 @@
 //! - [`export`] — artifacts-as-code export (issue #91): one measured pass
 //!   written as clock-free, path-relative JSON artifacts + a sha256-bound
 //!   manifest (`wanyrix.export/v1`) so teams can diff evidence in PRs
+//! - [`entitlement`] — local-first subscription layer (issue #94): offline
+//!   ed25519 license verification (`wanyrix activate`), the cached
+//!   entitlement envelope (`wanyrix.entitlement/v1`), maintainer keygen/issue
+//!   tooling and the premium-surface gate + registry. ZERO network I/O —
+//!   only entitlements may touch the cloud, and this slice does not; core
+//!   measured surfaces are never gated (docs/COMMERCIAL.md rule #1)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
 pub mod ai;
@@ -75,6 +81,7 @@ pub mod build;
 pub mod change;
 pub mod cli;
 pub mod daemon;
+pub mod entitlement;
 pub mod events;
 pub mod export;
 pub mod git;
@@ -93,6 +100,10 @@ pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
 pub use build::{ArtifactRow, BuildOptions, BuildReport, BUILD_PROFILE, BUILD_SCHEMA};
+pub use entitlement::{
+    EntitlementReport, EntitlementState, GateGrant, Plan, SignedToken, TokenPayload,
+    ENTITLEMENT_SCHEMA, REVALIDATION_GRACE_DAYS, SURFACE_REGISTRY, TOKEN_SCHEMA,
+};
 pub use export::{ExportArtifact, ExportManifest, EXPORT_SCHEMA};
 pub use graph::{Graph, GraphEdge, GraphNode};
 pub use model::{
