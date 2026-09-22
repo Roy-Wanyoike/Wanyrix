@@ -9,25 +9,37 @@ actually enforced in code today vs. what is **Roadmap**. See also
 ## 1. Authentication & authorization
 
 - **No auth surface exists.** There are no accounts, sessions, cookies, or login
-  routes; `next-auth` is unused scaffold. Every API route is a read-only, unauthenticated
-  local surface (`/api/wanyrix/*`) serving fixture-derived data.
+  routes; `next-auth` is unused scaffold. Every API route is an unauthenticated
+  local surface (`/api/wanyrix/*`) — fixture-derived data on the read routes, and,
+  since the registration bridge, engine-measured / client-POSTed records on the
+  sync routes (Gate 21: the server never invents data).
 - Consequence: nothing in this app authorizes anything. Organization/tier data is
   explicitly badged fixture (AUDIT-I3 acceptance: *"must not expose or mutate anything
   beyond fixtures until real auth exists"*). Cloud/auth features are **Roadmap**
   (nothing is authorized or billed today).
-- No state-changing HTTP surface exists: `POST/PUT/DELETE/PATCH` on GET-only routes
-  return `405` (with `Allow`); the only POST route (`/explain`) is a pure reasoning
-  endpoint that writes nothing.
+- **State-changing surfaces exist** (no longer "none"): `POST /api/wanyrix/scan-runs`
+  persists the durable scan-run log; `POST`/`DELETE /api/wanyrix/workspaces` registers
+  or removes a local project (running the real engine on `POST`, writing the local
+  SQLite store); `POST /api/wanyrix/license/issue` executes the real engine's offline
+  license issuer; `GET /api/wanyrix/engine/{build,doctor,impact}` and `/git` execute
+  the real engine binary on demand (read surfaces, no writes); `POST
+  /api/wanyrix/storage/{rebuild,reclaim}` mutate in-process simulated state only.
+  All durable writes land in the local SQLite file on the machine running the server —
+  see [`docs/PRIVACY.md`](PRIVACY.md) for exactly what is stored.
+- `POST /explain` remains a pure reasoning endpoint that writes nothing. GET-only
+  routes enforce method discipline: `POST/PUT/DELETE/PATCH` return `405` carrying the
+  RFC 9110 `Allow` header (ENG-TCA-6a, ENG-TE-1).
 
 ## 2. Secrets
 
-- **No secrets in the tree.** The only environment file (`.env`) is git-ignored
-  (`git check-ignore .env` → ignored; `git ls-files` contains no `.env`) and holds a
-  local SQLite path (`DATABASE_URL=file:…`), not a credential.
+- **No secrets in the tree.** The only tracked env file is `.env.example`, a placeholder
+  template; the real `.env` is git-ignored (`git check-ignore .env` → ignored) and
+  holds a local SQLite path (`DATABASE_URL=file:…`), not a credential.
 - The AI provider credentials are resolved server-side by the `z-ai-web-dev-sdk` at
   runtime — they are never embedded in source or shipped to the browser.
-- Checked by: `git ls-files | grep -c '^\.env'` = 0 (untracked) + review of tracked
-  files; a dedicated secret-scanning CI job is **Roadmap**.
+- Checked by: `git check-ignore .env` → ignored, and review of tracked files (only the
+  placeholder `.env.example` is committed); a dedicated secret-scanning CI job is
+  **Roadmap**.
 
 ## 3. Input validation (defense in depth on every route)
 
@@ -59,13 +71,24 @@ through typed getters; no user string is ever used as a file path or query.
 
 - Dependencies are pinned in `package.json` with a committed lockfile (`bun.lock`);
   runtime deps are mainstream UI/framework packages.
-- **No telemetry/analytics endpoints ship in the product code.** One disclosed scaffold
-  caveat: `@vercel/analytics` is wired in `src/app/layout.tsx` — inert on localhost,
-  active only when deployed on Vercel; removal recommended and tracked in
-  the zero-telemetry policy section of [`docs/PRIVACY.md`](PRIVACY.md).
-- Prisma is present as scaffold but unused by product flows (no database writes).
-- Automated `bun audit`/Renovate/Dependabot pipelines: **Roadmap** (no CI
-  infrastructure exists in this sandbox; see AUDIT-I5).
+- **No telemetry/analytics endpoints ship in the product code.** The scaffold's
+  `@vercel/analytics` snippet was removed from the rendered tree: `src/app/layout.tsx`
+  carries an explicit no-analytics note (ENG-T3A-1) and no module under `src/` imports
+  it (the unused package entry remains in `package.json`). Zero-telemetry policy:
+  [`docs/PRIVACY.md`](PRIVACY.md).
+- Prisma backs the optional durable sync targets (durable scan-run log, registered
+  workspaces) in a **local SQLite file** on the machine running the server — see
+  [`docs/PRIVACY.md`](PRIVACY.md) for exactly what is stored and why.
+- **CI exists** as four workflow definitions under `.github/workflows/`:
+  `ci.yml` (web gate: lint · types · tests · brand gate), `wanyrix.yml` (engine
+  referee: fmt · build · clippy · tests + measured envelopes), `release.yml`
+  (tag/dispatch-triggered release engineering), and `perf.yml` (dispatch-only
+  perf/soak/flake harnesses). `release.yml` ships a CycloneDX **SBOM** job and a
+  **cargo-audit** advisory-audit job alongside multi-target binaries and checksums.
+  Honesty note: the repository's hosted Actions runners are billing-locked (documented
+  in the `wanyrix.yml` honesty label) — hosted run records exist but no job steps have
+  executed, so these gates are validated locally, not on hosted runners. Renovate /
+  Dependabot: **Roadmap** (not configured).
 
 ## 6. AI / sandbox data boundaries
 
@@ -87,28 +110,43 @@ through typed getters; no user string is ever used as a file path or query.
 - Status-escalation firewall: neither the model nor the simulator can emit
   `verified` — only recorded experiments can (Gate 21).
 
-## 7. Local data at rest
+## 7. Data at rest
 
-- All persisted state is browser localStorage (workspace preference, scan history, diff
-  queue, theme, AI status label) behind the legacy-key → new-key storage migration
+- Browser: all persisted UI state is localStorage (workspace preference, scan history,
+  diff queue, theme, AI status label) behind the legacy-key → new-key storage migration
   layer (protocol documented in `docs/PRIVACY.md`, `docs/ARCHITECTURE.md`, and
-  Settings' live migration-status panel). Clearing site data removes everything; reset
+  Settings' live migration-status panel). Clearing site data removes it; reset
   instructions in `docs/PRIVACY.md`.
+- Server: the optional durable sync target is a **local SQLite file** (scan-run log +
+  registered-workspace rows; see `docs/PRIVACY.md` for the exact fields). It lives on
+  the machine running the dev server (`db/custom.db` in this checkout, path configured
+  via the git-ignored `.env`) — no cloud copy exists.
 
 ## 8. Roadmap (not implemented — do not assume otherwise)
 
-- **THREAT_MODEL.md** and a formal trust-boundary review (pending-task §35 lists it; the
-  posture above is the current informal equivalent).
-- SBOM generation, SAST/DAST in CI, dependency-audit gates, secret-scanning CI.
-- Signed releases and provenance attestation (meaningful only once releases are cut —
-  AUDIT-I5).
+- **THREAT_MODEL.md** and a formal trust-boundary review (the posture above is the
+  current informal equivalent).
+- SAST/DAST and secret-scanning in CI (CI itself exists — see §5; these deeper gates
+  are not wired yet).
+- Renovate/Dependabot dependency-update automation (SBOM + cargo-audit already ship in
+  `release.yml`; see §5).
+- Signed releases and provenance attestation: `release.yml` deliberately stops short of
+  artifact signing — it stages binaries, SBOM, advisory audit, and checksums so signing
+  is the only remaining step (requires maintainer secrets).
 - Authentication, multi-tenancy, plugin sandboxing (Phases 13–14 — roadmap).
+- GitHub **private vulnerability reporting**: planned, tracked in the governance bundle
+  (#119) — **not enabled yet**; do not assume a private channel exists (see Reporting).
 
 ## Reporting
 
-This repository accepts no external bug reports yet (no public issue tracker until the
-GitHub rename/push completes — AUDIT-I5). Internal findings follow the audit process in
-[`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+The repository is public (`github.com/Roy-Wanyoike/wanyrix`) with an open issue
+tracker: ordinary bugs — including security-relevant ones that are safe to disclose —
+can be filed as GitHub issues. For findings you prefer **not** to disclose publicly,
+GitHub's private vulnerability reporting is the intended channel once enabled:
+enabling it is planned and tracked in the governance bundle (#119) — **it is not
+enabled yet**, so please do not assume a private channel exists. Either way, include
+reproduction steps and the affected surface (API route / CLI command / engine
+behavior); process context in [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## 9. Adversarial input fixtures (engine, issue #71)
 
@@ -160,7 +198,7 @@ this suite):
   `events`/experiment surfaces without the regular-file guard. A repository that
   pre-plants a symlink/FIFO at those exact paths can still block those surfaces on
   read. Scan-path reads are hardened (rows 9/10 above); dotfile hardening is
-  tracked as follow-up work.
+  tracked in #114.
 - **The 16 MiB measured-file cap is a deliberate bound:** a legitimate repository
   with a larger `Cargo.toml`/`rust-toolchain` file would be reported as an
   unreadable finding rather than analyzed.
