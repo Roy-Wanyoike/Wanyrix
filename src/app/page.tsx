@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AppShell } from '@/components/wanyrix/app-shell'
 import OverviewView from '@/components/wanyrix/views/overview-view'
@@ -23,6 +23,7 @@ import OrganizationView from '@/components/wanyrix/views/organization-view'
 import PlansView from '@/components/wanyrix/views/plans-view'
 import SettingsView from '@/components/wanyrix/views/settings-view'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
+import { hashForView, viewFromHash } from '@/lib/wanyrix/view-hash'
 import type { ViewId } from '@/lib/wanyrix/types'
 
 /**
@@ -55,13 +56,56 @@ const VIEWS: Record<ViewId, React.ComponentType<{ onNavigate?: (v: ViewId) => vo
   settings: SettingsView,
 }
 
+/* QA-1 F-1 — the location hash is the single source of truth for the active
+   view. Subscribed via useSyncExternalStore (the app-shell `mounted` pattern):
+   hashchange covers navigations AND manual hash edits, popstate additionally
+   covers history traversal, and both funnel into one cheap re-read. */
+const subscribeToViewHash = (onChange: () => void) => {
+  window.addEventListener('hashchange', onChange)
+  window.addEventListener('popstate', onChange)
+  return () => {
+    window.removeEventListener('hashchange', onChange)
+    window.removeEventListener('popstate', onChange)
+  }
+}
+
+/** Client snapshot: the view named by the URL, null when the hash names none. */
+const readViewHash = () => viewFromHash(window.location.hash)
+
 export default function Home() {
-  const [view, setView] = useState<ViewId>('overview')
   const activeWs = useWorkspaceStore((s) => s.active)
+
+  /* The server snapshot is null (⇒ Overview) so SSR and the first hydration
+     render always agree; React then adopts the client snapshot, so a deep
+     link restores its view without a hydration mismatch. Unknown hashes fall
+     back to Overview. */
+  const hashView = useSyncExternalStore(subscribeToViewHash, readViewHash, () => null)
+  const view: ViewId = hashView ?? 'overview'
   const ActiveView = VIEWS[view]
 
+  /* Canonicalize a missing/invalid hash to `#/overview` so refresh/bookmark
+     keeps the default view shareable (replaceState: no history entry, no
+     hashchange event, no reload). */
+  useEffect(() => {
+    if (viewFromHash(window.location.hash) === null) {
+      window.history.replaceState(null, '', hashForView('overview'))
+    }
+  }, [])
+
+  /* Every navigation choke point (sidebar, palette, view CTAs) funnels
+     through here. Writing the hash IS the state update: a plain hash write
+     pushes a history entry WITHOUT any reload and fires hashchange, which the
+     store above picks up — so Back/Forward step between views. The write is
+     skipped when the hash already names the view, so no duplicate history
+     entry is created. */
+  const navigate = useCallback((v: ViewId) => {
+    if (viewFromHash(window.location.hash) !== v) {
+      window.location.hash = hashForView(v)
+    }
+  }, [])
+
   return (
-    <AppShell activeView={view} onNavigate={setView}>
+    <AppShell activeView={view} onNavigate={navigate}>
       <AnimatePresence mode="wait">
         <motion.div
           key={`${activeWs}:${view}`}
@@ -71,7 +115,7 @@ export default function Home() {
           transition={{ duration: 0.18, ease: 'easeOut' }}
           className="mx-auto max-w-[1400px]"
         >
-          <ActiveView onNavigate={setView} />
+          <ActiveView onNavigate={navigate} />
         </motion.div>
       </AnimatePresence>
     </AppShell>
