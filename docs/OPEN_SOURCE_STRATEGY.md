@@ -1,11 +1,13 @@
 # Wanyrix — Open-Source Strategy
 
-Status: **recommendation + transition plan** (spec §58). Honest starting point: the
-repository is **proprietary today** — [`README.md`](../README.md) states *"Proprietary —
-© Wanyrix. All rights reserved. No license is granted with this repository."* This
-document defines the target state and the conditions to reach it; it does **not** retro-
-actively relicense anything, and no open-source status may be claimed publicly until the
-transition in §7 completes.
+Status: **recommendation + transition plan** (spec §58). Honest starting point, updated:
+the repository is **public and dual-licensed today** — `MIT OR Apache-2.0` per the
+[`README.md`](../README.md) license badge, with `LICENSE`, `LICENSE-MIT`, and
+`LICENSE-APACHE` at the repo root and the same expression in `engine/Cargo.toml`. The
+license transition (§7 rows 1–2) is therefore **done**; what remains of this document's
+job is the operational half of the transition gate (§7 rows 3–6 — history review,
+governance artifacts, private vulnerability reporting, community refresh), tracked in
+the governance bundle (#119).
 
 ## 1. The decision being made
 
@@ -32,17 +34,18 @@ lowest-friction choice for Rust contributors and downstream packagers.
 Requirements at relicensing time: `LICENSE-MIT` + `LICENSE-APACHE` files, `license`
 field in every `Cargo.toml`, copyright line per source file per Rust convention
 (`Copyright <year> Wanyrix contributors`), and a NOTICE file if Apache is elected.
-Legal/owner sign-off is part of the transition gate (§7) — a strategy document is not a
-license grant.
+**State: done at the repo level** — both license files are committed and the engine
+crate declares `license = "MIT OR Apache-2.0"`; per-source-file copyright headers and a
+NOTICE file remain open items (tracked with the governance bundle, #119).
 
 ## 3. Open core vs proprietary boundary
 
 | Component | License plane | Status today | Rationale |
 | --- | --- | --- | --- |
-| Rust engine + analyzers + collectors (v0) | **Open** (dual) | v0, parallel track (AUDIT-I8) | Scrutiny of evidence collection is the product |
+| Rust engine + analyzers + collectors | **Open** (dual) | **Shipped** — `wanyrix-engine` v0.9.0 in-tree (`engine/`), dual-licensed | Scrutiny of evidence collection is the product |
 | `wanyrix-protocol` / `wanyrix-core` / `wanyrix` CLI crates | **Open** (dual) | Publication plan in [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md) | Reusable, contract-first, ecosystem-native |
 | W-EIR schema + versioned flavors (`wanyrix.report/v1`, …) | **Open**, spec-public | Shipped & test-pinned | Contract transparency prevents lock-in (COMMERCIAL: exports are not a lock-in format) |
-| Web platform (dashboard UI, API routes) | **Open** (dual) | Shipped, verified (192 tests) | The demonstrator; runs locally, no telemetry |
+| Web platform (dashboard UI, API routes) | **Open** (dual) | Shipped, verified (296 tests passing / 3 skip — measured 2026-09-22) | The demonstrator; runs locally, no telemetry |
 | Wanyrix Cloud (history sync, team dashboards, hosted AI) | **Proprietary** (service, not code) | Designed, not built (Phase 13) | The service is the product; the client stack it serves stays open |
 | Billing, entitlements, subscription engine | **Proprietary** | Designed (COMMERCIAL §39) | Inner-shell only; never touches the local core |
 | Enterprise delivery (SSO/SCIM glue, private deployment, SLAs, audit-log backend) | **Proprietary/commercial** | Roadmap (Phase 14) | Deployment convenience and assurance, not analysis capability |
@@ -74,15 +77,15 @@ If no, the boundary line is drawn wrong.
 | After transition | **Maintainers council** (3–5 members, including the founder) | Substantive changes (API, schema flavors, honesty gates, license) require a lightweight public RFC + council lazy-consensus (72 h objection window) |
 | Unchangeable by anyone unilaterally | The honesty gates (Estimated ≠ Measured ≠ Verified, no false Verified claims, no fabricated evidence — [`CONTRIBUTING.md`](CONTRIBUTING.md) §3) | These are the constitution; a council change to them requires a supermajority and a public rationale |
 
-Interim artifact: a short `GOVERNANCE.md` ships with the public launch describing the
-BDFL phase honestly (who decides, how to propose, how disputes escalate) instead of
-pretending a committee exists that doesn't.
+Interim artifact: a short `GOVERNANCE.md` describing the BDFL phase honestly (who
+decides, how to propose, how disputes escalate) instead of pretending a committee exists
+that doesn't. **Not yet adopted — tracked in the governance bundle (#119).**
 
 ## 6. Security reporting & maintainer operations
 
 | Topic | Policy |
 | --- | --- |
-| Security reports | Follow [`SECURITY.md`](SECURITY.md). Today: no public tracker (AUDIT-I5) — reports route privately per that doc. At public launch: GitHub private vulnerability reporting + published advisories; the existing posture (no auth surface, validation tables, grounding firewall) becomes the baseline for a public THREAT_MODEL.md. |
+| Security reports | Follow [`SECURITY.md`](SECURITY.md). Today: the public GitHub issue tracker is live for disclosable reports; GitHub **private vulnerability reporting** is the intended channel for sensitive ones — planned, tracked in #119, **not enabled yet**. The existing posture (no auth surface, validation tables, grounding firewall) becomes the baseline for a public THREAT_MODEL.md. |
 | Maintainer onboarding | Ladder: contributor → regular (3+ merged PRs honoring the evidence standard) → maintainer (invite by existing maintainers, 2/3 consent; gets review rights + `CODEOWNERS` entry). Onboarding checklist: CONTRIBUTING walkthrough, issue-record template practice, one mentored review, CoC acceptance. `good-first-issue` and `help-wanted` labels are the documented entry doors ([`RUST_COMMUNITY_GUIDE.md`](RUST_COMMUNITY_GUIDE.md) §7). |
 | Release cadence | Web platform: continuous (gated by lint/typecheck/tests/brand gate). Engine + CLI crates: time-based minors every 4–6 weeks on the 4–6-week train once v0 ships; patches as needed; breaking changes only at `0.x+1`/`1.x+1` with migration notes; machine flavors versioned independently (`vN` additive-only). Full mechanics: [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md) §2/§6. |
 | Security releases | Out-of-band, immediate, advisory published simultaneously with the fixed release. |
@@ -94,12 +97,12 @@ state of each is stated to keep this document honest.
 
 | # | Prerequisite | State |
 | --- | --- | --- |
-| 1 | Public repo reachable (GitHub push with credentials) | **Blocked** — AUDIT-I5 (human step) |
-| 2 | Owner legal sign-off on `MIT OR Apache-2.0` + license files + NOTICE | Pending (this doc is the proposal) |
-| 3 | Commit-history review for anything unsuitable for publication | Pending |
-| 4 | `GOVERNANCE.md`, trademark policy, CoC adopted (Rust CoC) | Drafted here (§4/§5/§10 of community guide); not yet adopted |
-| 5 | Private vulnerability reporting configured | Pending (needs the public repo) |
-| 6 | Community material updated from "plan" to "fact" (this doc, community guide §1) | Pending — until then, all public claims stay at plan level |
+| 1 | Public repo reachable (GitHub push with credentials) | **Done** — `github.com/Roy-Wanyoike/wanyrix` is public |
+| 2 | Owner legal sign-off on `MIT OR Apache-2.0` + license files + NOTICE | **Done (license files)** — `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE` committed; README badge + `engine/Cargo.toml` declare the expression. NOTICE file + per-file copyright headers: open (with #119) |
+| 3 | Commit-history review for anything unsuitable for publication | Pending — tracked in the governance bundle (#119) |
+| 4 | `GOVERNANCE.md`, trademark policy, CoC adopted (Rust CoC) | Drafted here (§4/§5/§10 of community guide); not yet adopted — tracked in #119 |
+| 5 | Private vulnerability reporting configured | Pending (repo is public; enabling GitHub private reporting is tracked in #119) |
+| 6 | Community material updated from "plan" to "fact" (this doc, community guide §1) | In progress — status snapshots refreshed against v0.9.0 reality; adoption/announcement steps remain gated on rows 3–5 (#119) |
 
 ## 8. Community-health metrics (baselines established at launch)
 
@@ -107,7 +110,7 @@ Measured, not felt. Vanity metrics (raw stars) are recorded but never targets.
 
 | Metric | Definition | Target | Baseline |
 | --- | --- | --- | --- |
-| Time-to-first-response | Median, issues/PRs from outsiders | < 48 h | not yet measured (no public tracker) |
+| Time-to-first-response | Median, issues/PRs from outsiders | < 48 h | not yet measured (tracker is live; baselines start with the governance bundle #119) |
 | Time-to-triage | Median, issue opened → labeled | < 7 days | not yet measured |
 | False-positive rate | `kind/false-positive` reports per released analyzer finding set | Trending down | not yet measured |
 | External contribution share | Merged PRs from outside the founding team | ≥ 20% by month 6 | 0% |
@@ -133,7 +136,8 @@ community itself.
 
 ## 10. What this strategy forbids
 
-- Open-washing: claiming "open source" before the transition gate (§7) completes.
+- Open-washing: claiming "open source" for components or governance practices that don't
+  meet §7 yet — the license is real, and so are the remaining gate rows.
 - Artificial crippling of the local core to manufacture cloud demand (spec §58's explicit
   warning; COMMERCIAL principle 1).
 - Bait-and-switch relicensing of already-released open code without a real stewardship
@@ -148,4 +152,4 @@ community itself.
 [`CONTRIBUTING.md`](CONTRIBUTING.md) (evidence standard, honesty gates) ·
 [`SECURITY.md`](SECURITY.md) (reporting path, current posture) ·
 [`PRIVACY.md`](PRIVACY.md) (local-first data flows) ·
-[`README.md`](../README.md) (current license statement — updated only at §7 completion)
+[`README.md`](../README.md) (license statement — shipped: dual `MIT OR Apache-2.0` badge)

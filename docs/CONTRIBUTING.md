@@ -95,3 +95,10 @@ by design — IDs are contracts.
 - A feature: honors the fixture conventions (`docs/DEVELOPMENT.md`), keeps
   `lint`/`typecheck`/`test`/brand gate green, and leaves the honesty architecture
   untouched.
+
+## 7. Repository bootstrap toolkit (historical)
+
+`scripts/github/*.sh` are the one-time repo-bootstrap toolkit (auth/rename/push +
+issue/PR filing) that produced this GitHub repository. It has already been executed —
+this repo is its output — and is kept only for reference or a re-run on a fresh fork;
+its README was removed once every step had completed.
