@@ -16,7 +16,8 @@ Next.js 16 (App Router) · TypeScript · Tailwind 4 · shadcn/ui · TanStack Que
   command palette), sidebar, mobile chips.
 - `src/components/wanyrix/nav-registry.ts` — **single source of truth** for navigation
   (`NAV_GROUPS`, `NAV_ITEMS`, `VIEW_TITLES`); sidebar and palette consume it so they cannot
-  drift. 6 groups / 18 views over `ViewId` (18 members in `src/lib/wanyrix/types.ts`).
+  drift. 6 groups / 19 views over `ViewId` (19 members in `src/lib/wanyrix/types.ts`;
+  counts = entries in `nav-registry.ts` / `ViewId` union members, issue #111).
 - `src/components/wanyrix/views/*` — one component per view. Two views are legacy-hosted
   overlays promoted to first-class: History (scan-history panel) and Findings (doctor
   findings + detail sheet). Shared loading/error primitives in `shared.tsx`.
@@ -39,11 +40,18 @@ Next.js 16 (App Router) · TypeScript · Tailwind 4 · shadcn/ui · TanStack Que
   AUDIT-I1's P0 bug: the storage *thunk* must be passed, not invoked).
 - Server data is fetched with TanStack Query (`hooks.ts`); no duplicate fetch caches.
 
-## API routes (18, under `src/app/api/wanyrix/`)
+## API routes (23, under `src/app/api/wanyrix/`)
 
-`diagnostics` · `doctor` · `engine/build` · `engine/doctor` · `experiments` · `explain` · `gates` ·
-`graph` · `health` · `impact` · `issues` · `pr` · `report` · `scan-runs` · `storage` ·
-`storage/rebuild` · `storage/reclaim` · `workspaces`
+Count = `find src/app/api -name "route.ts" | wc -l` minus the `/api` root (23; 24 total incl.
+the root, measured 2026-09-22, issue #111).
+
+`diagnostics` · `doctor` · `engine/build` · `engine/doctor` · `engine/impact` · `experiments` ·
+`explain` · `export` · `gates` · `git` · `graph` · `health` · `impact` · `issues` ·
+`license/issue` · `pr` · `report` · `scan-runs` · `storage` · `storage/rebuild` ·
+`storage/reclaim` · `what-changed` · `workspaces`
+
+(Added since the last audit of this list: `export` — PR #91; `git`, `what-changed` — PR #75;
+`engine/impact`, `license/issue` — PR #94.)
 
 ### Error semantics
 
@@ -61,6 +69,10 @@ Workspace scoping: every `ws`-accepting surface resolves the param through the s
 (9 ws-scoped surfaces across 8 route directories: report counts twice for its two
 `format` branches; every `flavor` is scoped too). An absent/empty `ws` falls back to the
 registry default; `storage`, `gates`, `issues`, and `workspaces` are workspace-independent.
+The engine-exec family (`engine/doctor`, `engine/build`, `engine/impact`, `git`,
+`what-changed`, `export`) resolves `?ws=`/`?workspace=` against the REGISTERED-workspace
+bridge instead (absent → the repo engine crate itself) — same never-wrong-workspace
+posture, different registry.
 
 Deterministic GET routes are byte-identical across calls minus timestamps/storage GC
 fields. Graph aggregates (`fanIn`/`fanOut`/`downstream`, blast radius, `recompileCrates`)
