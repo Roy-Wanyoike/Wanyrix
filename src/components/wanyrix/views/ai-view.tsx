@@ -15,6 +15,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useExplain, useGates, useGraph, useHealth, useDoctor } from '@/lib/wanyrix/hooks'
+import { smoothGroundedProse } from '@/lib/wanyrix/report'
 import type { ExplainRequest } from '@/lib/wanyrix/types'
 import { aiStatusFromExplain, useAiStatusStore } from '../ai-status-store'
 import { MeasurementBadge, Panel, SectionHeading } from '../shared'
@@ -227,7 +228,9 @@ export default function AiView() {
                   </p>
                 )}
                 <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border/70 bg-card/60 p-4 text-sm leading-relaxed [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_li]:my-0.5 [&_p]:my-1.5 [&_ul]:my-1.5">
-                  <ReactMarkdown>{(response.explanation ?? response.fallback ?? '').trim()}</ReactMarkdown>
+                  {/* smoothGroundedProse: raw `⟨removed: not in evidence⟩` tokens
+                      render as an em-dash — removed claims stay removed (#99) */}
+                  <ReactMarkdown>{smoothGroundedProse((response.explanation ?? response.fallback ?? '').trim())}</ReactMarkdown>
                 </div>
                 <p className="font-mono text-[10px] text-muted-foreground">
                   {response.ok && response.grounded

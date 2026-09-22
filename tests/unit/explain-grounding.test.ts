@@ -9,8 +9,10 @@
 import { describe, expect, test } from 'bun:test'
 import {
   EXPLAIN_MAX_BODY_BYTES,
+  GROUNDING_REDACTED_TOKEN,
   parseModelSections,
   redactViolations,
+  smoothGroundedProse,
   validateModelGrounding,
 } from '@/lib/wanyrix/report'
 
@@ -124,6 +126,27 @@ describe('explain grounding — redactViolations', () => {
     expect(red.inference).not.toContain('12.4')
     expect(red.inference).not.toContain('verified')
     expect(red.inference).toContain('⟨removed: not in evidence⟩')
+  })
+})
+
+describe('explain grounding — smoothGroundedProse (issue #99 P4)', () => {
+  test('the raw placeholder is exported verbatim (wire contract stays stable)', () => {
+    expect(GROUNDING_REDACTED_TOKEN).toBe('⟨removed: not in evidence⟩')
+  })
+
+  test('raw placeholders render as an em-dash — removed claims stay removed', () => {
+    const prose = `Build time is ⟨removed: not in evidence⟩ seconds and the impact is ⟨removed: not in evidence⟩ per clean build.`
+    const smooth = smoothGroundedProse(prose)
+    expect(smooth).not.toContain('⟨removed')
+    expect(smooth).not.toContain('not in evidence⟩')
+    expect(smooth).toBe(
+      'Build time is — seconds and the impact is — per clean build.',
+    )
+  })
+
+  test('prose without placeholders passes through untouched', () => {
+    expect(smoothGroundedProse('clean deterministic fallback')).toBe('clean deterministic fallback')
+    expect(smoothGroundedProse('')).toBe('')
   })
 })
 

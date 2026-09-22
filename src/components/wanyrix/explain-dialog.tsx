@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import ReactMarkdown from 'react-markdown'
 import { useExplain } from '@/lib/wanyrix/hooks'
+import { smoothGroundedProse } from '@/lib/wanyrix/report'
 import type { ExplainRequest } from '@/lib/wanyrix/types'
 import { aiStatusFromExplain, useAiStatusStore } from './ai-status-store'
 
@@ -60,7 +61,9 @@ export function ExplainDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="h-7 gap-1.5 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary">
+        {/* hit-44 (issue #99): the 28px chip keeps its visual size but gets a
+            44px touch target */}
+        <Button size="sm" variant="outline" className="hit-44 h-7 gap-1.5 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary">
           <Sparkles className="size-3.5" />
           {label}
         </Button>
@@ -99,7 +102,9 @@ export function ExplainDialog({
                 </p>
               )}
               <div className="prose prose-sm prose-invert max-w-none [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_p]:my-1.5 [&_ul]:my-1.5 [&_li]:my-0.5">
-                <ReactMarkdown>{(explain.data.explanation ?? explain.data.fallback ?? '').trim()}</ReactMarkdown>
+                {/* smoothGroundedProse: raw `⟨removed: not in evidence⟩` tokens
+                    render as an em-dash — removed claims stay removed (#99) */}
+                <ReactMarkdown>{smoothGroundedProse((explain.data.explanation ?? explain.data.fallback ?? '').trim())}</ReactMarkdown>
               </div>
             </>
           )}
