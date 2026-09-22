@@ -177,7 +177,8 @@ only the explicit context payload you submit. No telemetry exists.
 the project audit history).
 
 **Can Wanyrix fix my code?** It proposes reviewable patches only (Gate 19). Auto-fix is
-**Roadmap** (Phase 9) and would still be approval-gated.
+**Roadmap** (not on the shipped list — see the README's Roadmap section) and would
+still be approval-gated.
 
 **Does AI upgrade estimates to verified?** Never. Only a recorded experiment does
 (Gate 21), and the AI layer is post-validated against exactly that rule.

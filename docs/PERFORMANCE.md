@@ -1,11 +1,15 @@
 # Wanyrix Web Platform — Performance
 
-**Measure it, don't invent it.** Every number below comes from the probe script checked
-into this round's tooling (`/tmp/wanyrix-perf/api-latency.ts`, two runs — outputs
-preserved verbatim in `/tmp/wanyrix-perf/run-1.txt` and `run-2.txt`). Nothing here is a
-designed target; targets are quoted as targets and labeled. Where a number does not
-exist because it belongs to the Rust engine repo, it is marked **N/A — engine repo**
-(engine v0 measures real filesystem analysis; never approximated).
+**Measure it, don't invent it.** Every number below comes from a Bun probe script
+(`api-latency.ts`) driven against the live dev server during the **2026-09-18
+measured round** (two runs). The probe outputs were preserved in
+`/tmp/wanyrix-perf/run-1.txt` and `run-2.txt`, which are **ephemeral**: evidence
+is re-measured per round, and committed probe outputs are pending the perf-rerun
+ledger item (**AUD-11**). Nothing here is a designed target; targets are quoted as
+targets and labeled. Where a number belongs to the Rust engine rather than the web
+platform, the table says so — the engine lives **in this tree** (`engine/`), and
+its measured numbers are maintained in [`engine/BENCHMARKS.md`](../engine/BENCHMARKS.md),
+not invented here.
 
 ## Method
 
@@ -53,6 +57,14 @@ exist because it belongs to the Rust engine repo, it is marked **N/A — engine 
 | gates | 30 | 4.4 | 4.8 | 5.9 | 6.1 | 5.8 |
 | issues | 30 | 3.7 | 4.9 | 7.9 | 12.4 | 4.8 |
 | storage | 30 | 4.0 | 5.0 | 24.3 | 34.5 | 6.0 |
+
+> **Coverage note (honest):** the table above is the 2026-09-18 measured round
+> — 13 of the 23 `/api/wanyrix/*` routes. The **10 routes shipped after that
+> round are UNMEASURED**: `git`, `what-changed`, `export`, `license/issue`,
+> `scan-runs`, `storage/rebuild`, `storage/reclaim`, `engine/build`,
+> `engine/doctor`, `engine/impact`. Re-measurement (these 10 + a fresh full
+> sweep) is the perf-rerun ledger item **AUD-11**; until it lands, no latency
+> claim exists for those routes.
 
 **Observations (honest):**
 
@@ -103,23 +115,24 @@ product guarantees.
   deployment. Related dev-infra note: stale Turbopack chunks after mass renames can
   serve pre-rename modules until a hard refresh (AUDIT-I9, P4).
 
-## Designed CLI/engine targets (pending-task §26) — **N/A in this repo**
+## Designed CLI/engine targets (pending-task §26) — engine is IN-TREE
 
 These are targets for the Rust **engine** surfaces (CLI binary, daemon, SQLite, real
-analysis). The web platform has no CLI binary and no daemon; they are reproduced here
-only as the contract the engine repo must meet, labeled accordingly:
+analysis). The engine lives in this repository (`engine/`) — its measured numbers are
+maintained in [`engine/BENCHMARKS.md`](../engine/BENCHMARKS.md); the table below only
+records the contract those numbers must meet:
 
-| §26 Target | Status here |
+| §26 Target | Where the number lives |
 | --- | --- |
-| p95 non-analysis CLI startup < 150 ms | **N/A — engine repo** (no CLI binary; contract in `docs/CLI.md`) |
-| p95 warm localized incremental analysis < 1 s | **N/A — engine repo** |
-| p95 medium-repository doctor < 10 s | **N/A — engine repo** (web `/doctor` serves fixtures in ~5 ms median — not comparable) |
-| Idle daemon < 100 MB RSS | **N/A — engine repo** (no daemon) |
-| 250-crate workspace < 1 GB RSS | **N/A — engine repo** |
-| 500+ crate synthetic repository completes without pathological memory growth | **N/A — engine repo** |
+| p95 non-analysis CLI startup < 150 ms | engine surface — `engine/BENCHMARKS.md` (contract in `docs/CLI.md`) |
+| p95 warm localized incremental analysis < 1 s | engine surface — `engine/BENCHMARKS.md` |
+| p95 medium-repository doctor < 10 s | engine surface — `engine/BENCHMARKS.md` (web `/doctor` serves fixtures in ~5 ms median — not comparable) |
+| Idle daemon < 100 MB RSS | engine surface — `engine/BENCHMARKS.md` |
+| 250-crate workspace < 1 GB RSS | engine surface — `engine/BENCHMARKS.md` |
+| 500+ crate synthetic repository completes without pathological memory growth | engine surface — `engine/BENCHMARKS.md` |
 
-Per §26, any regression > 10% must receive an investigation — that applies to the
-engine repo once it exists; for this web platform the protocol is: re-run the probe
-script, compare medians/p95 per route variant against this document, and file an issue
-record (`docs/CONTRIBUTING.md`) if a median moves > 10% across runs under equal
-conditions.
+Per §26, any regression > 10% must receive an investigation — for the engine, that
+protocol runs against the `engine/BENCHMARKS.md` numbers; for this web platform the
+protocol is: re-run the probe script, compare medians/p95 per route variant against
+this document, and file an issue record (`docs/CONTRIBUTING.md`) if a median moves
+> 10% across runs under equal conditions.

@@ -153,27 +153,30 @@ Measured 500-crate timings: [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) · fu
 
 ## Grounded AI — real API response
 
-`POST /api/wanyrix/explain` with `{"context":{"findingId":"FER-BLD-001"},"question":"Why does this matter for a Rust team?"}` (abridged — facts truncated from 18 to 3; everything else verbatim):
+`POST /api/wanyrix/explain` with `{"context":{"findingId":"WAN-BLD-001"},"question":"Why does this matter for a Rust team?"}` (response captured 2026-09-22; abridged — grounding facts truncated from 18 to 3, `provenance.contextFields` list omitted; everything else verbatim). An unknown finding id is a named refusal: `400` with `{"ok":false,"error":"unknown finding 'FER-BLD-001'"}`. The `ai` fields are provider-bound; if grounding validation rejects model output, the route answers `ok:false` with the deterministic fallback instead.
 
 ```json
 {
   "ok": true,
+  "explanation": "OBSERVED FACT — common-runtime adds 18.3s to each build (41% of total), blocks 41 downstream crates, and changes frequently (23 commits in 90 days), causing ×41 rebuild amplification. … INFERENCE — … RECOMMENDATION — … UNCERTAINTY — …",
   "grounded": true,
-  "explanation": "OBSERVED FACT — common-runtime takes 18.3s to compile and blocks 41 downstream crates. … INFERENCE — … RECOMMENDATION — … UNCERTAINTY — …",
   "grounding": {
     "status": "registry",
+    "resolved": { "id": "WAN-BLD-001", "registry": "findings" },
     "facts": [
-      { "statement": "id: FER-BLD-001", "derivedFrom": "registry:findings.id" },
-      { "statement": "title: common-runtime sits on the critical path", "derivedFrom": "registry:findings.title" }
+      { "statement": "id: WAN-BLD-001", "derivedFrom": "registry:findings.id" },
+      { "statement": "title: common-runtime sits on the critical path", "derivedFrom": "registry:findings.title" },
+      { "statement": "severity: critical", "derivedFrom": "registry:findings.severity" }
     ]
   },
   "ai": {
-    "commentary": "…",
-    "inference": "…",
-    "recommendation": "…",
-    "uncertainty": "While the estimated improvement is 12.4s, the actual measurement may vary. …"
+    "commentary": "common-runtime adds 18.3s to each build (41% of total), blocks 41 downstream crates, and changes frequently (23 commits in 90 days), causing ×41 rebuild amplification.",
+    "inference": "This creates a significant productivity bottleneck for Rust developers, with long feedback cycles and high rebuild costs impacting the entire workspace.",
+    "recommendation": "Implement the architecture split into runtime-core and runtime-telemetry to reduce incremental build time by an estimated 12.4s.",
+    "uncertainty": "The actual impact of the split is estimated (not yet measured); verification requires experiment EXP-014 with baseline measurements."
   },
-  "provenance": { "generatedBy": "ai-provider", "resolution": "context reference resolved against the findings registry → FER-BLD-001" }
+  "disclaimer": "FACT statements above are rendered server-side from the evidence context and cannot be altered by the model. The `ai` fields are model-generated interpretation, not evidence; numbers, statuses and references in them are validated against the evidence context and redacted when ungrounded. Claims keep their stated measurement status (measured / estimated / verified) — nothing in this response upgrades an estimate.",
+  "provenance": { "generatedBy": "ai-provider", "resolution": "context reference resolved against the findings registry → WAN-BLD-001" }
 }
 ```
 
@@ -262,7 +265,7 @@ This repository is built the way it asks you to build software — with verifiab
 
 Shipped: the full offline product contract (23 command surfaces — including git facts, impact + what-changed change intelligence, export, registry-branch team sync, and offline ed25519 entitlement), the durable event log, local-AI grounding, the connect-a-project bridge, chaos- and adversarial-tested resilience, release engineering with SBOM, and the design directions for hosted cloud and plugins. Next, in order:
 
-- **crates.io publish** of `wanyrix-engine` once the release checklist (MSRV, feature flags, signing secrets) is exercised on a real tag.
+- **crates.io publish** in the [`docs/CRATES_IO_STRATEGY.md`](docs/CRATES_IO_STRATEGY.md) §1 order — `wanyrix-protocol` first (then `wanyrix-core`, then the `wanyrix` CLI) — once the §6 checklist (MSRV, feature flags, signing secrets) is exercised on a real tag.
 - **Plugin API v1** — the event log is the first shipped extension surface; the out-of-process plugin contract follows the decision points in [`docs/PLUGIN_AND_EVENTS.md`](docs/PLUGIN_AND_EVENTS.md).
 - **Cloud milestone** — the serverless first rung is shipped: `wanyrix sync push|pull` (registry-branch team sync + CI referee, v0.9.0). The hosted offering starts when greenlit ([`docs/CLOUD_DESIGN.md`](docs/CLOUD_DESIGN.md)).
 

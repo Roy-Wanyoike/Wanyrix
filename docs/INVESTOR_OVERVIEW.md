@@ -65,7 +65,7 @@ Measurement date: **2026-09-22** against the v0.9.0 tree.
 | Component | Status | Why it matters |
 | --- | --- | --- |
 | crates.io publication (`wanyrix-protocol` → `wanyrix-core` → `wanyrix`) | Planned — publication order + checklist in `docs/CRATES_IO_STRATEGY.md` | `cargo install wanyrix` distribution; ecosystem native presence |
-| Cloud control plane (sync, billing, team) | Designed, not built (`docs/COMMERCIAL.md` §"to build") | Phase 13–14 monetization surface |
+| Cloud control plane (sync, billing, team) | Designed, not built (`docs/COMMERCIAL.md` §"to build") | Monetization surface for the designed hosted tiers (tier plan in `docs/COMMERCIAL.md`) |
 | Community launch (posts, listings) | Not started — feedback-gated (`docs/RUST_COMMUNITY_GUIDE.md` §4); governance artifacts tracked in #119 | Organic adoption per the no-spam ground rules |
 
 ## 5. Market and wedge
@@ -90,7 +90,8 @@ Measurement date: **2026-09-22** against the v0.9.0 tree.
   remains proprietary.
 - No payment processing exists in the product today — by design. The offline
   entitlement layer (license issuance/activation, sandbox-local, no payment method)
-  shipped in v0.9.0; the hosted billing stack remains Phase 13.
+  shipped in v0.9.0; the hosted billing stack remains design-only
+  (`docs/COMMERCIAL.md`).
 
 ## 7. Traction & verification discipline
 
@@ -109,7 +110,7 @@ This document deliberately does not invent funding amounts or valuations — tho
 founder decisions. What can be stated as measured fact: the platform's engineering
 foundation is built and audited — engine v0.9.0 (daemon, store, telemetry, CLI) and the
 web platform are shipped in-tree (§3); the remaining roadmap to a commercial v1
-(crates.io publication, cloud phases 13–14) is specified with acceptance gates; and the
+(crates.io publication, hosted cloud per `docs/COMMERCIAL.md`) is specified with acceptance gates; and the
 differentiating honesty architecture is defensible because it is enforced in code, not copy.
 
 ## 9. Risks (honest)

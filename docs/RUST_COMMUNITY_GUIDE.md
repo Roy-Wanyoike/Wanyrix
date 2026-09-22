@@ -151,7 +151,9 @@ RUNTIME evidence re-check — the same rule that applies internally.
 
 ## 8. Roadmap transparency policy
 
-- The public roadmap is the README's phases 1–15; items are either **shipped**,
+- The public roadmap is the README's Roadmap section (its shipped list and the
+  ordered "next" bullets), with issue-level detail on the tracker (open:
+  #66, #100–#103, #114–119); items are either **shipped**,
   **in progress**, or **Roadmap** — nothing in between, no euphemisms.
 - Community feedback may reorder Roadmap items; it can never silently redefine what is
   already shipped.

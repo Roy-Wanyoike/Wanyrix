@@ -29,14 +29,20 @@ at the end gate any further implementation.
 
 The extension surface is already real — it is just not yet *named* one:
 
-- **12 versioned JSON envelopes** (each pinned by engine tests):
-  `wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
+- **22 versioned JSON envelopes** (each pinned by engine tests; enumerated in
+  `docs/CLI.md`): `wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`,
   `wanyrix.analyze/v1`, `wanyrix.dependencies/v1`, `wanyrix.init/v1`,
-  `wanyrix.status/v1`, `wanyrix.experiment/v1`, `wanyrix.experiments/v1`,
-  `wanyrix.build/v1`, `wanyrix.telemetry/v1`, `wanyrix.daemon/v1`.
+  `wanyrix.status/v1`, `wanyrix.experiment/v1`, `wanyrix.build/v1`,
+  `wanyrix.telemetry/v1`, `wanyrix.daemon/v1`, `wanyrix.events/v1`,
+  `wanyrix.ai/v1`, `wanyrix.git/v1`, `wanyrix.impact/v1`,
+  `wanyrix.what-changed/v1`, `wanyrix.export/v1`, `wanyrix.sync/v1`,
+  `wanyrix.entitlement/v1`, `wanyrix.entitlement.token/v1`,
+  `wanyrix.entitlement.cache/v1`, `wanyrix.license-keygen/v1` — plus the
+  plural `wanyrix.experiments/v1` collection envelope that `experiment list
+  --json` emits (`docs/CLI.md` row 12).
 - **Unix-socket daemon protocol** (`wanyrix.daemon/v1`): request/response over
   a local socket with liveness probing — the natural local event transport.
-- **HTTP surface**: 18 web routes under `/api/wanyrix/*`, including
+- **HTTP surface**: 23 web routes under `/api/wanyrix/*`, including
   durable scan-run sync (`POST/GET /api/wanyrix/scan-runs`, idempotent upsert
   on the client's deterministic run id) and versioned reports
   (`wanyrix.report/v1`, `wanyrix.markdown/v1`).

@@ -56,10 +56,12 @@ Tree below is the complete file list (`ls tests/unit tests/api engine/tests/*.rs
 ```text
 tests/
   bun-env.d.ts                  # bun:test types
-  unit/                         # 26 files — `bun test unit`
+  unit/                         # 27 files — `bun test unit`
     badge-contrast.test.ts      # honesty-badge WCAG-AA contrast (computed, both themes)
     build-telemetry.test.ts     # build-telemetry store + estimated-range semantics
+    cli-dialog-command-set.test.ts # CLI-contract dialog pins the docs/CLI.md command set (issue #109)
     client-export.test.ts       # in-app download exporters (markdown/CSV envelopes)
+    doctor-replay.test.ts       # doctor view honest REPLAY degraded state (issue #128)
     engine-meta.test.ts         # engine version pin agrees with engine/Cargo.toml
     explain-grounding.test.ts   # grounding validator / redaction units (ENG-TCA-4)
     finding-diff.test.ts        # A→B run comparison math (compare mode)
@@ -69,22 +71,28 @@ tests/
     flavors.test.ts             # scorecard/scan-history flavor builders (ENG-TCA-2)
     legacy-migration.test.ts    # AUDIT-I1 P0 regression: storage thunk + copy-before-delete
     license-issue.test.tsx      # license-issue dialog semantics
+    muted-contrast.test.ts      # muted-text WCAG-AA contrast (computed, both themes, issue #131)
     palette-filter.test.ts      # command-palette filtering
+    palette-search.test.ts      # command-palette data search (crates/findings/PRs, issue #127)
     patch.test.ts               # Gate 19 new-proposal patch semantics
     register.test.ts            # workspace registration bridge behaviors
     registered-workspaces.test.ts # merged workspace registry: registered rows first, fixtures after (QA-5-B-1)
     scan-runs.test.ts           # durable scan-run sync client (idempotent POST)
     simulator-intent.test.ts    # intent parsing + impact math invariants (monotonic, finite, always estimated)
     stores.test.ts              # zustand persist stores, offline behaviors
+    wanyrix-workspace-param.test.ts # unified ?workspace= / ?ws= param contract, handler-level (issue #129)
+    workspace-count-consistency.test.ts # ONE count selector across surfaces (QA-5-B-3)
     workspace-provenance.test.tsx # fixture/registered provenance badge honesty (QA-5-B-1/B-4)
     workspace-selector.test.ts  # workspace switcher behaviors
-  api/                          # 4 files — live contracts against :3000 (counted skip when down; REQUIRE_LIVE=1 fails instead — AUD-4)
+  api/                          # 7 files — live contracts against :3000 (counted skip when down; REQUIRE_LIVE=1 fails instead — AUD-4)
     harness.ts                  # shared server probe + counted test registration (AUD-4)
     server-present.test.ts      # vacuous-green gate: REQUIRE_LIVE=1 + server absent → red (AUD-4)
     wanyrix-api.test.ts         # 200 JSON shapes, 400/404/405/413, ws guard, flavors
     wanyrix-export.test.ts      # POST /api/wanyrix/export contract (PR #91)
     wanyrix-license.test.ts     # POST /api/wanyrix/license/issue contract (PR #94)
-engine/tests/                   # 20 Rust suites — `cargo test` (182 tests, per engine/README v0.9.0)
+    wanyrix-scan-runs.test.ts   # POST/GET /api/wanyrix/scan-runs route contracts (AUD-2)
+    wanyrix-storage-mutations.test.ts # POST /api/wanyrix/storage/{rebuild,reclaim} contracts (AUD-3)
+engine/tests/                   # 22 Rust suites — `cargo test --workspace --offline` (engine/)
   adversarial.rs                # hostile-input hardening: unicode paths, symlinks, huge/deep trees (issue #71, PR #74)
   ai_cli.rs                     # wanyrix ai — digest-only grounding, https refusal, named errors
   binary_matrix.rs              # release-binary matrix checks (PR #89)
@@ -94,13 +102,14 @@ engine/tests/                   # 20 Rust suites — `cargo test` (182 tests, pe
   daemon_ipc.rs                 # daemon over the local Unix socket
   doctor_rules.rs               # deterministic finding rules
   entitlement_cli.rs            # activate / entitlement / tier gating (PR #94)
+  entitlement_gate_cli.rs       # dispatch-time entitlement gate + CI/dev hatch (AUD-1)
   entitlement_offline_pin.rs    # zero-network activation pinned at source level (PR #94)
   exclude_cli.rs                # --exclude on every scan surface (issue #76, PR #86)
   export_cli.rs                 # export artifacts + sha256 index (issue #91, PR #91)
-  fixtures/                     # tiny-ws · cycle-ws · diamond-ws · synth-50 workspaces
   human_format.rs               # human-readable output formatting
   perf_probe.rs                 # 2 opt-in perf probes (cargo test --release --test perf_probe -- --ignored)
   pretty_cli.rs                 # --pretty output contract (PR #89)
+  stdin_shorthand_cli.rs        # positional `-` stdin sugar for store save / telemetry ingest (QA-4-B-3)
   store_recovery.rs             # SQLite WAL crash-recovery
   sync_cli.rs                   # sync push/pull roundtrip, conflicts, tier downgrade (issue #92, PR #92)
   synth.rs                      # deterministic synth (same seed+count ⇒ byte-identical)

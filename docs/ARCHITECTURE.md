@@ -155,9 +155,12 @@ ENG-TCA-3 fix) — no hand-typed counts.
 - Flavors above define what the real engine must emit; routes are thin over fixture
   getters so swapping fixtures for engine calls is a data-layer change, not a contract
   change.
-- Roadmap surfaces (CLI, daemon, sync, billing) have no runtime stubs pretending to work —
-  they are documented as roadmap (USER_GUIDE/COMMERCIAL), and Organization tier data is
-  explicitly badged fixture.
+- Roadmap surfaces have no runtime stubs pretending to work: the CLI, daemon
+  and sync are **shipped** (the real `wanyrix` binary in `engine/`, the UDS
+  daemon, and registry-branch `sync push|pull` — see `docs/CLI.md`), and only
+  hosted **billing/cloud** remains documented as roadmap (USER_GUIDE/
+  COMMERCIAL/CLOUD_DESIGN). Organization tier data is explicitly badged
+  fixture.
 
 ## Verification
 

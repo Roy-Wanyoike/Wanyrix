@@ -28,6 +28,14 @@ This document records the design direction so the future online layer is built
   server never invents runs, durations, or figures (Gate 21).
 - **Secret redaction** — engine telemetry ingestion redacts source snippets
   and known secret shapes by default (`wanyrix.telemetry/v1`).
+- **Serverless team sync — SHIPPED (issue #92, v0.9.0)** — `wanyrix sync
+  push|pull` turns a git branch into the shared store: one measured pass
+  committed to the remote's registry branch as exactly one deterministic
+  commit (push), and a merge with named conflicts + evidence-tier downgrade
+  on pull. No server exists — the transport is git itself — which is exactly
+  why it fits this document: the hosted rung below would replace the
+  git-branch transport with a bridge, never the local-first measurement
+  model. Gated to the TEAM tier (offline ed25519 entitlement, issue #94).
 - **Local stores** — per-browser localStorage + SQLite (WAL, crash-recovery
   tested, `fsck`/repair).
 
@@ -66,7 +74,10 @@ Wanyrix Cloud
 
 1. Hosting model and data residency (per-tenant encryption at rest?).
 2. Auth provider vs self-hosted identity.
-3. Commercial terms (blocked on the license decision — issue #62).
+3. Commercial terms — **resolved**: issue #62 is closed and
+   `docs/COMMERCIAL.md` is the ratified direction (local core free forever;
+   paid tiers monetize sync/teams/scale/governance). What remains open here
+   is only the implementation decision below.
 4. Whether team features (policies, fleet views) launch with snapshots or
    after them.
 

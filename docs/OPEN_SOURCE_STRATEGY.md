@@ -46,9 +46,9 @@ NOTICE file remain open items (tracked with the governance bundle, #119).
 | `wanyrix-protocol` / `wanyrix-core` / `wanyrix` CLI crates | **Open** (dual) | Publication plan in [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md) | Reusable, contract-first, ecosystem-native |
 | W-EIR schema + versioned flavors (`wanyrix.report/v1`, …) | **Open**, spec-public | Shipped & test-pinned | Contract transparency prevents lock-in (COMMERCIAL: exports are not a lock-in format) |
 | Web platform (dashboard UI, API routes) | **Open** (dual) | Shipped, verified (296 tests passing / 3 skip — measured 2026-09-22) | The demonstrator; runs locally, no telemetry |
-| Wanyrix Cloud (history sync, team dashboards, hosted AI) | **Proprietary** (service, not code) | Designed, not built (Phase 13) | The service is the product; the client stack it serves stays open |
+| Wanyrix Cloud (history sync, team dashboards, hosted AI) | **Proprietary** (service, not code) | Designed, not built (design-only: [`CLOUD_DESIGN.md`](CLOUD_DESIGN.md); the serverless sync rung — `wanyrix sync push\|pull` — is shipped) | The service is the product; the client stack it serves stays open |
 | Billing, entitlements, subscription engine | **Proprietary** | Designed (COMMERCIAL §39) | Inner-shell only; never touches the local core |
-| Enterprise delivery (SSO/SCIM glue, private deployment, SLAs, audit-log backend) | **Proprietary/commercial** | Roadmap (Phase 14) | Deployment convenience and assurance, not analysis capability |
+| Enterprise delivery (SSO/SCIM glue, private deployment, SLAs, audit-log backend) | **Proprietary/commercial** | Roadmap (tier plan in [`COMMERCIAL.md`](COMMERCIAL.md)) | Deployment convenience and assurance, not analysis capability |
 | Brand assets (name, logo) | **Trademark** — neither open nor "free license" | In use | See §4 |
 
 Litmus test applied per component: *if this were proprietary-only, could a user still get

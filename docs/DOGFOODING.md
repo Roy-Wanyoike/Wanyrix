@@ -1,9 +1,14 @@
 # Wanyrix Dogfooding — Wanyrix analyzes Wanyrix (EPIC 49 / issue #72)
 
-> Every number below was pasted from a REAL run at execution time. No
-> illustrative figures. Engine: **wanyrix 0.8.0**, built release from this
-> repository at commit `79fef79` (PR #75 merge). Host: this repo's sandbox
-> (Linux x86_64). Audit context: `docs/AUDIT.md` (EPIC 00).
+> **Historical snapshot (engine v0.8.0-era record).** Every number below was
+> pasted from a REAL run at execution time — no illustrative figures — but it
+> documents the **wanyrix 0.8.0** binary built from this repository at commit
+> `79fef79` (PR #75 merge). It is kept verbatim as the dogfooding methodology
+> reference and the origin of the follow-up work listed at the bottom; it is
+> NOT a claim about the current engine. v0.9.0-era evidence lives in
+> [`engine/BENCHMARKS.md`](../engine/BENCHMARKS.md) and
+> [`docs/PERFORMANCE.md`](PERFORMANCE.md). Host: this repo's sandbox (Linux
+> x86_64). Audit context: `docs/AUDIT.md` (EPIC 00).
 
 ## What was run
 
@@ -118,7 +123,9 @@ manifests pass every deterministic check the doctor knows how to run.
    fixtures under `tests/fixtures/`, which dominate the finding counts (93
    of 95). A `--exclude <dir>` option on scan surfaces would let operators
    scope analysis to real sources while keeping fixtures for tests.
-   → follow-up issue (P3, enhancement).
+   → **SHIPPED** — PR #86 (issue #76, v0.9.0): `--exclude <dir>` exists on
+   every scan surface, is echoed in the envelopes, pinned by
+   `engine/tests/exclude_cli.rs`, and documented in `docs/CLI.md` §exclude.
 2. No other product defects surfaced: the critical-chain surfaces
    (git → W-EIR → graph → findings → doctor → experiments → verification)
    all measured this repository without a single named error beyond the
