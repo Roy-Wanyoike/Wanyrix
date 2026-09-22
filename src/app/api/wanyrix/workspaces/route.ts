@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readdir } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import path from 'node:path'
 import { getWorkspaces } from '@/lib/wanyrix/data'
 import { methodNotAllowed } from '@/lib/wanyrix/api'
@@ -13,6 +14,7 @@ import {
   configuredWorkspaceRoots,
   hasRustProjectMarker,
   NOT_A_CONNECTABLE_PROJECT_REFUSAL,
+  rustMarkerEntries,
   validateRegistrationPath,
   workspaceIdFor,
 } from '@/lib/wanyrix/register'
@@ -159,10 +161,13 @@ export async function POST(req: NextRequest) {
   }
   const abs = check.abs as string
 
-  /* 2 — the directory must look like a Rust project the engine can scan. */
-  let entries: string[]
+  /* 2 — the directory must look like a Rust project the engine can scan.
+   * Entries are TYPE-CHECKED (AUD-8): only a regular-file Cargo.toml or a
+   * real .wanyrix directory counts — a planted symlink named `.wanyrix` is
+   * dropped, so the marker check cannot be satisfied by an alias. */
+  let dirents: Dirent[]
   try {
-    entries = await readdir(abs)
+    dirents = await readdir(abs, { withFileTypes: true })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.warn('[workspaces] POST readdir failed for', abs, ':', message)
@@ -171,7 +176,7 @@ export async function POST(req: NextRequest) {
       { status: 502 },
     )
   }
-  if (!hasRustProjectMarker(entries)) {
+  if (!hasRustProjectMarker(rustMarkerEntries(dirents))) {
     console.warn('[workspaces] POST refused: no Cargo.toml or .wanyrix at', abs)
     return NextResponse.json(
       { error: NOT_A_CONNECTABLE_PROJECT_REFUSAL },

@@ -67,3 +67,36 @@ export function mergeWorkspaceRegistry(
   const fixtures = payload?.workspaces ?? []
   return [...registered, ...fixtures]
 }
+
+/* --------------------------------------------- scan-run workspace resolution --- */
+
+/**
+ * AUD-14 — the scan-runs route resolves its workspace id against the FULL
+ * registry, not just the fixtures: a registered local project (QA-5-B-1)
+ * must be able to sync its durable runs. Pure decision over an
+ * already-fetched registered-id list (the route fetches the ids from the
+ * SAME store GET /api/wanyrix/workspaces serves — `db.registeredWorkspace`,
+ * mergeWorkspaceRegistry's source of truth), so this stays unit-testable
+ * without a db.
+ */
+export interface ScanWorkspaceDecision {
+  /** True when `id` is a known fixture id OR a known registered id. */
+  known: boolean
+  /**
+   * The #129 404 guidance list for a truly-unknown id: registered ids FIRST
+   * (mergeWorkspaceRegistry order — the user's own projects lead), then the
+   * demo fixtures.
+   */
+  knownWorkspaces: string[]
+}
+
+export function resolveScanRunWorkspace(
+  id: string,
+  fixtureIds: string[],
+  registeredIds: string[],
+): ScanWorkspaceDecision {
+  return {
+    known: fixtureIds.includes(id) || registeredIds.includes(id),
+    knownWorkspaces: [...registeredIds, ...fixtureIds],
+  }
+}
