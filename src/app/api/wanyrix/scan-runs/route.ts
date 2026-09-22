@@ -47,6 +47,8 @@ interface ScanRunDto {
   /** R7 findings fingerprint — present only when the run carried one. */
   findingIds?: string[]
   findingIdsTruncated?: boolean
+  /** Issue #128 — `true` when the run replayed the stored report (no engine invocation). */
+  replay?: boolean
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -78,6 +80,7 @@ function toDto(r: {
   syncedAt: Date
   findingIds: string | null
   findingIdsTruncated: boolean
+  replay: boolean
 }): ScanRunDto {
   const dto: ScanRunDto = {
     id: r.id,
@@ -101,6 +104,10 @@ function toDto(r: {
     }
   }
   if (r.findingIdsTruncated) dto.findingIdsTruncated = true
+  // Issue #128: the replay marker comes back verbatim — runs synced before
+  // the field existed (or persisted during the pre-regeneration fallback
+  // below) omit the key entirely rather than claiming a false negative.
+  if (r.replay) dto.replay = true
   return dto
 }
 
@@ -195,9 +202,10 @@ export async function POST(req: NextRequest) {
   }
   // R7 findings fingerprint — optional; when present it must be a well-formed
   // capped id list (see finding-diff.ts). Persisted verbatim after validation.
-  const { findingIds, findingIdsTruncated } = body as {
+  const { findingIds, findingIdsTruncated, replay } = body as {
     findingIds?: unknown
     findingIdsTruncated?: unknown
+    replay?: unknown
   }
   if (findingIds !== undefined && !isValidFindingIdList(findingIds)) {
     return bad(
@@ -206,6 +214,12 @@ export async function POST(req: NextRequest) {
   }
   if (findingIdsTruncated !== undefined && typeof findingIdsTruncated !== 'boolean') {
     return bad('findingIdsTruncated must be a boolean')
+  }
+  // Issue #128 — the replay marker: optional boolean, persisted verbatim. The
+  // server NEVER derives or second-guesses it: a replay run is exactly what
+  // the client says it replayed (Gate 21).
+  if (replay !== undefined && typeof replay !== 'boolean') {
+    return bad('replay must be a boolean')
   }
 
   const runId = typeof id === 'string' ? id : `run-srv-${startedAt}-${workspaceId}`
@@ -222,6 +236,7 @@ export async function POST(req: NextRequest) {
     trigger: typeof trigger === 'string' ? trigger : 'manual',
     findingIds: Array.isArray(findingIds) ? JSON.stringify(findingIds) : null,
     findingIdsTruncated: findingIdsTruncated === true,
+    replay: replay === true,
   }
 
   try {
@@ -232,7 +247,30 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ schema: SCHEMA, run: toDto(row) }, { status: 201 })
   } catch (err) {
-    console.error('[scan-runs] POST failed:', err)
+    // Issue #128 degraded mode: a deployed Prisma client predating the
+    // additive `replay` column rejects the unknown key. The run itself is
+    // still measured data worth persisting — retry WITHOUT the marker rather
+    // than dropping the run; the key is simply absent from that row (the DTO
+    // omits it, no false replay/fail claim anywhere).
+    const msg = err instanceof Error ? err.message : String(err)
+    if (replay === true && msg.includes('Unknown argument')) {
+      try {
+        const { replay: _omitted, ...legacyValues } = values
+        const row = await db.scanRun.upsert({
+          where: { id: runId },
+          update: legacyValues,
+          create: { id: runId, ...legacyValues },
+        })
+        console.warn(
+          '[scan-runs] persisted WITHOUT the replay marker — Prisma client predates the column; run `prisma generate` post-merge',
+        )
+        return NextResponse.json({ schema: SCHEMA, run: toDto(row) }, { status: 201 })
+      } catch (retryErr) {
+        console.error('[scan-runs] POST (legacy retry) failed:', retryErr)
+      }
+    } else {
+      console.error('[scan-runs] POST failed:', err)
+    }
     return NextResponse.json(
       { error: 'scan-run store unavailable — the run was NOT persisted (the browser-local log is unaffected)' },
       { status: 503 },

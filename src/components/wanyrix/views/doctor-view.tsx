@@ -10,6 +10,7 @@ import {
   FileDiff,
   FlaskConical,
   RefreshCw,
+  RotateCcw,
   Settings,
   Terminal as TerminalIcon,
   Zap,
@@ -143,17 +144,28 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
  * Progressive `wanyrix doctor` terminal. Remounted (via key={runId}) to replay:
  * initial state carries the reset, and setState is only ever called from
  * timer callbacks — never synchronously inside the effect body.
+ *
+ * Issue #128 (honesty): with `replay` the terminal is EXPLICITLY labeled as a
+ * replay of the stored report at the point of the action — an amber REPLAY
+ * strip is visible from mount (before the first step streams) and a REPLAY
+ * line precedes the phase stream inside the terminal itself. The fixture
+ * numbers are untouched; only the labeling is added. The real engine binary
+ * is not invoked by this flow (that is the "Real engine binary" panel's
+ * engine-exec contract, unchanged).
  */
 function ScanTerminal({
   report,
+  replay = false,
   onDone,
 }: {
   report: DoctorReport
+  /** issue #128 — label the run as a replay of the stored report in-view */
+  replay?: boolean
   onDone: (done: boolean, durationMs: number) => void
 }) {
   const [revealed, setRevealed] = useState(1) // the $ command line is visible immediately
   const [done, setDone] = useState(false)
-  const total = 1 + report.phases.length + 2 // cmd + phases + 2 summary lines
+  const total = 2 + report.phases.length + 2 // cmd + replay marker + phases + 2 summary lines
 
   /* keep the latest callback without restarting the reveal timers (issue #25 pattern) */
   const onDoneRef = useRef(onDone)
@@ -185,6 +197,16 @@ function ScanTerminal({
 
   const lines = [
     { text: 'wanyrix doctor --profile dev', tone: 'cmd' as const },
+    // issue #128: the replay disclosure streams BEFORE the phase narrative —
+    // the success story is never shown without its in-view replay label.
+    ...(replay
+      ? [
+          {
+            text: 'REPLAY — stored report re-streamed · engine binary not invoked by this run',
+            tone: 'warn' as const,
+          },
+        ]
+      : []),
     ...report.phases.map((p) => ({ text: `  ✓ ${p.label} — ${p.detail}`, tone: 'ok' as const })),
     {
       text: `Wanyrix found ${report.findings.length} engineering bottlenecks.`,
@@ -197,12 +219,32 @@ function ScanTerminal({
   ]
 
   return (
-    <Terminal
-      title="wanyrix — zsh"
-      lines={lines.slice(0, revealed)}
-      step={0}
-      running={!done}
-    />
+    <div className="space-y-2">
+      {replay && (
+        <p
+          role="status"
+          aria-label="Replay: the stored doctor report is re-streamed — the engine binary is not invoked by this run"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/[0.08] px-3.5 py-2.5 text-amber-800 dark:text-amber-300"
+        >
+          <RotateCcw className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span className="text-[12.5px] leading-snug">
+            <span className="font-mono font-semibold uppercase tracking-wide">REPLAY</span>
+            {' — '}the stored doctor report is re-streamed; the engine binary is not invoked by
+            this run
+            <span className="mt-0.5 block font-mono text-[10.5px] text-muted-foreground">
+              demo fixture data (wanyrix.doctor/v1) · real execution lives in the “Real engine
+              binary” panel below
+            </span>
+          </span>
+        </p>
+      )}
+      <Terminal
+        title={replay ? 'wanyrix — zsh · REPLAY' : 'wanyrix — zsh'}
+        lines={lines.slice(0, revealed)}
+        step={0}
+        running={!done}
+      />
+    </div>
   )
 }
 
@@ -560,9 +602,11 @@ export default function DoctorView({ onNavigate }: ViewProps) {
 
       {/* ------------------------------------------------ 2) terminal / json */}
       {/* the terminal always runs (so a scan is recorded even while JSON mode is
-          on); it is simply hidden while the JSON report is being viewed */}
+          on); it is simply hidden while the JSON report is being viewed.
+          issue #128: replay is ALWAYS true here — this terminal re-streams the
+          stored report and never invokes the engine binary. */}
       <div className={mode === 'json' ? 'hidden' : undefined}>
-        <ScanTerminal key={runId} report={report} onDone={handleScanDone} />
+        <ScanTerminal key={runId} report={report} replay onDone={handleScanDone} />
       </div>
       {mode === 'json' && (
         <div className="space-y-2">

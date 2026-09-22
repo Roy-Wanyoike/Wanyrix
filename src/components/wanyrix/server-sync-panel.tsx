@@ -112,6 +112,18 @@ function FingerprintTag({ ids, truncated }: { ids?: string[]; truncated?: boolea
   )
 }
 
+/** Issue #128: the visible REPLAY marker shared by both run-log columns. */
+function ReplayBadge() {
+  return (
+    <span
+      title="replay of the stored doctor report — the engine binary was not invoked by this run"
+      className="inline-flex shrink-0 items-center rounded border border-amber-500/25 bg-amber-500/10 px-1 py-0.5 font-mono text-[8.5px] uppercase tracking-wide text-amber-800 dark:text-amber-400"
+    >
+      replay
+    </span>
+  )
+}
+
 function LocalRunRow({ run, state, index }: { run: ScanRunRecord; state: RunSyncState; index: number }) {
   return (
     <motion.li
@@ -126,6 +138,7 @@ function LocalRunRow({ run, state, index }: { run: ScanRunRecord; state: RunSync
       <span className="rounded border border-border/60 bg-card px-1 py-0.5 font-mono text-[8.5px] uppercase tracking-wide text-muted-foreground">
         {TRIGGER_SHORT[run.trigger] ?? run.trigger}
       </span>
+      {run.replay === true && <ReplayBadge />}
       <span className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
         <span className="size-1 rounded-full bg-red-400" aria-hidden />
         {run.severityCounts.critical}
@@ -160,6 +173,7 @@ function ServerRunRow({ run, index }: { run: ServerScanRun; index: number }) {
       <span className="rounded border border-border/60 bg-card px-1 py-0.5 font-mono text-[8.5px] uppercase tracking-wide text-muted-foreground">
         {TRIGGER_SHORT[run.trigger] ?? run.trigger}
       </span>
+      {run.replay === true && <ReplayBadge />}
       <span className="font-mono text-[10px] text-muted-foreground">
         <span className="tabular-nums text-foreground/85">{run.findingCount}</span> findings
       </span>

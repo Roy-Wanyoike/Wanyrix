@@ -85,7 +85,9 @@ function exportMarkdown(workspace: string, runs: ScanHistoryEntry[]): string {
       h.buildTimeStatus === 'not-measured'
         ? `n/a (not measured) | – – s`
         : `${h.buildTime.toFixed(1)}s | ${h.estimatedFrom}–${h.estimatedTo}s`
-    return `| ${TIME_FMT.format(h.at)} | ${TRIGGER_LABEL[h.trigger]} | ${h.critical} / ${h.warning} / ${h.info} | ${h.findings} | ${buildCell} | ${(h.durationMs / 1000).toFixed(1)}s |`
+    // issue #128: replay runs are marked IN the table, not only in a footnote
+    const triggerCell = `${TRIGGER_LABEL[h.trigger]}${h.replay === true ? ' · REPLAY' : ''}`
+    return `| ${TIME_FMT.format(h.at)} | ${triggerCell} | ${h.critical} / ${h.warning} / ${h.info} | ${h.findings} | ${buildCell} | ${(h.durationMs / 1000).toFixed(1)}s |`
   })
   return [
     `# wanyrix scan history — ${workspace}`,
@@ -97,7 +99,7 @@ function exportMarkdown(workspace: string, runs: ScanHistoryEntry[]): string {
     ...rows,
     ``,
     `---`,
-    `_Wanyrix export — the engine replays the same telemetry each run in this demo; history tracks what the CLI would report (Gate 11: human/JSON equivalence)._`,
+    `_Wanyrix export — runs marked REPLAY re-stream the stored doctor report (engine binary not invoked by those runs); history tracks what the CLI would report (Gate 11: human/JSON equivalence)._`,
   ].join('\n')
 }
 
@@ -113,6 +115,7 @@ function exportCsv(runs: ScanHistoryEntry[]): string {
     'run_id',
     'time',
     'trigger',
+    'replay',
     'critical',
     'warning',
     'info',
@@ -130,6 +133,9 @@ function exportCsv(runs: ScanHistoryEntry[]): string {
       h.id,
       h.at,
       h.trigger,
+      // issue #128: 'true' only when the row carries the replay marker —
+      // legacy rows (marked before the field existed) stay empty, not false.
+      h.replay === true ? 'true' : '',
       h.critical,
       h.warning,
       h.info,
@@ -453,6 +459,14 @@ export function ScanHistoryPanel({
                   <span className="rounded border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground">
                     {TRIGGER_LABEL[h.trigger]}
                   </span>
+                  {h.replay === true && (
+                    <span
+                      title="replay of the stored doctor report — the engine binary was not invoked by this run"
+                      className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide text-amber-800 dark:text-amber-400"
+                    >
+                      replay
+                    </span>
+                  )}
                   <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
                     <span className="size-1.5 rounded-full bg-red-400" aria-hidden />
                     {h.critical}
@@ -585,8 +599,9 @@ export function ScanHistoryPanel({
       {history.length > 0 && (
         <p className="mt-3 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
           <RefreshCw className="size-3 shrink-0" aria-hidden />
-          the engine replays the same telemetry each run in this demo — history tracks what the CLI
-          would report across runs
+          entries marked <span className="font-mono text-[10px] uppercase text-amber-800 dark:text-amber-400">replay</span> re-stream
+          the stored doctor report (engine binary not invoked by those runs) — history tracks what
+          the CLI would report across runs
         </p>
       )}
     </Panel>
