@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Copy, KeyRound, ShieldCheck, Sparkles } from 'lucide-react'
+import { Check, Copy, KeyRound, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Panel, SectionHeading } from '../shared'
+import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import {
   ACTIVATION_HINT,
@@ -68,11 +69,97 @@ function dayToIso(day: number): string {
   return new Date(day * 86_400_000).toISOString().slice(0, 10)
 }
 
+/* ------------------------------------------------------------- outcome ---- */
+
+export interface IssueError {
+  title: string
+  detail: string
+}
+
+export type IssueOutcome =
+  | { kind: 'error'; title: string; detail: string }
+  | {
+      kind: 'token'
+      plan: IssuablePlan
+      token: IssuedToken
+      honestyNote: string
+      binaryVersion: string
+    }
+
+/**
+ * Pure mapping of the issuer's HTTP outcome to what the view shows
+ * (QA-5-B-2): the honest 503 must NEVER be swallowed — it becomes a named
+ * error (title carries the status, detail the verbatim route reason + the
+ * hint) that states NOTHING WAS ISSUED. Unit-pinned in
+ * tests/unit/license-issue.test.tsx.
+ */
+export function parseIssueResponse(
+  res: { ok: boolean; status: number },
+  body: unknown,
+): IssueOutcome {
+  if (!res.ok || typeof body !== 'object' || body === null) {
+    const rec = (typeof body === 'object' && body !== null ? body : {}) as {
+      error?: unknown
+      hint?: unknown
+    }
+    const reason = typeof rec.error === 'string' ? rec.error : 'the issuer response was not JSON'
+    const hint = typeof rec.hint === 'string' ? ` · fix: ${rec.hint}` : ''
+    return {
+      kind: 'error',
+      title: `Issuer refused (${res.status})`,
+      detail: `${reason}${hint} · Nothing was issued.`,
+    }
+  }
+  const { token, honesty, binary } = body as {
+    token?: IssuedToken
+    honesty?: { note?: string }
+    binary?: { version?: string }
+  }
+  if (!token || token.schema !== 'wanyrix.entitlement.token/v1') {
+    return {
+      kind: 'error',
+      title: 'Issuer response is not a signed token',
+      detail: 'refusing to display it · Nothing was issued.',
+    }
+  }
+  return {
+    kind: 'token',
+    plan: token.plan as IssuablePlan,
+    token,
+    honestyNote: honesty?.note ?? `Sandbox issuance — ${HONESTY_LABEL}.`,
+    binaryVersion: binary?.version ?? '',
+  }
+}
+
+/**
+ * Inline issuer feedback (QA-5-B-2) — rendered ADJACENT to the buttons, so
+ * a refused issuance is unmissable (the toast alone can be dismissed or
+ * missed; a below-the-fold panel was invisible). role="alert" announces it.
+ */
+export function IssuanceFeedback({ error }: { error: IssueError | null }) {
+  if (!error) return null
+  return (
+    <div
+      role="alert"
+      className="rounded-lg border border-red-500/40 bg-red-500/[0.08] px-3 py-2.5"
+    >
+      <p className="flex items-start gap-2 text-[12.5px] font-medium leading-snug text-red-800 dark:text-red-300">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        {error.title}
+      </p>
+      <p className="mt-1 break-words pl-6 font-mono text-[11px] leading-relaxed text-muted-foreground">
+        {error.detail}
+      </p>
+    </div>
+  )
+}
+
 export default function PlansView() {
   const [pending, setPending] = useState<IssuablePlan | null>(null)
   const [issued, setIssued] = useState<IssueResult | null>(null)
-  const [error, setError] = useState<{ title: string; detail: string } | null>(null)
+  const [error, setError] = useState<IssueError | null>(null)
   const [copied, setCopied] = useState(false)
+  const { toast } = useToast()
 
   const issue = (plan: IssuablePlan) => {
     if (pending) return
@@ -87,34 +174,34 @@ export default function PlansView() {
     })
       .then(async (res) => {
         const body: unknown = await res.json().catch(() => null)
-        if (!res.ok || typeof body !== 'object' || body === null) {
-          setError({
-            title: `Issuer refused (${res.status})`,
-            detail:
-              typeof body === 'object' && body !== null && 'error' in body
-                ? String((body as { error: unknown }).error)
-                : 'the issuer response was not JSON',
+        const outcome = parseIssueResponse(res, body)
+        if (outcome.kind === 'error') {
+          // QA-5-B-2: the honest refusal is SURFACED — inline (adjacent to the
+          // buttons) AND as a toast. Never a silent no-op on the commercial
+          // surface; the detail names the cause and states nothing was issued.
+          setError({ title: outcome.title, detail: outcome.detail })
+          toast({
+            title: outcome.title,
+            description: outcome.detail,
+            variant: 'destructive',
           })
           return
         }
-        const { token, honesty, binary } = body as {
-          token?: IssuedToken
-          honesty?: { note?: string }
-          binary?: { version?: string }
-        }
-        if (!token || token.schema !== 'wanyrix.entitlement.token/v1') {
-          setError({ title: 'Issuer response is not a signed token', detail: 'refusing to display it' })
-          return
-        }
         setIssued({
-          plan,
-          token,
-          honestyNote: honesty?.note ?? `Sandbox issuance — ${HONESTY_LABEL}.`,
-          binaryVersion: binary?.version ?? '',
+          plan: outcome.plan,
+          token: outcome.token,
+          honestyNote: outcome.honestyNote,
+          binaryVersion: outcome.binaryVersion,
+        })
+        toast({
+          title: 'License token issued (estimated)',
+          description: 'Real engine token — copy the JSON below and activate offline with `wanyrix activate`.',
         })
       })
       .catch((e: unknown) => {
-        setError({ title: 'Issuer unreachable', detail: e instanceof Error ? e.message : String(e) })
+        const detail = `${e instanceof Error ? e.message : String(e)} · Nothing was issued.`
+        setError({ title: 'Issuer unreachable', detail })
+        toast({ title: 'Issuer unreachable', description: detail, variant: 'destructive' })
       })
       .finally(() => setPending(null))
   }
@@ -168,28 +255,34 @@ export default function PlansView() {
               <p className="mt-auto text-[11px] leading-relaxed text-muted-foreground/90">{tier.footnote}</p>
 
               {tier.id === 'team' && (
-                <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
-                  <Button
-                    size="sm"
-                    className="h-8 gap-1.5 text-xs"
-                    disabled={pending !== null}
-                    onClick={() => issue('team')}
-                  >
-                    <KeyRound className="size-3.5" aria-hidden />
-                    {pending === 'team' ? 'issuing…' : 'Issue sandbox Team license'}
-                    <span className="font-mono text-[9px] opacity-70">estimated</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 gap-1.5 text-xs"
-                    disabled={pending !== null}
-                    onClick={() => issue('trial')}
-                  >
-                    <Sparkles className="size-3.5" aria-hidden />
-                    {pending === 'trial' ? 'issuing…' : '14-day trial — no payment method'}
-                    <span className="font-mono text-[9px] opacity-70">estimated</span>
-                  </Button>
+                <div className="flex flex-col gap-2 border-t border-border/60 pt-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs"
+                      disabled={pending !== null}
+                      onClick={() => issue('team')}
+                    >
+                      <KeyRound className="size-3.5" aria-hidden />
+                      {pending === 'team' ? 'issuing…' : 'Issue sandbox Team license'}
+                      <span className="font-mono text-[9px] opacity-70">estimated</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 text-xs"
+                      disabled={pending !== null}
+                      onClick={() => issue('trial')}
+                    >
+                      <Sparkles className="size-3.5" aria-hidden />
+                      {pending === 'trial' ? 'issuing…' : '14-day trial — no payment method'}
+                      <span className="font-mono text-[9px] opacity-70">estimated</span>
+                    </Button>
+                  </div>
+                  {/* QA-5-B-2: a refused issuance is shown HERE — adjacent to the
+                      buttons, role=alert, verbatim reason + nothing-was-issued —
+                      plus a toast. The old below-the-fold-only panel hid it. */}
+                  <IssuanceFeedback error={error} />
                 </div>
               )}
               {tier.id === 'free' && (
@@ -206,16 +299,6 @@ export default function PlansView() {
           )
         })}
       </div>
-
-      {/* ---------------- named error, verbatim ---------------- */}
-      {error && (
-        <Panel title="Issuer refused" subtitle="the named error is shown verbatim — never a silent failure">
-          <p className="text-[13px] font-medium text-red-800 dark:text-red-300">{error.title}</p>
-          <p className="mt-1 break-words font-mono text-[11.5px] leading-relaxed text-muted-foreground">
-            {error.detail}
-          </p>
-        </Panel>
-      )}
 
       {/* ---------------- the issued license/token, honestly ---------------- */}
       {issued && (

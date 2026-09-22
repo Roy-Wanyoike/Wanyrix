@@ -41,7 +41,10 @@ import {
 } from '../../src/lib/wanyrix/license'
 import { NAV_ITEMS, VIEW_TITLES } from '../../src/components/wanyrix/nav-registry'
 import { POST, GET, PUT, DELETE, PATCH } from '../../src/app/api/wanyrix/license/issue/route'
-import PlansView from '../../src/components/wanyrix/views/plans-view'
+import PlansView, {
+  IssuanceFeedback,
+  parseIssueResponse,
+} from '../../src/components/wanyrix/views/plans-view'
 
 /* --------------------------------------------------------------- plumbing -- */
 
@@ -443,7 +446,98 @@ describe('Plans view — renders the three tiers with honest labels', () => {
   })
 })
 
-/* --------------------------------------------- 4. navigation registration -- */
+/* --------------------------------------------- 3b. Plans view — QA-5-B-2 --- */
+
+/**
+ * QA-5-B-2 — the honest 503 must reach the user. The walkthrough found the
+ * issuance buttons produced ZERO visible outcome (no toast, no inline error,
+ * no state change) when the route answered its documented 503. These pins
+ * cover both branches of the pure outcome mapping and the inline feedback.
+ */
+describe('Plans view — issuer outcomes are never silent (QA-5-B-2)', () => {
+  const FIFTY3_BODY = {
+    error:
+      'no signing key configured on this host — set WANYRIX_SIGNING_KEY to enable sandbox issuance (never simulated)',
+    env: 'WANYRIX_SIGNING_KEY',
+    hint: 'wanyrix license keygen --out ./priv.hex',
+  }
+
+  test('503 response → named error carrying the status, the cause and the fix hint', () => {
+    const outcome = parseIssueResponse({ ok: false, status: 503 }, FIFTY3_BODY)
+    expect(outcome.kind).toBe('error')
+    if (outcome.kind !== 'error') return
+    expect(outcome.title).toBe('Issuer refused (503)')
+    expect(outcome.detail).toContain('WANYRIX_SIGNING_KEY')
+    expect(outcome.detail).toContain('wanyrix license keygen')
+  })
+
+  test('every error branch states that NOTHING WAS ISSUED', () => {
+    const fifty3 = parseIssueResponse({ ok: false, status: 503 }, FIFTY3_BODY)
+    const nonJson = parseIssueResponse({ ok: false, status: 503 }, null)
+    const wrongSchema = parseIssueResponse({ ok: true, status: 200 }, { token: { schema: 'other/v1' } })
+    for (const outcome of [fifty3, nonJson, wrongSchema]) {
+      expect(outcome.kind).toBe('error')
+      if (outcome.kind === 'error') expect(outcome.detail).toContain('Nothing was issued.')
+    }
+  })
+
+  test('non-JSON issuer body → named error, not a crash', () => {
+    const outcome = parseIssueResponse({ ok: false, status: 503 }, null)
+    expect(outcome.kind).toBe('error')
+    if (outcome.kind === 'error') expect(outcome.detail).toContain('not JSON')
+  })
+
+  test('success response → token outcome with the honesty note and engine version', () => {
+    const token = {
+      schema: 'wanyrix.entitlement.token/v1',
+      version: 1,
+      plan: 'team',
+      team: 'local-sandbox',
+      seats: 5,
+      issuedAtDay: 20714,
+      expiryDay: 21079,
+      nonce: 'a'.repeat(32),
+      signature: 'b'.repeat(128),
+    }
+    const outcome = parseIssueResponse(
+      { ok: true, status: 200 },
+      { token, honesty: { note: 'Sandbox issuance — estimated. No payment method was collected.' }, binary: { version: 'wanyrix 0.9.0' } },
+    )
+    expect(outcome.kind).toBe('token')
+    if (outcome.kind !== 'token') return
+    expect(outcome.token.team).toBe('local-sandbox')
+    expect(outcome.token.seats).toBe(5)
+    expect(outcome.honestyNote).toContain('estimated')
+    expect(outcome.binaryVersion).toBe('wanyrix 0.9.0')
+  })
+
+  test('the inline feedback renders role=alert with the verbatim reason, adjacent to the buttons', () => {
+    const outcome = parseIssueResponse({ ok: false, status: 503 }, FIFTY3_BODY)
+    expect(outcome.kind).toBe('error')
+    if (outcome.kind !== 'error') return
+    const html = renderToStaticMarkup(<IssuanceFeedback error={{ title: outcome.title, detail: outcome.detail }} />)
+    expect(html).toContain('role="alert"')
+    expect(html).toContain('Issuer refused (503)')
+    expect(html).toContain('WANYRIX_SIGNING_KEY')
+    expect(html).toContain('Nothing was issued.')
+  })
+
+  test('no error → no feedback rendered', () => {
+    expect(renderToStaticMarkup(<IssuanceFeedback error={null} />)).toBe('')
+  })
+
+  test('source pins — the view toasts BOTH branches and keeps the buttons disabled while pending', async () => {
+    const view = await Bun.file(
+      new URL('../../src/components/wanyrix/views/plans-view.tsx', import.meta.url),
+    ).text()
+    expect(view).toContain("variant: 'destructive'")
+    expect(view).toContain("title: 'License token issued (estimated)'")
+    expect(view).toContain('IssuanceFeedback error={error}')
+    expect(view).toContain('disabled={pending !== null}')
+  })
+})
+
+/* ------------------------------------------------ 4. navigation registration -- */
 
 describe('Plans view — registered in the app shell navigation', () => {
   test('nav registry exposes plans (sidebar + palette + mobile share one source)', () => {
