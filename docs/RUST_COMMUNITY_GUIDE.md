@@ -28,12 +28,12 @@ what a reader can reproduce today with [`README.md`](../README.md) ("Run locally
 
 | Surface | Status | Allowed in public material |
 | --- | --- | --- |
-| Web platform (18-view dashboard, 13 API routes, 192-test suite) | **Shipped, verified** (gates green; CONDITIONAL GO scorecard) | Real demo, screenshots, live walkthrough |
+| Web platform (19-view dashboard, 23 API routes, 299-test suite: 296 pass / 3 skip — measured 2026-09-22) | **Shipped, verified** (gates green; browser-QA rounds M1–M9) | Real demo, screenshots, live walkthrough |
 | Honesty architecture (Estimated ≠ Measured ≠ Verified, Gate 21) | **Shipped, test-enforced** | Core differentiator — show it |
 | Grounded AI (server-rendered FACT block, post-validated model output) | **Shipped, tested** | Show a real transcript ([README example](../README.md)) |
 | Versioned API flavors (`wanyrix.report/v1`, `wanyrix.scan-history/v1`, `wanyrix.release-scorecard/v1`) | **Shipped, pinned by tests** | Show as contract examples |
-| CLI (`wanyrix` binary) | **Roadmap** — command set/exit codes pinned by the in-app CLI contract dialog ([`CLI.md`](CLI.md)) | Describe as designed contract, always labeled Roadmap |
-| Rust engine | **v0, in progress** on a parallel track — not wired into this repo ([AUDIT-I8](audits/issues/AUDIT-I8.md)) | Roadmap-level status only; no feature promises or dates |
+| CLI (`wanyrix` binary) | **Shipped** — real binary since v0.8.0 (engine v0.9.0), 23-command surface + exit codes (`0`/`2`, honest `101` broken-pipe note) pinned in [`CLI.md`](CLI.md); `cargo install` from crates.io is **Roadmap** (publication plan in [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md)) | Demo the real binary from the repo; label crates.io install as Roadmap |
+| Rust engine | **Shipped** — `wanyrix-engine` v0.9.0 in-tree, wired into the web platform (workspace registration bridge + engine-exec routes); 182 tests per `engine/README.md` (v0.9.0) | Real engine demos on local workspaces (doctor/graph/impact/build); no perf claims without fresh measurements |
 | Wanyrix Cloud / billing | **Designed, not built** ([`COMMERCIAL.md`](COMMERCIAL.md)) | Never demo or imply live |
 
 ## 2. Project introduction (the 30-second version)
@@ -78,7 +78,7 @@ Stage 0 — Materials ready   ──▶  Stage 1 — Soft share  ──▶  Stag
 
 | Stage | Entry criteria | Actions | Exit criteria |
 | --- | --- | --- | --- |
-| 0 | Public repo reachable (currently blocked by AUDIT-I5 — GitHub push needs human credentials) | Polish README, demo script, FAQ; set up issue tracker + labels (§7) | A stranger can go README → running dashboard in < 5 min |
+| 0 | Public repo reachable — **met**: `github.com/Roy-Wanyoike/wanyrix` is public with a live issue tracker | Polish README, demo script, FAQ; set up issue tracker + labels (§7) | A stranger can go README → running dashboard in < 5 min |
 | 1 | Stage 0 done | Share privately with trusted Rust devs; ask for blunt criticism; fix top complaints | ≥ 3 external people completed first-run without hand-holding |
 | 2 | Stage 1 fixes landed | Tailored posts: Users Forum, r/rust, Show HN; author sticks around and answers everything for ≥ 48 h | Posts stand on their own; zero moderation complaints |
 | 3 | Stage 2 feedback incorporated visibly | TWiR submission; awesome-rust-style list submissions; conference CFP watch | Each inclusion **actually occurs** before it is ever mentioned |
@@ -87,20 +87,23 @@ Stage 0 — Materials ready   ──▶  Stage 1 — Soft share  ──▶  Stag
 
 | Shareable **today** (reproducible from the repo) | Shareable **later** (label Roadmap until real) |
 | --- | --- |
-| Web dashboard demo over fixture workspaces (`helios-platform`, 47 crates · `atlas-consortium`) | `cargo install wanyrix` (CLI binary) |
-| Honesty architecture: `estimated`/`measured`/`verified` badges, no silent upgrades | crates.io publications ([`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md)) |
-| Grounded AI transcript: server-rendered FACT block + validated `ai.*` fields | Live engine ingestion (cargo metadata / rustc JSON) |
-| Versioned machine flavors + 13-route API surface with documented error semantics | Real-workspace analytics (current data is fixture-encoded by design) |
-| Evidence-cited findings with stable IDs and verification paths | Cloud/team features (designed, not built) |
-| 90-day trial *model* as a proposal ([`COMMERCIAL.md`](COMMERCIAL.md)) — never as a live offer | Any perf claims about the engine itself |
+| Web dashboard demo over fixture workspaces (`helios-platform`, 47 crates · `atlas-consortium`) | `cargo install wanyrix` (crates.io publication — [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md)) |
+| Real engine analysis on a local workspace via the shipped `wanyrix` binary (doctor/graph/impact/build; engine v0.9.0) | crates.io publications of `wanyrix-protocol` / `wanyrix-core` |
+| Honesty architecture: `estimated`/`measured`/`verified` badges, no silent upgrades | Cloud/team features (designed, not built) |
+| Grounded AI transcript: server-rendered FACT block + validated `ai.*` fields | Any perf claims about the engine itself (until freshly measured) |
+| Versioned machine flavors + 23-route API surface with documented error semantics | — |
+| Evidence-cited findings with stable IDs and verification paths | — |
+| 90-day trial *model* as a proposal ([`COMMERCIAL.md`](COMMERCIAL.md)) — never as a live offer | — |
 
 ## 6. First-run workflow & example (for community posts)
 
 - **Installation (today)**: `bun install` → `bun run dev` → `http://localhost:3000` →
   follow the README's 5-minute "First analysis" walkthrough. No accounts, no telemetry,
-  works offline ([`PRIVACY.md`](PRIVACY.md)).
-- **Installation (Roadmap)**: `cargo install wanyrix` once the CLI binary exists — the
-  command set, flags, and exit codes (0/1/2/3) are already pinned in [`CLI.md`](CLI.md).
+  works offline ([`PRIVACY.md`](PRIVACY.md)). The engine CLI ships in-tree: build the
+  `wanyrix` binary from `engine/` (see [`CLI.md`](CLI.md) for the 23-command surface).
+- **Installation (Roadmap)**: `cargo install wanyrix` once the crates.io publication
+  lands — the command set, flags, and exit codes (`0`/`2`, honest `101` broken-pipe
+  note) are pinned in [`CLI.md`](CLI.md).
 - **Example analysis**: use the README's real transcript — finding `FER-BLD-001`
   ("common-runtime sits on the critical path", 18.3 s compile, 41 downstream crates), the
   evidence table, and the grounded AI answer with `grounding.facts` + `ai.uncertainty`.
@@ -120,8 +123,8 @@ conventional commits). Community-facing entry points:
 | Integrations (CI, editors, cargo tooling) | See [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md) inventory; contract-first |
 | Docs & triage | Labels below + the issue-record template |
 
-**Feedback routing** (spec §55): report via the public tracker once it exists
-(blocked only by AUDIT-I5); until then, channels announced per post.
+**Feedback routing** (spec §55): the public GitHub issue tracker is live — file issues
+there; label conventions below.
 
 | Feedback type | Label | Notes |
 | --- | --- | --- |
@@ -165,13 +168,13 @@ RUNTIME evidence re-check — the same rule that applies internally.
 | Machine contracts | `wanyrix.report/v1`-style flavors are additive: `v1` never changes shape — breaking changes mint `vN+1`. Already enforced by tests. |
 
 Engine values in this table are policy commitments, not measurements — first validated at
-the first engine release (AUDIT-I8).
+the first crates.io release.
 
 ## 10. Community etiquette & code of conduct
 
 - Adopt the **Rust Community Code of Conduct** (rust-lang.org/policies/code-of-conduct)
-  for all Wanyrix-run spaces, with the Rust moderation spectrum; recommend adoption in
-  this repo when the public tracker goes live (AUDIT-I5).
+  for all Wanyrix-run spaces, with the Rust moderation spectrum; adopting it for this
+  repo is part of the governance bundle (#119).
 - In external communities we follow **their** rules and moderators, not ours: read the
   pinned rules, disclose affiliation, never argue moderation publicly, accept "no" the
   first time.
@@ -180,7 +183,8 @@ the first engine release (AUDIT-I8).
 
 ## 11. 90-day community engagement calendar
 
-T0 = the day the public repo is reachable (Stage 0 exit). All items are proposals gated on
+T0 = the day the public repo is reachable — **reached** (the repo is public; Stage 0
+housekeeping continues per the governance bundle #119). All items are proposals gated on
 real completion of the previous item; slipping beats spamming.
 
 | Week | Focus | Concrete actions | Success signal |
@@ -207,5 +211,4 @@ external contributors, and whether strangers complete the 5-minute first-run una
 [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md) ·
 [`OPEN_SOURCE_STRATEGY.md`](OPEN_SOURCE_STRATEGY.md) · [`COMMERCIAL.md`](COMMERCIAL.md) ·
 [`PRIVACY.md`](PRIVACY.md) · [`CLI.md`](CLI.md) · [`USER_GUIDE.md`](USER_GUIDE.md) ·
-[`audits/issues/AUDIT-I8.md`](audits/issues/AUDIT-I8.md) (engine scope) ·
-[`audits/GITHUB_ACTIONS_REQUIRED.md`](audits/GITHUB_ACTIONS_REQUIRED.md) (public-repo blocker)
+[`AUDIT.md`](AUDIT.md) (audit records)

@@ -1,12 +1,12 @@
 # Wanyrix — crates.io Strategy
 
 Status: **policy + plan**. Satisfies spec §56 (Rust ecosystem integration) and §57
-(crates.io strategy). Nothing has been published yet — the engine is v0 on a parallel
-track and the CLI binary is Roadmap ([`CLI.md`](CLI.md)); this document fixes *what gets
-published, in what order, under which rules* so the first release is boring, correct, and
-trustworthy. It complements [`RUST_COMMUNITY_GUIDE.md`](RUST_COMMUNITY_GUIDE.md)
-(community side) and [`OPEN_SOURCE_STRATEGY.md`](OPEN_SOURCE_STRATEGY.md) (license,
-governance, cadence).
+(crates.io strategy). Nothing has been published to crates.io yet — the engine is at
+**v0.9.0** with the CLI binary shipped (v0.8.0; the full command surface is pinned in
+[`CLI.md`](CLI.md)) — so this document fixes *what gets published, in what order, under
+which rules* so the first release is boring, correct, and trustworthy. It complements
+[`RUST_COMMUNITY_GUIDE.md`](RUST_COMMUNITY_GUIDE.md) (community side) and
+[`OPEN_SOURCE_STRATEGY.md`](OPEN_SOURCE_STRATEGY.md) (license, governance, cadence).
 
 Prime directive (spec §57): **do not publish internal implementation crates merely for
 appearance.** A crate ships only when it is independently useful, documented, and stable
@@ -17,8 +17,8 @@ enough to promise.
 | Order | Crate | Kind | Contents | Publish when | Depends on |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `wanyrix-protocol` | lib | Shared types & schema definitions: W-EIR evidence shapes, finding records (stable IDs, severity, confidence), flavor envelopes (`wanyrix.report/v1`-style), report/scorecard payloads | First — smallest, most reusable, zero engine internals; it is the contract the web platform already pins with tests (types currently mirrored in `src/lib/wanyrix/types.ts` as fixtures) | nothing |
-| 2 | `wanyrix-core` | lib | Engine library: workspace loading, collectors, Engineering Graph construction, analysis orchestration, experiment model | Engine v0 usable end-to-end on real workspaces (AUDIT-I8) | `wanyrix-protocol` |
-| 3 | `wanyrix` | bin (+ thin lib `wanyrix-cli` for testability) | The CLI: `doctor`, `graph`, `impact`, `report`, `experiment start` — the exact 8-command surface + exit codes already pinned in [`CLI.md`](CLI.md) | CLI binary real; only after 1–2 | `wanyrix-core` |
+| 2 | `wanyrix-core` | lib | Engine library: workspace loading, collectors, Engineering Graph construction, analysis orchestration, experiment model | Met — engine v0.9.0 measures real workspaces end-to-end; crate publish still waits on 1 | `wanyrix-protocol` |
+| 3 | `wanyrix` | bin (+ thin lib `wanyrix-cli` for testability) | The CLI: `doctor`, `graph`, `impact`, `report`, `experiment start` — the full command surface + exit codes pinned in [`CLI.md`](CLI.md) | Met — CLI binary shipped (v0.8.0, current v0.9.0); crate publish still after 1–2 | `wanyrix-core` |
 | — | `wanyrix-eir` | (folded) | W-EIR types live in `wanyrix-protocol` initially | Split out **only if** the IR grows its own release lifecycle | — |
 | — | `wanyrix-graph` | conditional lib | Graph algorithms (blast radius, critical path, duplicate detection) | Only if the algorithms stabilize enough to be independently reusable outside the engine | `wanyrix-protocol` |
 | — | `wanyrix-analyzer` | conditional lib | Pluggable analyzer API + built-in rules | Only if a plugin API stabilizes; otherwise it stays internal — no cosmetic split (§ prime directive) | `wanyrix-core` |
@@ -66,10 +66,10 @@ never hide what exists.
 - `wanyrix` itself is the **binary crate name**; if unavailable at publish time, the CLI
   ships as `wanyrix-cli` with the binary still named `wanyrix` — decided at publish time,
   never pre-announced.
-- Repository links in each crate point to the single canonical GitHub home (owner/org
-  finalized when the public push lands — AUDIT-I5); every crate README carries the same
-  one-paragraph product description, the license badge, and an honest status line
-  (shipped vs Roadmap).
+- Repository links in each crate point to the single canonical GitHub home
+  (`github.com/Roy-Wanyoike/wanyrix` — the public push has landed); every crate README
+  carries the same one-paragraph product description, the license badge, and an honest
+  status line (shipped vs Roadmap).
 - Directory-of-record commitments once real: docs.rs pages, GitHub topics (`rust`,
   `cargo`, `build-intelligence`, `developer-tools`, `engineering-intelligence`),
   RustForge/awesome-rust-style listings — **submitted only**, never claimed before
@@ -124,7 +124,7 @@ contains:
 | Flavor envelopes: `wanyrix.report/v1`, `wanyrix.markdown/v1`, `wanyrix.scan-history/v1`, `wanyrix.release-scorecard/v1` (incl. the honest server-empty scan-history note) | Byte-pinned golden tests on the report route | `tests/unit/client-export.test.ts` |
 | Scan-run record (duration, finding count, severity counts, trigger) | `wanyrix.scan-history/v1` run shape | `tests/unit/scan-runs.test.ts` |
 | Error semantics: unknown-workspace `404 {error, knownWorkspaces}`, enum/missing-param `400`, oversized-body `413` | Live API behavior | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
-| Exit-code ladder `0/1/2/3` (success / findings present / usage error / infrastructure failure) | CLI contract dialog | [`CLI.md`](CLI.md) |
+| Exit-code ladder `0`/`2` (success / error) with the honest `101` broken-pipe note — deliberately **no** "findings present" code | CLI contract dialog + the real binary | [`CLI.md`](CLI.md) |
 
 **Explicitly internal — never published for appearance** (spec §57 prime directive):
 fixture workspace data (`helios-platform`, `atlas-consortium` files), the web platform's
@@ -140,11 +140,11 @@ that is AUDIT-I8 territory.
 
 | Integration | Purpose | Status | Where it lives today |
 | --- | --- | --- | --- |
-| `cargo metadata` | Workspace/dependency source of truth for the Engineering Graph (blast radius, duplicates, critical path) | **integrated** (contract level) | Graph & Dependencies payloads encode cargo-metadata-shaped data over fixtures; engine consumes it live at v0 |
-| `cargo build --timings` | Build-time evidence attribution (the named source in finding evidence tables) | **integrated** (contract level) | Evidence source attribution in findings/README; live collection engine-side at v0 |
-| rustc JSON diagnostics (`--message-format=json`) | Borrow/async diagnostics → Diagnostics view, borrow explainers | **planned** | Diagnostics view contract exists; live ingestion scheduled engine track |
+| `cargo metadata` | Workspace/dependency source of truth for the Engineering Graph (blast radius, duplicates, critical path) | **integrated** | Engine scans real manifests (`scan`/`doctor`/`graph` v0.9.0); web graph payloads encode cargo-metadata-shaped data over fixtures and the registration bridge runs the real engine on local projects |
+| `cargo build --timings` | Build-time evidence attribution (the named source in finding evidence tables) | **integrated** (engine) | Instrumented `cargo build` (`wanyrix build` → `wanyrix.build/v1`): wall clock, fresh/cache-hit rate, per-artifact stream activity, redacted diagnostics |
+| rustc JSON diagnostics (`--message-format=json`) | Borrow/async diagnostics → Diagnostics view, borrow explainers | **integrated** (engine, v0.3.0+) | `wanyrix telemetry ingest` (`wanyrix.telemetry/v1`) — redacted, aggregated rustc JSON diagnostics; web Diagnostics view consumes the contract |
 | rust-analyzer | IDE-surface alignment (findings where developers work) | **not-started** | No work; evaluated after CLI |
-| `cargo bench` + criterion | Experiment harness: baseline → candidate → measured delta for verified upgrades | **planned** | Experiments view already models the measurement schema (fixture-level); live runner engine track |
+| `cargo bench` + criterion | Experiment harness: baseline → candidate → measured delta for verified upgrades | **integrated** (engine) | `wanyrix experiment record\|measure\|verify\|list` over the `.wanyrix/experiments.jsonl` ledger (estimated → measured via REAL builds → verified); web Experiments view |
 | `flamegraph`/profiling | Runtime intelligence (phase 11) | **not-started** | Roadmap |
 | cargo workspace lints/CI (`cargo-semver-checks`, `cargo publish --dry-run`) | Release hygiene for our own crates | **planned** | §6 checklist; enforced once a Cargo workspace exists here |
 | GitHub topics / tooling directories / awesome-rust-style lists | Discoverability | **planned** | Submission-only policy — [`RUST_COMMUNITY_GUIDE.md`](RUST_COMMUNITY_GUIDE.md) §3 |
@@ -157,7 +157,7 @@ on hope.
 
 [`RUST_COMMUNITY_GUIDE.md`](RUST_COMMUNITY_GUIDE.md) ·
 [`OPEN_SOURCE_STRATEGY.md`](OPEN_SOURCE_STRATEGY.md) (license + governance + cadence) ·
-[`CLI.md`](CLI.md) (the contract the CLI crate will implement) ·
+[`CLI.md`](CLI.md) (the contract the CLI crate implements — shipped) ·
 [`W-EIR.md`](W-EIR.md) (the IR behind `wanyrix-protocol`) ·
 [`COMMERCIAL.md`](COMMERCIAL.md) (why the local core is never crippled) ·
-[`audits/issues/AUDIT-I8.md`](audits/issues/AUDIT-I8.md) (engine scope)
+[`AUDIT.md`](AUDIT.md) (audit records, incl. engine scope)

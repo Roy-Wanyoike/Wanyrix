@@ -4,7 +4,8 @@
 > This document is written for investors and follows the same honesty rules as the
 > product: every claim is either **measured** (reproducible from this repository) or
 > **planned** (labeled, with the gate that must pass first). Nothing is "verified"
-> that has not been verified. Last updated: 2026-09-18.
+> that has not been verified. Last updated: **2026-09-22** (measurements below re-run
+> against the v0.9.0 tree on that date).
 
 ---
 
@@ -44,23 +45,28 @@ Core differentiator — the **honesty architecture**:
 
 ## 3. What exists today (measured, in this repository)
 
+Measurement date: **2026-09-22** against the v0.9.0 tree.
+
 | Component | State | Evidence |
 | --- | --- | --- |
-| Web platform (Next.js 16 + TS + Tailwind 4 + shadcn/ui) | Production-credible | 192 tests / 3,076 assertions green; 18 views browser-verified with 0 console errors; 9 API routes live-verified |
+| Web platform (Next.js 16 + TS + Tailwind 4 + shadcn/ui) | Production-credible | 296 tests passing / 3 skip / 0 fail across 19 files (2,930 `expect()` calls) — re-run 2026-09-22 against the live server; 19 views (`ViewId` registry in `src/lib/wanyrix/types.ts`); 23 `/api/wanyrix/*` route handlers (`find src/app/api -name route.ts`), exercised by live API-contract suites; browser-QA rounds M1–M9 |
+| Rust engine `wanyrix-engine` v0.9.0 (`engine/Cargo.toml`) | Shipped | 182 tests + 2 opt-in perf probes **per `engine/README.md` (v0.9.0)** — quoted, not re-run here; real filesystem measurement behind `scan`/`doctor`/`graph`/`health`/`build`/`daemon`/`store`/`telemetry` surfaces, each emitting versioned JSON (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.build/v1`, `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, …) |
+| CLI binary `wanyrix` (shipped v0.8.0) | Shipped | 23-command surface + exit ladder (`0`/`2`, honest `101` broken-pipe note) pinned in `docs/CLI.md`; wired into the web platform via the workspace registration bridge and engine-exec routes |
+| Engine daemon + SQLite store + telemetry ingestion | Shipped | `engine/src/{daemon,store,telemetry}.rs`; `wanyrix daemon start/call` (incremental analysis over a local socket), `wanyrix store init/save/list/fsck` (WAL-backed SQLite), `wanyrix telemetry ingest` (redacted rustc JSON) — documented in `engine/README.md` (v0.9.0) |
+| Offline entitlement layer | Shipped (sandbox-local) | ed25519 license issuance/activation (`engine/src/entitlement.rs`; `wanyrix license issue` / `activate` / `entitlement`; web Plans portal + `POST /api/wanyrix/license/issue`) — no payment method, never a simulated purchase (#94) |
 | Honest math core | Done | Graph aggregates (blast radius, fan-in/out, recompile sets) derived from a single edge list; byte-deterministic report flavors ×3 |
 | Grounded AI layer | Done | Server-rendered facts; model confined to isolated fields; grounding-violation stripping; 413 payload cap <10 ms |
-| Rust engine `wanyrix-engine` v0.1.0 | v0 working | 25 Rust tests green; clippy clean; `doctor`/`graph`/`health` subcommands emit versioned JSON (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.health/v1`) from real filesystem measurement |
+| Dual open-source license + public repo | Done | `MIT OR Apache-2.0` (`LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`; `engine/Cargo.toml`); public repo `github.com/Roy-Wanyoike/wanyrix` |
 | Product documentation set | Done | README, USER_GUIDE, ARCHITECTURE, CLI, W-EIR, SECURITY, PRIVACY, PERFORMANCE, DEVELOPMENT, CONTRIBUTING, COMMERCIAL + community/crates/open-source strategies |
-| 57-gate acceptance audit | Done | Maintainer audit record (ACCEPTANCE_GATES) — 32 PASS / 7 PARTIAL / 1 FAIL / 12 IN-PROGRESS / 5 N/A |
+| Acceptance-audit regime | Done (ongoing) | Maintainer audit record (`docs/AUDIT.md`) + per-round gate matrices; issue records carry the full audit trail (§7) |
 
 ## 4. What is deliberately not built yet (planned)
 
 | Component | Status | Why it matters |
 | --- | --- | --- |
-| Engine daemon + SQLite store | Designed (`engine/README.md` roadmap) | Unlocks incremental analysis, 24 h soak, historical intelligence |
-| rustc/telemetry collection | Not started | Turns static analysis into build/runtime intelligence |
+| crates.io publication (`wanyrix-protocol` → `wanyrix-core` → `wanyrix`) | Planned — publication order + checklist in `docs/CRATES_IO_STRATEGY.md` | `cargo install wanyrix` distribution; ecosystem native presence |
 | Cloud control plane (sync, billing, team) | Designed, not built (`docs/COMMERCIAL.md` §"to build") | Phase 13–14 monetization surface |
-| GitHub-side CI + community launch | Blocked on repository access (ops step, not engineering) | Gate #38/#43/#44/#57 |
+| Community launch (posts, listings) | Not started — feedback-gated (`docs/RUST_COMMUNITY_GUIDE.md` §4); governance artifacts tracked in #119 | Organic adoption per the no-spam ground rules |
 
 ## 5. Market and wedge
 
@@ -79,10 +85,12 @@ Core differentiator — the **honesty architecture**:
 - **90-day free trial** across paid tiers; `Wanyrix Local` (local-first, per-seat),
   `Wanyrix Cloud`, `Wanyrix Team`, `Wanyrix Enterprise` tiers — see
   `docs/COMMERCIAL.md` for tier boundaries and the billing architecture.
-- Open-core separation: the deterministic core is open-source-friendly; the cloud
-  control plane is proprietary (`docs/OPEN_SOURCE_STRATEGY.md`).
-- No billing code exists in the product today — by design (honest scope), with the
-  billing state machine specified.
+- Open-core separation: the deterministic core is dual-licensed `MIT OR Apache-2.0` and
+  the repository is public (`docs/OPEN_SOURCE_STRATEGY.md`); the cloud control plane
+  remains proprietary.
+- No payment processing exists in the product today — by design. The offline
+  entitlement layer (license issuance/activation, sandbox-local, no payment method)
+  shipped in v0.9.0; the hosted billing stack remains Phase 13.
 
 ## 7. Traction & verification discipline
 
@@ -91,16 +99,18 @@ claims: every round produces machine-checked evidence (test counts, browser E2E
 sweeps, gate matrices), and issue records carry their full audit trail
 (a maintainer-local audit registry — every finding → record → fix → commit; issues live on the tracker).
 The release decision is re-derived each round: currently **CONDITIONAL GO**, with the
-named conditions being the engine roadmap (§4) and the repository-access ops step —
-no known product-integrity blockers.
+earlier named conditions resolved — repository access (the repo is public) and most of
+the engine roadmap (v0.9.0 shipped; §3). Remaining named gaps: crates.io publication
+and the community launch (§4). No known product-integrity blockers.
 
 ## 8. The ask (placeholder, to be finalized by the founders)
 
 This document deliberately does not invent funding amounts or valuations — those are
 founder decisions. What can be stated as measured fact: the platform's engineering
-foundation is built and audited; the roadmap to a commercial v1 (engine daemon,
-telemetry, cloud phases 13–14) is specified with acceptance gates; and the differenti-
-ating honesty architecture is defensible because it is enforced in code, not copy.
+foundation is built and audited — engine v0.9.0 (daemon, store, telemetry, CLI) and the
+web platform are shipped in-tree (§3); the remaining roadmap to a commercial v1
+(crates.io publication, cloud phases 13–14) is specified with acceptance gates; and the
+differentiating honesty architecture is defensible because it is enforced in code, not copy.
 
 ## 9. Risks (honest)
 
