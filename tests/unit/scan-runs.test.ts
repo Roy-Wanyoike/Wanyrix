@@ -26,7 +26,15 @@ const BASE = Date.parse('2026-09-18T12:00:00.000Z')
 
 /** Full state reset — the store under test is a module singleton. */
 beforeEach(() => {
-  useScanStore.setState({ history: {}, runs: {}, runSeq: {}, scanTick: 0, lastTrigger: 'manual' })
+  useScanStore.setState({
+    history: {},
+    runs: {},
+    runSeq: {},
+    scanTick: 0,
+    lastTrigger: 'manual',
+    runInFlight: false,
+    lastRecordedTick: -1,
+  })
 })
 
 let n = 0
@@ -237,5 +245,50 @@ describe('recordScanRun — persisted envelope (real persist middleware, in-memo
     }
     expect(envelope.state).not.toHaveProperty('scanTick')
     expect(envelope.state).not.toHaveProperty('lastTrigger')
+    // issue #99 lifecycle fields are equally ephemeral
+    expect(envelope.state).not.toHaveProperty('runInFlight')
+    expect(envelope.state).not.toHaveProperty('lastRecordedTick')
+  })
+})
+
+/* ------------------------------------------- issue #99: run lifecycle ----- */
+
+describe('run lifecycle (issue #99) — shell loading state + exactly-once recording', () => {
+  test('startShellScanRun/finishShellScanRun toggle runInFlight idempotently', () => {
+    const s = useScanStore.getState()
+    expect(s.runInFlight).toBe(false)
+    s.startShellScanRun()
+    s.startShellScanRun() // second start while in flight is a no-op
+    expect(useScanStore.getState().runInFlight).toBe(true)
+    useScanStore.getState().finishShellScanRun()
+    useScanStore.getState().finishShellScanRun() // double finish is a no-op
+    expect(useScanStore.getState().runInFlight).toBe(false)
+  })
+
+  test('claimRunRecording: first caller wins, later callers for the same tick lose', () => {
+    const s = useScanStore.getState()
+    expect(s.claimRunRecording(1)).toBe(true) // shell records the topbar run
+    expect(s.claimRunRecording(1)).toBe(false) // doctor replay of the same tick: visual only
+    expect(s.claimRunRecording(2)).toBe(true) // the next scan event is recordable again
+  })
+
+  test('claimRunRecording rejects already-passed ticks (stale replays never record)', () => {
+    useScanStore.getState().claimRunRecording(5)
+    expect(useScanStore.getState().claimRunRecording(3)).toBe(false)
+    expect(useScanStore.getState().claimRunRecording(5)).toBe(false)
+    expect(useScanStore.getState().claimRunRecording(6)).toBe(true)
+  })
+
+  test('a full shell-run cycle: bump → claim → record; the doctor view cannot double-record', () => {
+    // 1. shell: bump the global scan event
+    useScanStore.getState().bumpScan('topbar')
+    const tick = useScanStore.getState().scanTick
+    // 2. shell: claim + record the run (figures from the fresh doctor payload)
+    expect(useScanStore.getState().claimRunRecording(tick)).toBe(true)
+    useScanStore.getState().recordScanRun(runInput({ trigger: 'topbar' }))
+    // 3. doctor view (mounted): its replay completes for the same tick…
+    expect(useScanStore.getState().claimRunRecording(tick)).toBe(false)
+    // …and records nothing — exactly one entry per scan event
+    expect(useScanStore.getState().runs['helios-platform']).toHaveLength(1)
   })
 })

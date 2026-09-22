@@ -23,7 +23,8 @@ import type {
   WorkspacesPayload,
 } from './types'
 import { useWorkspaceStore } from './workspace-store'
-import { useScanStore, type ScanRunInput, type ScanRunRecord } from './scan-store'
+import { useScanStore, type ScanRunInput, type ScanRunRecord, type ScanTrigger } from './scan-store'
+import { capFindingIds } from './finding-diff'
 import { useSyncStatusStore } from './sync-status-store'
 
 async function getJson<T>(url: string): Promise<T> {
@@ -194,11 +195,21 @@ export function useHealth() {
   })
 }
 
+/**
+ * Fetches ONE fresh doctor report for `ws` — the shared queryFn behind
+ * {@link useDoctor}, exposed so the app shell can run the topbar / ⌘K scan
+ * headlessly (issue #99): same endpoint, same envelope, no duplicated route
+ * knowledge in the component layer.
+ */
+export function fetchDoctorReport(ws: string): Promise<DoctorReport> {
+  return getJson<DoctorReport>(`/api/wanyrix/doctor?ws=${encodeURIComponent(ws)}`)
+}
+
 export function useDoctor() {
   const ws = useActiveWorkspace()
   return useQuery<DoctorReport>({
     queryKey: ['doctor', ws],
-    queryFn: () => getJson(`/api/wanyrix/doctor?ws=${encodeURIComponent(ws)}`),
+    queryFn: () => fetchDoctorReport(ws),
   })
 }
 
@@ -811,6 +822,62 @@ export function useRecordScanRun(): (input: RecordScanRunInput) => ScanRunRecord
       return record
     },
     [recordScanRun, activeWs, queryClient],
+  )
+}
+
+/**
+ * Records ONE completed doctor run end-to-end (issue #37 + Task 3-b): appends
+ * the History entry AND the structured scan-run record (which fire-and-forget
+ * POSTs to the durable server log). Shared by the doctor view (its own button
+ * + auto-run) and the app shell (topbar / ⌘K headless runs, issue #99) so the
+ * entry shape can never drift between the two recorders.
+ *
+ * Callers must gate on `useScanStore.getState().claimRunRecording(tick)` so a
+ * single scan event is recorded exactly once.
+ */
+export function useRecordDoctorRun(): (input: {
+  report: DoctorReport
+  trigger: ScanTrigger
+  startedAt: number
+  durationMs: number
+}) => ScanRunRecord {
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const addScanEntry = useScanStore((s) => s.addEntry)
+  const recordScanRun = useRecordScanRun()
+  return useCallback(
+    ({ report, trigger, startedAt, durationMs }) => {
+      const fingerprint = capFindingIds(report.findings.map((f) => f.id))
+      const critical = report.findings.filter((f) => f.severity === 'critical').length
+      const warning = report.findings.filter((f) => f.severity === 'warning').length
+      const info = report.findings.filter((f) => f.severity === 'info').length
+      addScanEntry(activeWs, {
+        id: `scan-${Date.now()}`,
+        workspace: activeWs,
+        at: Date.now(),
+        durationMs,
+        findings: report.findings.length,
+        critical,
+        warning,
+        info,
+        buildTime: report.buildTime,
+        estimatedFrom: report.estimatedRange[0],
+        estimatedTo: report.estimatedRange[1],
+        trigger,
+        findingIds: fingerprint.ids,
+        ...(fingerprint.truncated ? { findingIdsTruncated: true } : {}),
+      })
+      return recordScanRun({
+        startedAt,
+        finishedAt: Date.now(),
+        durationMs,
+        findingCount: report.findings.length,
+        severityCounts: { critical, warning, info },
+        trigger,
+        findingIds: fingerprint.ids,
+        findingIdsTruncated: fingerprint.truncated,
+      })
+    },
+    [activeWs, addScanEntry, recordScanRun],
   )
 }
 

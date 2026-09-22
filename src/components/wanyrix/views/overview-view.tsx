@@ -968,7 +968,7 @@ export default function OverviewView({ onNavigate }: ViewProps) {
               aria-label="CI cache hit rate"
             />
             <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
-              34/50 jobs rebuilt the full graph last week — FER-DEP-006
+              34/50 jobs rebuilt the full graph last week — WAN-DEP-006
             </p>
             <Button
               size="sm"

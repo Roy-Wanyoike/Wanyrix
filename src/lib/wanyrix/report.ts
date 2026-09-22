@@ -604,12 +604,29 @@ export function validateModelGrounding(
   return violations
 }
 
+/**
+ * The literal token {@link redactViolations} writes into quarantined model
+ * text. Wire/render contract — pinned by tests/unit/explain-grounding.test.ts.
+ */
+export const GROUNDING_REDACTED_TOKEN = '⟨removed: not in evidence⟩'
+
 /** Redact violating tokens in place so quarantined model text is safe to inspect. */
 export function redactViolations(sections: ExplainModelSections, violations: GroundingViolation[]): ExplainModelSections {
   const out: ExplainModelSections = { ...sections }
   for (const v of violations) {
     const token = v.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    out[v.field] = out[v.field].replace(new RegExp(token, 'g'), '⟨removed: not in evidence⟩')
+    out[v.field] = out[v.field].replace(new RegExp(token, 'g'), GROUNDING_REDACTED_TOKEN)
   }
   return out
+}
+
+/**
+ * Presentation smoothing for quarantined model prose (issue #99 P4): the raw
+ * redaction token is machine-honest but reads terribly inside a sentence —
+ * the UI renders an em-dash in its place instead. The claim is still REMOVED
+ * (never fabricated, never re-labeled); the prose just stops shouting angle
+ * brackets at the reader. The server-side token itself is unchanged.
+ */
+export function smoothGroundedProse(text: string): string {
+  return text.split(GROUNDING_REDACTED_TOKEN).join('—')
 }

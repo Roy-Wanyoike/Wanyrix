@@ -25,7 +25,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useWorkspaces, useWorkspaceHealths } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import type { WorkspaceSummary } from '@/lib/wanyrix/types'
-import { DataErrorPanel, ViewSkeleton } from '../shared'
+import { CachedDataBanner, DataErrorPanel, ViewSkeleton } from '../shared'
 import type { ViewProps } from '../view-types'
 
 const WS_ACCENT: Record<WorkspaceSummary['accent'], string> = {
@@ -59,13 +59,23 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
   const workspaces = useMemo(() => workspacesQuery.data?.workspaces ?? [], [workspacesQuery.data])
   const healths = useWorkspaceHealths(workspaces)
 
+  /* issue #99: a mid-session failure must never degrade into a silent cache —
+     when the registry/health payloads still render from the last successful
+     fetch, say so with the degraded banner + retry. */
+  const workspacesError = workspacesQuery.isError
+    ? (workspacesQuery.error as Error | null)?.message ?? 'registry refresh failed'
+    : undefined
+  const healthsError = healths.some((h) => h.isError && h.data !== undefined)
+    ? 'workspace health refresh failed'
+    : undefined
+
   const activeWs = useWorkspaceStore((s) => s.active)
   const setActiveWs = useWorkspaceStore((s) => s.setActive)
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
   if (workspacesQuery.isLoading) return <ViewSkeleton kpiCount={2} />
-  if (workspacesQuery.isError || workspaces.length === 0)
+  if ((workspacesQuery.isError && !workspacesQuery.data) || workspaces.length === 0)
     return (
       <DataErrorPanel
         title="Workspace registry unavailable"
@@ -73,6 +83,11 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
         onRetry={() => workspacesQuery.refetch()}
       />
     )
+
+  const retryAll = () => {
+    void workspacesQuery.refetch()
+    void queryClient.invalidateQueries({ queryKey: ['health'] })
+  }
 
   const switchTo = (id: string) => {
     if (id === activeWs) return
@@ -87,6 +102,16 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
 
   return (
     <div className="space-y-5">
+      {/* issue #99: cached payloads after a mid-session failure are labeled,
+          never presented silently as live data */}
+      {(workspacesError || healthsError) && (
+        <CachedDataBanner
+          message={workspacesError ?? healthsError}
+          onRetry={retryAll}
+          retrying={workspacesQuery.isRefetching}
+        />
+      )}
+
       {/* header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>

@@ -44,7 +44,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { useReportExport, useWorkspaces } from '@/lib/wanyrix/hooks'
+import {
+  fetchDoctorReport,
+  useRecordDoctorRun,
+  useReportExport,
+  useWorkspaces,
+} from '@/lib/wanyrix/hooks'
 import { workspaceSelectorState } from '@/lib/wanyrix/workspace-selector'
 import { ENGINE_VERSION } from '@/lib/wanyrix/engine-meta'
 import type { ReportFormat } from '@/lib/wanyrix/hooks'
@@ -84,7 +89,7 @@ function ThemeToggle() {
     <Button
       size="icon"
       variant="ghost"
-      className="size-8"
+      className="hit-44 size-8"
       aria-label={label}
       title={hint}
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
@@ -123,6 +128,20 @@ export function AppShell({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [diffOpen, setDiffOpen] = useState(false)
   const [cliOpen, setCliOpen] = useState(false)
+  /* issue #99 P3: F8 opens/closes the engine-signals (notifications) surface —
+     the same hotkey the toast viewport advertises, now wired to the popover */
+  const [signalsOpen, setSignalsOpen] = useState(false)
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'F8') {
+        e.preventDefault()
+        setSignalsOpen((o) => !o)
+      }
+    }
+    document.addEventListener('keydown', down)
+    return () => document.removeEventListener('keydown', down)
+  }, [])
 
   /* workspace registry + active selection (issue #34) */
   const workspacesQuery = useWorkspaces()
@@ -143,6 +162,11 @@ export function AppShell({
 
   /* global scan event (issue #37) + reviewable-diff queue (issue #38) */
   const bumpScan = useScanStore((s) => s.bumpScan)
+  /* issue #99: shell-owned run lifecycle — the topbar Run-scan button mirrors
+     the doctor-view run contract (loading state → POST scan-runs → History) */
+  const scanRunning = useScanStore((s) => s.runInFlight)
+  const claimRunRecording = useScanStore((s) => s.claimRunRecording)
+  const recordDoctorRun = useRecordDoctorRun()
   const diffEntries = useDiffQueueStore((s) => s.entries)
   const pendingDiffs = countPending(diffEntries, activeWs)
 
@@ -165,13 +189,61 @@ export function AppShell({
 
   const uptimeLabel = `${Math.floor(uptime / 3600)}h ${String(Math.floor((uptime % 3600) / 60)).padStart(2, '0')}m ${String(uptime % 60).padStart(2, '0')}s`
 
-  const runScan = () => {
-    queryClient.invalidateQueries()
-    bumpScan('topbar') // doctor view reacts with a replay + history entry (issue #37)
+  /**
+   * Topbar / ⌘K "Run scan" (issue #99 P2) — mirrors the doctor-view run
+   * contract instead of merely nudging it:
+   *   1. loading state — the button spinner reflects `runInFlight`;
+   *   2. toast — start + completion (or destructive failure);
+   *   3. POST /api/wanyrix/scan-runs — via useRecordDoctorRun → useRecordScanRun;
+   *   4. History refresh — the scan-store entry lands in History/doctor panels
+   *      live (zustand) and the durable server log is invalidated on 201.
+   *
+   * The shell claims the scan event's recording (`claimRunRecording`) so when
+   * the doctor view is mounted its terminal replay stays purely visual — one
+   * scan event, exactly one history entry, never a double record. Figures
+   * come from a FRESH doctor payload (`fetchQuery`, staleTime 0) — the same
+   * measured source the doctor view records from; nothing is invented (Gate
+   * 21). The doctor view's own button keeps its pre-existing path (replay +
+   * record + measured replay duration).
+   */
+  const runScan = (trigger: 'topbar' | 'palette' = 'topbar') => {
+    const scan = useScanStore.getState()
+    if (scan.runInFlight) return
+    scan.startShellScanRun()
+    bumpScan(trigger)
+    claimRunRecording(useScanStore.getState().scanTick)
+
+    const wsName = activeSummary?.name ?? 'the active workspace'
     toast({
-      title: 'Scan re-triggered',
-      description: `Wanyrix engine is re-collecting cargo + git telemetry for ${activeSummary?.name ?? 'the active workspace'}.`,
+      title: 'Scan running…',
+      description: `Wanyrix engine is re-collecting cargo + git telemetry for ${wsName}.`,
     })
+
+    const startedAt = Date.now()
+    void queryClient
+      .fetchQuery({
+        queryKey: ['doctor', activeWs],
+        queryFn: () => fetchDoctorReport(activeWs),
+        staleTime: 0,
+      })
+      .then((report) => {
+        const durationMs = Date.now() - startedAt
+        recordDoctorRun({ report, trigger, startedAt, durationMs })
+        toast({
+          title: 'Scan complete',
+          description: `${report.findings.length} findings · ${(durationMs / 1000).toFixed(1)}s · History updated`,
+        })
+      })
+      .catch((e: Error) => {
+        toast({
+          title: 'Scan failed',
+          description: `${e.message} — nothing was recorded; the last History entries are untouched.`,
+          variant: 'destructive',
+        })
+      })
+      .finally(() => {
+        useScanStore.getState().finishShellScanRun()
+      })
   }
 
   const switchWorkspace = (id: string) => {
@@ -298,7 +370,7 @@ export function AppShell({
               <button
                 type="button"
                 onClick={() => setPaletteOpen(true)}
-                className="relative hidden h-8 w-52 items-center gap-2 rounded-md border border-input bg-card pl-8 pr-2 text-left text-xs text-muted-foreground/80 transition-colors hover:border-primary/30 hover:text-foreground md:flex"
+                className="hit-44 relative hidden h-8 w-52 items-center gap-2 rounded-md border border-input bg-card pl-8 pr-2 text-left text-xs text-muted-foreground/80 transition-colors hover:border-primary/30 hover:text-foreground md:flex"
                 aria-label="Open command palette (Ctrl+K)"
               >
                 <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" />
@@ -314,7 +386,7 @@ export function AppShell({
                 disabled={selectorState.disabled || workspaces.length === 0}
               >
                 <SelectTrigger
-                  className="h-8 w-[168px] max-w-[36vw] gap-1.5 text-xs"
+                  className="hit-44 h-8 w-[168px] max-w-[36vw] gap-1.5 text-xs"
                   aria-label="Workspace"
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
@@ -362,7 +434,7 @@ export function AppShell({
                   onClick={() => workspacesQuery.refetch()}
                   disabled={selectorState.retrying}
                   aria-label="Retry loading the workspace registry"
-                  className="flex h-8 items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
+                  className="hit-44 flex h-8 items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
                 >
                   <RotateCw className={`size-3.5 ${selectorState.retrying ? 'animate-spin' : ''}`} aria-hidden />
                   {selectorState.retrying ? 'retrying…' : 'Retry'}
@@ -372,15 +444,27 @@ export function AppShell({
               {/* workspace registration bridge — connects a REAL local project */}
               <ConnectProjectDialog />
 
-              <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={runScan}>
-                <RefreshCw className="size-3.5" />
+              {/* issue #99: the topbar run now mirrors the doctor contract —
+                  loading spinner, toasts, POST scan-runs, History refresh. The
+                  icon-only mobile rendering gets an accessible name + a 44px
+                  hit area (`.hit-44`) instead of the bare 32px visual box. */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="hit-44 h-8 gap-1.5 text-xs"
+                onClick={() => runScan('topbar')}
+                disabled={scanRunning}
+                aria-label="Run scan"
+                title="Run a doctor scan for the active workspace"
+              >
+                <RefreshCw className={`size-3.5 ${scanRunning ? 'animate-spin' : ''}`} aria-hidden />
                 <span className="hidden sm:inline">Run scan</span>
               </Button>
 
               <Button
                 size="sm"
                 variant="outline"
-                className={cn('relative h-8 gap-1.5 text-xs', pendingDiffs > 0 && 'border-primary/40 text-foreground')}
+                className={cn('hit-44 relative h-8 gap-1.5 text-xs', pendingDiffs > 0 && 'border-primary/40 text-foreground')}
                 onClick={() => setDiffOpen(true)}
                 aria-label={`Pending diffs — ${pendingDiffs} awaiting review`}
               >
@@ -398,7 +482,7 @@ export function AppShell({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-8 gap-1.5 text-xs"
+                    className="hit-44 h-8 gap-1.5 text-xs"
                     disabled={reportPending}
                     aria-label={`Download workspace report for ${activeSummary?.name ?? 'active workspace'} (Markdown or JSON)`}
                     title="Workspace report — markdown findings/evidence/gates or machine-readable JSON (--json parity)"
@@ -425,7 +509,7 @@ export function AppShell({
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <NotificationsPopover onNavigate={onNavigate} />
+              <NotificationsPopover onNavigate={onNavigate} open={signalsOpen} onOpenChange={setSignalsOpen} />
 
               <ThemeToggle />
             </div>
@@ -484,7 +568,7 @@ export function AppShell({
             <StorageDialog>
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded px-1 transition-colors hover:text-foreground"
+                className="hit-44 flex items-center gap-1.5 rounded px-1 transition-colors hover:text-foreground"
                 aria-label="Open storage report"
               >
                 <HardDrive className="size-3" />

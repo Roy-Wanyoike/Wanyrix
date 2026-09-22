@@ -26,6 +26,7 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { REPO_URL } from '@/lib/wanyrix/data'
+import { paletteFilter } from '@/lib/wanyrix/palette-filter'
 import { useWorkspaces } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { NAV_ITEMS } from './nav-registry'
@@ -48,7 +49,7 @@ export function CommandPalette({
   open: boolean
   setOpen: (o: boolean) => void
   onNavigate: (v: ViewId) => void
-  onRunScan: () => void
+  onRunScan: (trigger?: 'topbar' | 'palette') => void
   onOpenDiffs: () => void
   onExportReport: () => void
   onExportJson: () => void
@@ -76,7 +77,9 @@ export function CommandPalette({
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    /* paletteFilter (issue #99): word-boundary matching — "dep" matches
+       Dependencies, not "Runtime captured profiles" */
+    <CommandDialog open={open} onOpenChange={setOpen} filter={paletteFilter}>
       <CommandInput placeholder="Type a command or search views…" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -118,7 +121,7 @@ export function CommandPalette({
           <CommandItem
             onSelect={() => {
               setOpen(false)
-              onRunScan()
+              onRunScan('palette')
             }}
             className="gap-2.5"
           >

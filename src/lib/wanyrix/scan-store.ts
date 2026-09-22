@@ -140,6 +140,31 @@ interface ScanState {
   recordScanRun: (run: ScanRunInput) => ScanRunRecord
   /** clear the recorded runs of one workspace */
   clearScanRuns: (workspaceId: string) => void
+  /* ------------------------------------------------ issue #99: run lifecycle */
+  /**
+   * True while a doctor-scan run triggered OUTSIDE the doctor view (topbar
+   * button / ⌘K palette) is in flight. Drives the topbar Run-scan loading
+   * state — the doctor view's own replay does not touch it (the terminal IS
+   * its loading state). EPHEMERAL: never persisted (excluded below).
+   */
+  runInFlight: boolean
+  /** mark a shell-triggered run as started (idempotent while in flight) */
+  startShellScanRun: () => void
+  /** mark the shell-triggered run as finished (fetch done / recorded / failed) */
+  finishShellScanRun: () => void
+  /**
+   * scanTick of the last run whose history entry + scan-run record were
+   * already written. Both recorders (app shell for topbar/⌘K runs, doctor
+   * view for its own button + auto-run) call {@link claimRunRecording} so a
+   * single scan event is recorded EXACTLY once no matter which component
+   * observes its completion. EPHEMERAL: never persisted.
+   */
+  lastRecordedTick: number
+  /**
+   * Returns true when the CALLER owns recording `tick` (first caller wins);
+   * false when the tick was already recorded by the other recorder.
+   */
+  claimRunRecording: (tick: number) => boolean
 }
 
 export const useScanStore = create<ScanState>()(
@@ -162,6 +187,22 @@ export const useScanStore = create<ScanState>()(
         set((s) => ({ history: { ...s.history, [ws]: [] } })),
       runs: {},
       runSeq: {},
+      /* issue #99: shell-run loading state — ephemeral, never persisted */
+      runInFlight: false,
+      startShellScanRun: () => {
+        if (get().runInFlight) return
+        set({ runInFlight: true })
+      },
+      finishShellScanRun: () => {
+        if (!get().runInFlight) return
+        set({ runInFlight: false })
+      },
+      lastRecordedTick: -1,
+      claimRunRecording: (tick) => {
+        if (tick <= get().lastRecordedTick) return false
+        set({ lastRecordedTick: tick })
+        return true
+      },
       recordScanRun: (run) => {
         const ws = run.workspaceId
         const seq = (get().runSeq[ws] ?? 0) + 1

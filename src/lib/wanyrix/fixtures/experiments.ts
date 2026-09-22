@@ -64,7 +64,7 @@ export const EXPERIMENTS: Experiment[] = [
       cache: 'cold (sccache disabled)',
     },
     commands: [
-      'wanyrix experiment create --from FER-BLD-001',
+      'wanyrix experiment create --from WAN-BLD-001',
       'wanyrix experiment baseline EXP-014 --runs 5',
       'git apply candidate.patch && cargo check',
       'cargo test --workspace',
@@ -92,7 +92,7 @@ export const EXPERIMENTS: Experiment[] = [
       cache: 'cold',
     },
     commands: [
-      'wanyrix experiment create --from FER-BLD-002',
+      'wanyrix experiment create --from WAN-BLD-002',
       'wanyrix experiment baseline EXP-015 --runs 3',
       'cargo update -p tokio@1.34.2 --precise 1.40.0  # candidate, pending',
     ],
@@ -115,7 +115,7 @@ export const EXPERIMENTS: Experiment[] = [
       profile: 'dev',
       cache: 'cold',
     },
-    commands: ['wanyrix experiment create --from FER-WRK-007  # plan drafted, awaiting approval'],
+    commands: ['wanyrix experiment create --from WAN-WRK-007  # plan drafted, awaiting approval'],
     stages: EXP_STAGES_DRAFT,
   },
 ]

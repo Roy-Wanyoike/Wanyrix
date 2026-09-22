@@ -174,8 +174,8 @@ export const GRAPH_EDGES: GraphEdge[] = [
   { from: 'syn', to: 'proc-macro2' },
   { from: 'quote', to: 'proc-macro2' },
   // full-workspace crates that were previously ghost references (ENG-TCA-3)
-  { from: 'legacy-cache', to: 'tokio' }, // pins tokio 1.34.2 (FER-BLD-002)
-  { from: 'legacy-cache', to: 'uuid' }, // pins uuid 0.8.2 (FER-BLD-002)
+  { from: 'legacy-cache', to: 'tokio' }, // pins tokio 1.34.2 (WAN-BLD-002)
+  { from: 'legacy-cache', to: 'uuid' }, // pins uuid 0.8.2 (WAN-BLD-002)
   { from: 'old-sdk', to: 'serde' }, // old-sdk 2.1 pins serde 1.0.203
   { from: 'reqwest', to: 'wasm-bindgen' }, // wasm client target
 ]
