@@ -9,7 +9,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Engine](https://img.shields.io/badge/engine-v0.9.0-DEA584)
-![Tests](https://img.shields.io/badge/tests-552_passing-2EA043)
+![Tests](https://img.shields.io/badge/tests-879_passing-2EA043)
 ![License](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2EA043)
 
 <img src="public/brand/banner.png" alt="Wanyrix — engineering intelligence. The Beacon-W brand mark over a dark amber energy burst." width="100%" />
@@ -30,7 +30,7 @@ That honesty rule is the product. Dashboards that make numbers look good are com
 
 | | |
 | --- | --- |
-| 🧪 **552 automated tests** | 374 web (bun: unit + live-API contract; 370 pass / 4 skip, measured 2026-09-22) + 182 engine (cargo, per `engine/README.md` v0.9.0) — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, adversarial hardening, sync roundtrip, offline entitlement, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
+| 🧪 **879 passing tests** | 886 collected: web 584 in 33 files (577 pass / 4 counted skip / 3 worktree-split fails — see the Counts note below) + engine 302 (`cargo test`, 0 fail; 2 opt-in probes ignored) — measured 2026-09-22 — unit, live-API contract, conformance, WAL crash-recovery, fault-injection chaos, adversarial hardening, sync roundtrip, offline entitlement, instrumented-build IPC, registration-bridge + local-AI wire-level mock tests |
 | 🔍 **23 versioned API routes** | `wanyrix.*​/v1` JSON contracts; unknown workspace ⇒ 404, never wrong-workspace data |
 | 🦀 **Real Rust engine** | `wanyrix-engine` v0.9.0, 23 command surfaces: doctor · graph · health · analyze · dependencies · build (instrumented cargo) · experiment ledger · **event log** · **local AI** · **git facts** · **impact** · **what-changed** · **export** (artifacts as code) · **sync push\|pull** (registry-branch team sync) · **activate / entitlement / license** (offline ed25519) · store (SQLite WAL + crash recovery) · daemon · telemetry · synth · init · status |
 | 🖥️ **19-surface dashboard** | Next.js 16 + Tailwind 4 + shadcn/ui — dark & light themes, mobile-clean (0 px overflow @ 390 px) |
@@ -40,7 +40,7 @@ That honesty rule is the product. Dashboards that make numbers look good are com
 
 ---
 
-> Counts are measured, not remembered (issue #111): command surfaces counted from the `Command` enum in `engine/src/cli.rs` (23); API routes = `find src/app/api -name "route.ts"` (23 under `/api/wanyrix/*`, 24 incl. the `/api` root); dashboard views = entries in `src/components/wanyrix/nav-registry.ts` (19); web tests = `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test` (374 across 22 files, 2026-09-22); engine tests = 182 as documented in `engine/README.md` v0.9.0 (not re-measured on the doc host — no Rust toolchain; re-run `cd engine && cargo test` to reproduce).
+> Counts are measured, not remembered (issue #111), one convention: **N tests, M files, measured 2026-09-22, command**. Command surfaces counted from the `Command` enum in `engine/src/cli.rs` (23); API routes = `find src/app/api -name "route.ts"` (23 under `/api/wanyrix/*`, 24 incl. the `/api` root); dashboard views = entries in `src/components/wanyrix/nav-registry.ts` (19); web tests = `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test` → **584 tests, 33 files, measured 2026-09-22: 577 pass / 4 skip / 3 fail** — the 4 skips are the license-issuance 200-forks (they need `WANYRIX_SIGNING_KEY` on the dev server; the 503-fork test pins the unconfigured behavior), and the 3 fails fire ONLY when the suite runs from a linked git worktree against a dev server rooted at another checkout (the export-digest test reads `<suite-root>/engine/.wanyrix/exports` while the server writes its own root's, and the registration-bridge POSTs `<suite-root>/engine`, refused by the server's `WANYRIX_WORKSPACE_ROOTS` confinement — QA-3-B-2). Same-root runs are 0-fail (last full same-checkout run 2026-09-22: 0 fail). Engine tests = `cd engine && cargo test --workspace --offline` → **302 tests, measured 2026-09-22: 302 pass / 0 fail / 2 ignored** (the opt-in `perf_probe` probes).
 
 ## The loop
 
@@ -59,7 +59,7 @@ That honesty rule is the product. Dashboards that make numbers look good are com
 
 - **W-EIR** — the normalized evidence snapshot every surface derives from. One source of truth, versioned contracts.
 - **Engineering Graph** — the dependency backbone behind blast radius, duplicate versions, hotspots, and impact estimation. All aggregates derive from a single edge list; no ghost nodes.
-- **Findings** — stable-ID, evidence-cited diagnoses (`FER-BLD-001`…), never silent fixes.
+- **Findings** — stable-ID, evidence-cited diagnoses (`WAN-BLD-001`…), never silent fixes.
 - **Experiments** — the only road from *estimated* to *measured* to *verified*. Every transition lands in a durable, append-only **event log** — the receipt trail.
 
 ---
@@ -153,27 +153,30 @@ Measured 500-crate timings: [`engine/BENCHMARKS.md`](engine/BENCHMARKS.md) · fu
 
 ## Grounded AI — real API response
 
-`POST /api/wanyrix/explain` with `{"context":{"findingId":"FER-BLD-001"},"question":"Why does this matter for a Rust team?"}` (abridged — facts truncated from 18 to 3; everything else verbatim):
+`POST /api/wanyrix/explain` with `{"context":{"findingId":"WAN-BLD-001"},"question":"Why does this matter for a Rust team?"}` (response captured 2026-09-22; abridged — grounding facts truncated from 18 to 3, `provenance.contextFields` list omitted; everything else verbatim). An unknown finding id is a named refusal: `400` with `{"ok":false,"error":"unknown finding 'FER-BLD-001'"}`. The `ai` fields are provider-bound; if grounding validation rejects model output, the route answers `ok:false` with the deterministic fallback instead.
 
 ```json
 {
   "ok": true,
+  "explanation": "OBSERVED FACT — common-runtime adds 18.3s to each build (41% of total), blocks 41 downstream crates, and changes frequently (23 commits in 90 days), causing ×41 rebuild amplification. … INFERENCE — … RECOMMENDATION — … UNCERTAINTY — …",
   "grounded": true,
-  "explanation": "OBSERVED FACT — common-runtime takes 18.3s to compile and blocks 41 downstream crates. … INFERENCE — … RECOMMENDATION — … UNCERTAINTY — …",
   "grounding": {
     "status": "registry",
+    "resolved": { "id": "WAN-BLD-001", "registry": "findings" },
     "facts": [
-      { "statement": "id: FER-BLD-001", "derivedFrom": "registry:findings.id" },
-      { "statement": "title: common-runtime sits on the critical path", "derivedFrom": "registry:findings.title" }
+      { "statement": "id: WAN-BLD-001", "derivedFrom": "registry:findings.id" },
+      { "statement": "title: common-runtime sits on the critical path", "derivedFrom": "registry:findings.title" },
+      { "statement": "severity: critical", "derivedFrom": "registry:findings.severity" }
     ]
   },
   "ai": {
-    "commentary": "…",
-    "inference": "…",
-    "recommendation": "…",
-    "uncertainty": "While the estimated improvement is 12.4s, the actual measurement may vary. …"
+    "commentary": "common-runtime adds 18.3s to each build (41% of total), blocks 41 downstream crates, and changes frequently (23 commits in 90 days), causing ×41 rebuild amplification.",
+    "inference": "This creates a significant productivity bottleneck for Rust developers, with long feedback cycles and high rebuild costs impacting the entire workspace.",
+    "recommendation": "Implement the architecture split into runtime-core and runtime-telemetry to reduce incremental build time by an estimated 12.4s.",
+    "uncertainty": "The actual impact of the split is estimated (not yet measured); verification requires experiment EXP-014 with baseline measurements."
   },
-  "provenance": { "generatedBy": "ai-provider", "resolution": "context reference resolved against the findings registry → FER-BLD-001" }
+  "disclaimer": "FACT statements above are rendered server-side from the evidence context and cannot be altered by the model. The `ai` fields are model-generated interpretation, not evidence; numbers, statuses and references in them are validated against the evidence context and redacted when ungrounded. Claims keep their stated measurement status (measured / estimated / verified) — nothing in this response upgrades an estimate.",
+  "provenance": { "generatedBy": "ai-provider", "resolution": "context reference resolved against the findings registry → WAN-BLD-001" }
 }
 ```
 
@@ -227,7 +230,7 @@ Every workspace-scoped route validates `?ws=`: unknown workspace ⇒ **404** `{e
 
 This repository is built the way it asks you to build software — with verifiable claims:
 
-- **552 tests, zero failures** (370 web pass measured 2026-09-22 via `cd tests && bun test` + 182 engine per `engine/README.md` v0.9.0) — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers) + the 24-test adversarial hardening suite + sync/entitlement CLI tests + wire-level local-AI mock tests.
+- **879 tests passing, zero product-defect failures** (measured 2026-09-22: engine `cd engine && cargo test --workspace --offline` → 302 pass / 0 fail; web `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test` → 577 pass / 4 counted skip / 3 documented worktree-split artifacts, 0 product defects) — including live API-contract suites, graph-math invariants (aggregates must equal edge-list closure), honesty-badge WCAG-AA contrast (computed, not asserted), storage-migration goldens, engine conformance + WAL crash-recovery + **9 chaos fault-injection tests** (truncated payloads, garbage DBs, dead sockets, corrupted ledgers) + the 24-test adversarial hardening suite + sync/entitlement CLI tests + wire-level local-AI mock tests.
 - **CI on every push/PR** — ESLint, `tsc --noEmit`, full test suite, legacy-token brand gate, `cargo build --locked` + `clippy -D warnings` + `cargo test --locked`. Release workflow ships binaries + CycloneDX SBOM + cargo-audit; perf workflow scales the soak/flake harnesses.
 - **Contract-first** — all machine payloads are versioned (`wanyrix.*​/v1`); determinism is pinned by tests (same input ⇒ byte-identical output, timestamp last). The web pins the engine version in one constant, tested against `engine/Cargo.toml`.
 - **Honesty is load-bearing** — the `estimated/verified` separation, workspace guards, grounding redaction, and the event log's *refusals-mint-no-events* rule are **tested behaviors**, not documentation.
@@ -262,7 +265,7 @@ This repository is built the way it asks you to build software — with verifiab
 
 Shipped: the full offline product contract (23 command surfaces — including git facts, impact + what-changed change intelligence, export, registry-branch team sync, and offline ed25519 entitlement), the durable event log, local-AI grounding, the connect-a-project bridge, chaos- and adversarial-tested resilience, release engineering with SBOM, and the design directions for hosted cloud and plugins. Next, in order:
 
-- **crates.io publish** of `wanyrix-engine` once the release checklist (MSRV, feature flags, signing secrets) is exercised on a real tag.
+- **crates.io publish** in the [`docs/CRATES_IO_STRATEGY.md`](docs/CRATES_IO_STRATEGY.md) §1 order — `wanyrix-protocol` first (then `wanyrix-core`, then the `wanyrix` CLI) — once the §6 checklist (MSRV, feature flags, signing secrets) is exercised on a real tag.
 - **Plugin API v1** — the event log is the first shipped extension surface; the out-of-process plugin contract follows the decision points in [`docs/PLUGIN_AND_EVENTS.md`](docs/PLUGIN_AND_EVENTS.md).
 - **Cloud milestone** — the serverless first rung is shipped: `wanyrix sync push|pull` (registry-branch team sync + CI referee, v0.9.0). The hosted offering starts when greenlit ([`docs/CLOUD_DESIGN.md`](docs/CLOUD_DESIGN.md)).
 

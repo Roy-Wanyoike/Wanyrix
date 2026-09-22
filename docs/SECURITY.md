@@ -159,7 +159,9 @@ never caller-supplied paths.
 - Signed releases and provenance attestation: `release.yml` deliberately stops short of
   artifact signing — it stages binaries, SBOM, advisory audit, and checksums so signing
   is the only remaining step (requires maintainer secrets).
-- Authentication, multi-tenancy, plugin sandboxing (Phases 13–14 — roadmap).
+- Authentication, multi-tenancy, plugin sandboxing (hosted-cloud and plugin
+  roadmap — design-only directions in `docs/CLOUD_DESIGN.md` and
+  `docs/PLUGIN_AND_EVENTS.md`; nothing implemented).
 - GitHub **private vulnerability reporting**: planned, tracked in the governance bundle
   (#119) — **not enabled yet**; do not assume a private channel exists (see Reporting).
 

@@ -49,8 +49,8 @@ Measurement date: **2026-09-22** against the v0.9.0 tree.
 
 | Component | State | Evidence |
 | --- | --- | --- |
-| Web platform (Next.js 16 + TS + Tailwind 4 + shadcn/ui) | Production-credible | 296 tests passing / 3 skip / 0 fail across 19 files (2,930 `expect()` calls) — re-run 2026-09-22 against the live server; 19 views (`ViewId` registry in `src/lib/wanyrix/types.ts`); 23 `/api/wanyrix/*` route handlers (`find src/app/api -name route.ts`), exercised by live API-contract suites; browser-QA rounds M1–M9 |
-| Rust engine `wanyrix-engine` v0.9.0 (`engine/Cargo.toml`) | Shipped | 182 tests + 2 opt-in perf probes **per `engine/README.md` (v0.9.0)** — quoted, not re-run here; real filesystem measurement behind `scan`/`doctor`/`graph`/`health`/`build`/`daemon`/`store`/`telemetry` surfaces, each emitting versioned JSON (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.build/v1`, `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, …) |
+| Web platform (Next.js 16 + TS + Tailwind 4 + shadcn/ui) | Production-credible | 584 tests across 33 files — 577 pass / 4 counted skip / 0 product-defect fail (4,900+ `expect()` calls) — re-run 2026-09-22 against the live server; 19 views (`ViewId` registry in `src/lib/wanyrix/types.ts`); 23 `/api/wanyrix/*` route handlers (`find src/app/api -name route.ts`), exercised by live API-contract suites; browser-QA rounds M1–M9 |
+| Rust engine `wanyrix-engine` v0.9.0 (`engine/Cargo.toml`) | Shipped | 302 tests / 0 fail / 2 opt-in perf probes ignored (`cd engine && cargo test --workspace --offline`, measured 2026-09-22); real filesystem measurement behind `scan`/`doctor`/`graph`/`health`/`build`/`daemon`/`store`/`telemetry` surfaces, each emitting versioned JSON (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.build/v1`, `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, …) |
 | CLI binary `wanyrix` (shipped v0.8.0) | Shipped | 23-command surface + exit ladder (`0`/`2`, honest `101` broken-pipe note) pinned in `docs/CLI.md`; wired into the web platform via the workspace registration bridge and engine-exec routes |
 | Engine daemon + SQLite store + telemetry ingestion | Shipped | `engine/src/{daemon,store,telemetry}.rs`; `wanyrix daemon start/call` (incremental analysis over a local socket), `wanyrix store init/save/list/fsck` (WAL-backed SQLite), `wanyrix telemetry ingest` (redacted rustc JSON) — documented in `engine/README.md` (v0.9.0) |
 | Offline entitlement layer | Shipped (sandbox-local) | ed25519 license issuance/activation (`engine/src/entitlement.rs`; `wanyrix license issue` / `activate` / `entitlement`; web Plans portal + `POST /api/wanyrix/license/issue`) — no payment method, never a simulated purchase (#94) |
@@ -65,7 +65,7 @@ Measurement date: **2026-09-22** against the v0.9.0 tree.
 | Component | Status | Why it matters |
 | --- | --- | --- |
 | crates.io publication (`wanyrix-protocol` → `wanyrix-core` → `wanyrix`) | Planned — publication order + checklist in `docs/CRATES_IO_STRATEGY.md` | `cargo install wanyrix` distribution; ecosystem native presence |
-| Cloud control plane (sync, billing, team) | Designed, not built (`docs/COMMERCIAL.md` §"to build") | Phase 13–14 monetization surface |
+| Cloud control plane (sync, billing, team) | Designed, not built (`docs/COMMERCIAL.md` §"to build") | Monetization surface for the designed hosted tiers (tier plan in `docs/COMMERCIAL.md`) |
 | Community launch (posts, listings) | Not started — feedback-gated (`docs/RUST_COMMUNITY_GUIDE.md` §4); governance artifacts tracked in #119 | Organic adoption per the no-spam ground rules |
 
 ## 5. Market and wedge
@@ -90,7 +90,8 @@ Measurement date: **2026-09-22** against the v0.9.0 tree.
   remains proprietary.
 - No payment processing exists in the product today — by design. The offline
   entitlement layer (license issuance/activation, sandbox-local, no payment method)
-  shipped in v0.9.0; the hosted billing stack remains Phase 13.
+  shipped in v0.9.0; the hosted billing stack remains design-only
+  (`docs/COMMERCIAL.md`).
 
 ## 7. Traction & verification discipline
 
@@ -109,7 +110,7 @@ This document deliberately does not invent funding amounts or valuations — tho
 founder decisions. What can be stated as measured fact: the platform's engineering
 foundation is built and audited — engine v0.9.0 (daemon, store, telemetry, CLI) and the
 web platform are shipped in-tree (§3); the remaining roadmap to a commercial v1
-(crates.io publication, cloud phases 13–14) is specified with acceptance gates; and the
+(crates.io publication, hosted cloud per `docs/COMMERCIAL.md`) is specified with acceptance gates; and the
 differentiating honesty architecture is defensible because it is enforced in code, not copy.
 
 ## 9. Risks (honest)

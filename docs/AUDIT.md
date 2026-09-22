@@ -5,20 +5,21 @@
 > (`main`, 2026-09-22; issue #110). Prior baseline: `524468c` (engine
 > v0.7.0). Every claim below was verified by reading source or running gates —
 > anything not yet verified is labeled as such. Honest-attribution rule:
-> engine test counts that could not be re-measured on the derivation host
-> (Rust toolchain reinstall in progress) are cited from `engine/README.md`
-> v0.9.0 with explicit attribution instead of being guessed.
+> counts carry the command that produced them. The 2026-09-22 drift pass
+> (AUD-7) re-measured the test suites directly — engine via `cargo test
+> --workspace --offline`, web via `bun test` — so the figures below are
+> measured on this host, not cited.
 
 ## Baseline (measured)
 
 | Dimension | State |
 | --- | --- |
 | Branch / commit | `main` @ `cfd2c1b` (re-derived 2026-09-22) |
-| Engine | `wanyrix-engine` v0.9.0 — 25 source files, 16,645 LOC (`wc -l engine/src/*.rs`), **23 CLI surfaces** (enum `Command` in `engine/src/cli.rs`, cross-checked against `docs/CLI.md` rows 1–23), 182 tests **per engine/README v0.9.0** (not re-measured this pass) |
-| Web | Next.js 16 + TS + Tailwind 4 + shadcn/ui — **23 versioned API routes** under `/api/wanyrix/*` (24 `route.ts` files incl. the `/api` root; `find src/app/api -name "route.ts" \| wc -l`); 299 web tests across 19 files — 296 pass / 3 skip / 0 fail (`bun test unit` vs the running dev server, measured 2026-09-22) |
-| Docs | ARCHITECTURE, AUDIT, CLI, CLOUD_DESIGN, COMMERCIAL, CONTRIBUTING, DOGFOODING, DEVELOPMENT, PERFORMANCE, PLUGIN_AND_EVENTS, PRIVACY, SECURITY, USER_GUIDE, W-EIR |
+| Engine | `wanyrix-engine` v0.9.0 — 25 source files, 16,645 LOC (`wc -l engine/src/*.rs`), **23 CLI surfaces** (enum `Command` in `engine/src/cli.rs`, cross-checked against `docs/CLI.md` rows 1–23), **302 tests / 0 failed / 2 ignored opt-in probes** (`cd engine && cargo test --workspace --offline`, measured 2026-09-22) |
+| Web | Next.js 16 + TS + Tailwind 4 + shadcn/ui — **23 versioned API routes** under `/api/wanyrix/*` (24 `route.ts` files incl. the `/api` root; `find src/app/api -name "route.ts" \| wc -l`); **584 web tests across 33 files** (27 unit + 6 api) — 577 pass / 4 counted skip / 3 worktree-split fail (`cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test` vs the running dev server, measured 2026-09-22; the 3 fails are checkout-root coupling — export-digest path + registration-confinement refusal — not product defects; same-root runs are 0-fail) |
+| Docs | 21 markdown files: docs/ = ARCHITECTURE, AUDIT, CLI, CLOUD_DESIGN, COMMERCIAL, CONTRIBUTING, CRATES_IO_STRATEGY, DEVELOPMENT, DOGFOODING, INVESTOR_OVERVIEW, OPEN_SOURCE_STRATEGY, PERFORMANCE, PLUGIN_AND_EVENTS, PRIVACY, RUST_COMMUNITY_GUIDE, SECURITY, USER_GUIDE, W-EIR (18) + `README.md` + `engine/README.md` + `engine/BENCHMARKS.md` |
 | License | Dual MIT OR Apache-2.0, open-core (cloud may be proprietary, trademark carved out) |
-| Tracker | Open: #66 (commercial roadmap), #100–#103 (engine gaps from this matrix), #109 (CLI-contract dialog rows, in-flight). Everything else closed with evidence. |
+| Tracker | Open: #66 (commercial roadmap), #100–#103 (engine gaps from this matrix), #114–#119 (follow-on execution wave). Everything else closed with evidence — including #109: the CLI-contract dialog now carries the sync & license rows (`src/components/wanyrix/cli-dialog.tsx`, pinned by `tests/unit/cli-dialog-command-set.test.ts`). |
 | Known external blocker | GitHub Actions billing lock (CI/release cannot run user-side); cron webDevReview compensates locally. The #92 referee workflow has NEVER run on hosted runners — local-only validation, labeled as such in `docs/CLI.md`. |
 
 ## Critical chain status
@@ -79,8 +80,9 @@
 3. **R3 — Web/engine contract drift.** 🔶 **Partially mitigated.** PR #75
    wired git/impact/what-changed into the dashboard; the platform now serves
    23 versioned routes under `/api/wanyrix/*` mirroring CLI.md rows 1–23.
-   In-flight: #109 (CLI-contract dialog must expose the sync & license
-   command rows). Remaining watch item: every new engine surface must land
+   In-flight: none — #109 (CLI-contract dialog exposing the sync & license
+   command rows) shipped and is pinned by tests (`cli-dialog.tsx` rows +
+   `tests/unit/cli-dialog-command-set.test.ts`). Remaining watch item: every new engine surface must land
    with its web mirror in the same round.
 4. **R4 — Unverified UI quality claims.** ✅ **Mitigated.** PR #77 (issue
    #70) ran the agent-browser audit (desktop + 390px, dark/light); PR #99
@@ -132,7 +134,10 @@ via PR #92 (see matrix rows above).
   v0.9.0 → `35077c7`.
 - Counts measured on the derivation host: `wc -l engine/src/*.rs`,
   `find src/app/api -name "route.ts"`, `rg -c "id: '"` over the nav
-  registry, `bun test unit` (296 pass / 3 skip / 0 fail).
-- Engine test total (182) is cited from `engine/README.md` v0.9.0 with
-  attribution because the Rust toolchain was being reinstalled on the
-  derivation host at re-derivation time; it has NOT been re-measured here.
+  registry, `bun test` (584 across 33 files; 577 pass / 4 counted skip / 3
+  worktree-split fail — see Baseline).
+- Engine test total re-measured 2026-09-22 (AUD-7 drift pass):
+  `cd engine && cargo test --workspace --offline` → **302 passed / 0 failed /
+  2 ignored** (the opt-in `perf_probe` probes); the 182 figure quoted from
+  `engine/README.md` v0.9.0 in earlier passes predates the entitlement, gate
+  and stdin-shorthand suites.
