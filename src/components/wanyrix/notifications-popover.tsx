@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Bell, CheckCircle2, FlaskConical, GitPullRequest, HardDrive, Network, Stethoscope } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -23,6 +23,10 @@ import { cn } from '@/lib/utils'
  * use, so the list is honest per workspace: atlas has no running experiment,
  * helios has no merged-PR story, and the badge count moves when the engine
  * state moves. Nothing here is fabricated.
+ *
+ * Issue #99: the popover is a CONTROLLED component — selecting a signal
+ * closes it (like the command palette) instead of leaving it floating over
+ * the navigated-to view, and the app shell can open it with F8.
  */
 interface Signal {
   id: string
@@ -47,7 +51,20 @@ const TONE_TEXT: Record<Signal['tone'], string> = {
   emerald: 'text-emerald-300',
 }
 
-export function NotificationsPopover({ onNavigate }: { onNavigate: (v: ViewId) => void }) {
+export function NotificationsPopover({
+  onNavigate,
+  open: openProp,
+  onOpenChange,
+}: {
+  onNavigate: (v: ViewId) => void
+  /** controlled open state (app shell owns it so F8 can toggle the popover) */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = openProp ?? uncontrolledOpen
+  const setOpen = onOpenChange ?? setUncontrolledOpen
+
   const activeWs = useWorkspaceStore((s) => s.active)
   const { data: wsData } = useWorkspaces()
   /* issue #78: a failed/error-shaped registry response must never crash the
@@ -141,12 +158,12 @@ export function NotificationsPopover({ onNavigate }: { onNavigate: (v: ViewId) =
   }, [doctor.data, graph.data, pr.data, experiments.data, storage.data])
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           size="icon"
           variant="ghost"
-          className="relative size-8"
+          className="hit-44 relative size-8"
           aria-label={
             signals.length > 0
               ? `Notifications — ${signals.length} active engine signal${signals.length > 1 ? 's' : ''}`
@@ -200,7 +217,10 @@ export function NotificationsPopover({ onNavigate }: { onNavigate: (v: ViewId) =
                 <li key={s.id}>
                   <button
                     type="button"
-                    onClick={() => onNavigate(s.view)}
+                    onClick={() => {
+                      setOpen(false) // issue #99: close on selection — the palette closes too
+                      onNavigate(s.view)
+                    }}
                     className="group flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none"
                     style={{ animationDelay: `${i * 40}ms` }}
                   >
