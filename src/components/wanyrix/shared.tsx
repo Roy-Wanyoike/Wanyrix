@@ -87,6 +87,88 @@ export function MeasurementBadge({ status }: { status: MeasurementStatus }) {
   )
 }
 
+/**
+ * Workspace provenance (QA-5-B-4) — fixture-backed demo workspaces must never
+ * wear a LIVE badge. `fixtureOnly === true` (set by GET /api/wanyrix/workspaces,
+ * issue #129) ⇒ DEMO; anything else is engine-measured and may say LIVE.
+ * The style map lives beside the other badge maps so the badge-contrast
+ * regression test (tests/unit/badge-contrast.test.ts) covers it automatically.
+ */
+export const PROVENANCE_STYLES: Record<'fixture' | 'measured', string> = {
+  fixture: 'text-amber-800 dark:text-amber-300 bg-amber-500/10 border-amber-500/25',
+  measured: 'text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/25',
+}
+
+export type WorkspaceProvenance = keyof typeof PROVENANCE_STYLES
+
+/** Pure mapping — only an EXPLICIT `fixtureOnly: true` marks demo data. */
+export function workspaceProvenance(w: { fixtureOnly?: boolean }): WorkspaceProvenance {
+  return w.fixtureOnly === true ? 'fixture' : 'measured'
+}
+
+export function WorkspaceProvenanceBadge({
+  fixtureOnly,
+  className,
+}: {
+  fixtureOnly?: boolean
+  className?: string
+}) {
+  const kind = workspaceProvenance({ fixtureOnly })
+  const isFixture = kind === 'fixture'
+  return (
+    <span
+      title={isFixture ? 'synthetic demo data' : 'engine-measured workspace'}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-wide',
+        PROVENANCE_STYLES[kind],
+        className,
+      )}
+    >
+      {isFixture ? (
+        'demo'
+      ) : (
+        <>
+          <span className="size-1 animate-pulse rounded-full bg-emerald-400" aria-hidden />
+          live
+        </>
+      )}
+    </span>
+  )
+}
+
+/**
+ * Overview fixture banner (QA-5-B-4) — the 60-second first impression must
+ * state that the default workspaces are synthetic, with a path to real data.
+ * Rendered only when the ACTIVE workspace is a fixture (`fixtureOnly: true`).
+ */
+export function FixtureDataBanner({ onNavigateRepositories }: { onNavigateRepositories?: () => void }) {
+  return (
+    <div
+      role="note"
+      aria-label="Sample data notice"
+      className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/[0.08] px-3.5 py-2.5 text-amber-800 dark:text-amber-300 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="flex items-start gap-2 text-[12.5px] leading-snug">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <span>
+          <span className="font-semibold">Sample data</span> — you&rsquo;re viewing synthetic demo
+          data. Register a real workspace to see your own.
+        </span>
+      </p>
+      {onNavigateRepositories && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="shrink-0 gap-1.5 border-amber-500/40 text-amber-800 hover:bg-amber-500/10 dark:text-amber-300"
+          onClick={onNavigateRepositories}
+        >
+          Connect a local project →
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export function DeltaBadge({
   delta,
   suffix = '%',

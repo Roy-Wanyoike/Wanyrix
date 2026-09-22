@@ -167,6 +167,8 @@ const BADGES: BadgePair[] = [
   ...styleMap('MEASUREMENT_STYLES').map(([k, v]) => pairFrom('measurement', k, v)),
   ...styleMap('CONFIDENCE_STYLES').map(([k, v]) => pairFrom('confidence', k, v)),
   ...styleMap('SEVERITY_STYLES').map(([k, v]) => pairFrom('severity', k, v)),
+  // QA-5-B-4: the workspace provenance chips (demo data vs engine-measured)
+  ...styleMap('PROVENANCE_STYLES').map(([k, v]) => pairFrom('provenance', k, v)),
   ...(() => {
     const m = sharedTsx.match(/good\s*\?\s*'([^']+)'\s*:\s*'([^']+)'/)
     if (!m) throw new Error('DeltaBadge good/bad classes not found in shared.tsx')

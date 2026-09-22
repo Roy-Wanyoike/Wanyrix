@@ -27,6 +27,7 @@ import { ConnectProjectDialog } from './connect-project-dialog'
 import { NotificationsPopover } from './notifications-popover'
 import { CliContractDialog } from './cli-dialog'
 import { SystemStatusPill } from './system-status-pill'
+import { WorkspaceProvenanceBadge } from './shared'
 import { NAV_GROUPS, VIEW_TITLES } from './nav-registry'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -417,16 +418,9 @@ export function AppShell({
                         <span className="ml-1 font-mono text-[10px] text-muted-foreground">
                           {w.crates} crates
                         </span>
-                        {w.status === 'live' ? (
-                          <span className="ml-auto flex items-center gap-1 font-mono text-[9px] uppercase text-emerald-300">
-                            <span className="size-1 animate-pulse rounded-full bg-emerald-400" aria-hidden />
-                            live
-                          </span>
-                        ) : (
-                          <span className="ml-auto font-mono text-[9px] uppercase text-muted-foreground">
-                            archived
-                          </span>
-                        )}
+                        {/* QA-5-B-4: fixture workspaces are demo data — they are
+                            never badged LIVE (fixtureOnly comes from the API). */}
+                        <WorkspaceProvenanceBadge fixtureOnly={w.fixtureOnly} className="ml-auto" />
                       </span>
                     </SelectItem>
                   ))}

@@ -41,6 +41,7 @@ import {
 import { useWorkspaces } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import { NAV_ITEMS } from './nav-registry'
+import { WorkspaceProvenanceBadge } from './shared'
 import type { ViewId } from '@/lib/wanyrix/types'
 
 /* Navigation comes from ./nav-registry (AUDIT-I3) — same source as the
@@ -211,6 +212,9 @@ export function CommandPalette({
               <span className="font-mono text-[10px] text-muted-foreground">
                 {w.crates} crates · {w.findings} findings
               </span>
+              {/* QA-5-B-4: provenance travels with the option — fixtures are
+                  demo data, never LIVE (title carries the explanation). */}
+              <WorkspaceProvenanceBadge fixtureOnly={w.fixtureOnly} />
               {w.id === activeWs && (
                 <Check className="ml-auto size-3.5 text-emerald-400" aria-label="active" />
               )}

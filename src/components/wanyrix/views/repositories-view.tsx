@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 import {
   ArrowRight,
   CircleCheck,
-  CircleDashed,
   Database,
   GitBranch,
   RefreshCw,
@@ -25,7 +24,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useWorkspaces, useWorkspaceHealths } from '@/lib/wanyrix/hooks'
 import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import type { WorkspaceSummary } from '@/lib/wanyrix/types'
-import { CachedDataBanner, DataErrorPanel, ViewSkeleton } from '../shared'
+import { CachedDataBanner, DataErrorPanel, ViewSkeleton, WorkspaceProvenanceBadge } from '../shared'
 import type { ViewProps } from '../view-types'
 
 const WS_ACCENT: Record<WorkspaceSummary['accent'], string> = {
@@ -177,17 +176,9 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {w.status === 'live' ? (
-                        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase text-emerald-300">
-                          <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden />
-                          live
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-                          <CircleDashed className="size-3" aria-hidden />
-                          archived
-                        </span>
-                      )}
+                      {/* QA-5-B-4: fixture rows are demo data (amber DEMO chip),
+                          never the pulsing LIVE label — provenance from fixtureOnly. */}
+                      <WorkspaceProvenanceBadge fixtureOnly={w.fixtureOnly} />
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">{w.crates}</TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">{w.edges}</TableCell>
@@ -262,15 +253,7 @@ export default function RepositoriesView({ onNavigate }: ViewProps) {
                   </div>
                 </dl>
                 <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground/90">
-                  {w.status === 'live' ? (
-                    <>
-                      <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden /> live
-                    </>
-                  ) : (
-                    <>
-                      <CircleDashed className="size-3" aria-hidden /> archived
-                    </>
-                  )}
+                  <WorkspaceProvenanceBadge fixtureOnly={w.fixtureOnly} />
                   <span aria-hidden>·</span> {w.toolchain}
                 </p>
               </li>

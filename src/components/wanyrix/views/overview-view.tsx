@@ -51,6 +51,7 @@ import { useWorkspaceStore } from '@/lib/wanyrix/workspace-store'
 import type { ActivityEvent, GraphPayload, Severity } from '@/lib/wanyrix/types'
 import {
   CountUp,
+  FixtureDataBanner,
   KpiCard,
   MeasurementBadge,
   Panel,
@@ -682,6 +683,13 @@ function PromiseCards({ onNavigate }: ViewProps) {
 
 export default function OverviewView({ onNavigate }: ViewProps) {
   const { data: health, isLoading, isError, error, refetch } = useHealth()
+  /* QA-5-B-4: the Overview must say when the ACTIVE workspace is synthetic —
+     the demo fixtures ship `fixtureOnly: true` from the registry API. */
+  const workspacesQ = useWorkspaces()
+  const activeWs = useWorkspaceStore((s) => s.active)
+  const activeIsFixture = (workspacesQ.data?.workspaces ?? []).some(
+    (w) => w.id === activeWs && w.fixtureOnly === true,
+  )
 
   const findingTotal = useMemo(
     () => (health ? health.findingCounts.reduce((acc, f) => acc + f.count, 0) : 0),
@@ -706,6 +714,12 @@ export default function OverviewView({ onNavigate }: ViewProps) {
 
   return (
     <div className="space-y-6">
+      {/* QA-5-B-4: provenance banner comes FIRST — within 60 seconds the page
+          must say the data is sample data and offer the path to real data. */}
+      {activeIsFixture && (
+        <FixtureDataBanner onNavigateRepositories={() => onNavigate?.('repositories')} />
+      )}
+
       {/* ------------------------------------------------ 1) header */}
       <SectionHeading
         eyebrow="Engineering Health"
@@ -713,13 +727,24 @@ export default function OverviewView({ onNavigate }: ViewProps) {
         description={`${health.crates} crates · ${health.edges} edges · ${health.toolchain}`}
         actions={
           <>
-            <Badge
-              variant="outline"
-              className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-            >
-              <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-              scan live
-            </Badge>
+            {activeIsFixture ? (
+              <Badge
+                variant="outline"
+                title="synthetic demo data — not engine measurements"
+                className="gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+              >
+                <span className="size-1.5 rounded-full bg-amber-400" />
+                demo data
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+              >
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+                scan live
+              </Badge>
+            )}
             <span className="hidden font-mono text-[11px] text-muted-foreground md:inline">
               last scan {new Date(health.lastScan).toLocaleString()}
             </span>
@@ -981,7 +1006,7 @@ export default function OverviewView({ onNavigate }: ViewProps) {
             </Button>
           </Panel>
 
-          <Panel title="Live activity" subtitle="engine signals as they land" bodyClassName="max-h-[340px] overflow-y-auto" scrollableLabel="Live activity feed">
+          <Panel title="Activity feed" subtitle="latest workspace signals" bodyClassName="max-h-[340px] overflow-y-auto" scrollableLabel="Activity feed">
             <ol className="relative space-y-4">
               {health.activity.map((event, i) => {
                 const Icon = KIND_ICONS[event.kind]
