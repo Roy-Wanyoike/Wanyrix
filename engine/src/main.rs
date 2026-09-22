@@ -156,5 +156,6 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             json,
             pretty,
         } => cli::product_export_run(&path, out.as_deref(), &excludes, json, pretty),
+        Command::Sync { cmd } => cli::sync_run(cmd),
     }
 }

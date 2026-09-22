@@ -172,7 +172,12 @@ fn sha256(data: &[u8]) -> [u8; 32] {
 }
 
 /// Lowercase hex digest of the exact bytes.
-fn sha256_hex(data: &[u8]) -> String {
+///
+/// `pub` on purpose: the digest binding is a CONTRACT, not an internal —
+/// `sync` (issue #92) re-verifies registry content against the same
+/// digests, and registry editors/tests need the exact same function rather
+/// than a hand-rolled lookalike that could drift.
+pub fn sha256_hex(data: &[u8]) -> String {
     sha256(data).iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -224,51 +229,43 @@ fn write_file(path: &Path, bytes: &[u8]) -> Result<(), EngineError> {
     })
 }
 
-/// Serialize one envelope, write it as an artifact and record its digest
-/// binding in the manifest. The SAME serde structs the CLI prints — zero
-/// re-shaping drift between `doctor --json` and `export`.
-fn push_artifact<T: serde::Serialize>(
-    artifacts: &mut Vec<ExportArtifact>,
-    out_dir: &Path,
-    file: &str,
-    schema: &str,
-    value: &T,
-    pretty: bool,
-) -> Result<(), EngineError> {
-    let bytes = artifact_bytes(value, pretty)?;
-    write_file(&out_dir.join(file), &bytes)?;
-    artifacts.push(ExportArtifact {
-        file: file.to_owned(),
-        schema: schema.to_owned(),
-        bytes: bytes.len(),
-        sha256: sha256_hex(&bytes),
-    });
-    Ok(())
+/// One measured export pass held in memory: the sha256-bound manifest plus
+/// the EXACT bytes of every file the export would write (the three envelope
+/// artifacts, then `index.json` — pipeline order). Shared by `export_run`
+/// (writes them to disk) and `sync push` (commits them to the registry
+/// branch, issue #92), so both surfaces emit byte-identical artifacts from
+/// the same measured pipeline — zero re-shaping drift between export and
+/// sync.
+pub struct ExportBundle {
+    pub manifest: ExportManifest,
+    /// `(file name, exact bytes)` in pipeline order:
+    /// `doctor.json`, `graph.json`, `health.json`, `index.json`.
+    pub files: Vec<(String, Vec<u8>)>,
 }
 
-/// Run the export pipeline and return the manifest. Every step is
-/// measured or named — there is no partial success: either all three
-/// envelope artifacts + the manifest are written, or an error is returned
-/// and nothing pretends to have exported.
-pub fn export_run(
-    scan_path: &Path,
-    out: Option<&Path>,
-    excludes: &[String],
-    pretty: bool,
-) -> Result<(ExportManifest, std::path::PathBuf), EngineError> {
-    // Relative-paths-only contract (checked BEFORE touching the disk —
-    // an absolute --path would leak into every envelope's `root` field).
+/// The relative-paths-only contract (checked BEFORE touching the disk —
+/// an absolute --path would leak into every envelope's `root` field).
+fn validate_relative_scan_path(scan_path: &Path) -> Result<(), EngineError> {
     if scan_path.is_absolute() {
         return Err(EngineError::Export(format!(
             "--path {} is absolute; export measures RELATIVE paths only (run from the workspace root and pass e.g. --path engine) so no artifact can embed an absolute path",
             scan_path.display()
         )));
     }
-    let out_dir = resolve_out_dir(scan_path, out)?;
+    Ok(())
+}
 
-    // The measured input. A missing/unscannable workspace is a named
-    // refusal (PathNotFound / NoManifests / InvalidExclude) — export never
-    // fabricates an empty envelope for absent input.
+/// Measure the export bundle WITHOUT touching the disk (no directory is
+/// created, no file written). A missing/unscannable workspace is a named
+/// refusal (PathNotFound / NoManifests / InvalidExclude) — the pipeline
+/// never fabricates an empty envelope for absent input.
+pub fn export_bundle(
+    scan_path: &Path,
+    excludes: &[String],
+    pretty: bool,
+) -> Result<ExportBundle, EngineError> {
+    validate_relative_scan_path(scan_path)?;
+
     let mut scan = crate::cli::scan_excluding(scan_path, excludes)?;
     // Artifacts-as-code provenance: the envelopes echo the operator's
     // RELATIVE --path, not the machine-local canonical root the scan
@@ -290,40 +287,36 @@ pub fn export_run(
     let health =
         crate::report::health_report(&scan, &findings, &g, kpis, slowest, counts, insight, stamp);
 
-    // Write the artifacts (created last → create the dir first) and bind
-    // each one to its exact bytes in the manifest.
-    std::fs::create_dir_all(&out_dir).map_err(|e| {
-        EngineError::Export(format!(
-            "cannot create export directory {}: {e} (unwritable target — named, never silent)",
-            out_dir.display()
-        ))
-    })?;
-
     let mut artifacts = Vec::with_capacity(3);
-    push_artifact(
-        &mut artifacts,
-        &out_dir,
-        DOCTOR_ARTIFACT,
-        crate::report::DOCTOR_SCHEMA,
-        &doctor,
-        pretty,
-    )?;
-    push_artifact(
-        &mut artifacts,
-        &out_dir,
-        GRAPH_ARTIFACT,
-        crate::report::GRAPH_SCHEMA,
-        &graph,
-        pretty,
-    )?;
-    push_artifact(
-        &mut artifacts,
-        &out_dir,
-        HEALTH_ARTIFACT,
-        crate::report::HEALTH_SCHEMA,
-        &health,
-        pretty,
-    )?;
+    let mut files = Vec::with_capacity(4);
+    // Serialize the TYPED envelopes directly (struct declaration order IS
+    // the wire contract — `generatedAt` stays the last key). Round-tripping
+    // through serde_json::Value would alphabetize keys and change bytes.
+    for (file, schema, bytes) in [
+        (
+            DOCTOR_ARTIFACT,
+            crate::report::DOCTOR_SCHEMA,
+            artifact_bytes(&doctor, pretty)?,
+        ),
+        (
+            GRAPH_ARTIFACT,
+            crate::report::GRAPH_SCHEMA,
+            artifact_bytes(&graph, pretty)?,
+        ),
+        (
+            HEALTH_ARTIFACT,
+            crate::report::HEALTH_SCHEMA,
+            artifact_bytes(&health, pretty)?,
+        ),
+    ] {
+        files.push((file.to_owned(), bytes.clone()));
+        artifacts.push(ExportArtifact {
+            file: file.to_owned(),
+            schema: schema.to_owned(),
+            bytes: bytes.len(),
+            sha256: sha256_hex(&bytes),
+        });
+    }
 
     let manifest = ExportManifest {
         schema: EXPORT_SCHEMA.to_owned(),
@@ -333,14 +326,42 @@ pub fn export_run(
         artifacts,
         measurement: EXPORT_MEASUREMENT.to_owned(),
     };
-
-    // index.json — the same object the `--json` flavor prints (same flavor
-    // flag, so a fixed command re-runs byte-identical; the manifest is
-    // excluded from its own artifact list — nothing can self-digest).
     let manifest_bytes = artifact_bytes(&manifest, pretty)?;
-    write_file(&out_dir.join(MANIFEST_FILE), &manifest_bytes)?;
+    files.push((MANIFEST_FILE.to_owned(), manifest_bytes));
 
-    Ok((manifest, out_dir))
+    Ok(ExportBundle { manifest, files })
+}
+
+/// Run the export pipeline and return the manifest. Every step is
+/// measured or named — there is no partial success: either all three
+/// envelope artifacts + the manifest are written, or an error is returned
+/// and nothing pretends to have exported.
+pub fn export_run(
+    scan_path: &Path,
+    out: Option<&Path>,
+    excludes: &[String],
+    pretty: bool,
+) -> Result<(ExportManifest, std::path::PathBuf), EngineError> {
+    // Relative-paths-only contract first, then the out-dir refusal — the
+    // same error precedence the pre-bundle pipeline had.
+    validate_relative_scan_path(scan_path)?;
+    let out_dir = resolve_out_dir(scan_path, out)?;
+
+    let bundle = export_bundle(scan_path, excludes, pretty)?;
+
+    // Write the artifacts (created last → create the dir first) and bind
+    // each one to its exact bytes in the manifest.
+    std::fs::create_dir_all(&out_dir).map_err(|e| {
+        EngineError::Export(format!(
+            "cannot create export directory {}: {e} (unwritable target — named, never silent)",
+            out_dir.display()
+        ))
+    })?;
+    for (file, bytes) in &bundle.files {
+        write_file(&out_dir.join(file), bytes)?;
+    }
+
+    Ok((bundle.manifest, out_dir))
 }
 
 /// Human-readable summary (used when `--json` is absent). Deterministic;
