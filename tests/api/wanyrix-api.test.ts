@@ -24,11 +24,17 @@
  * blind. If the server is unreachable the suite skips with a clear message
  * (the runner itself has no hard dependency on the server).
  */
-import { describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect } from 'bun:test'
 import path from 'node:path'
+// AUD-4: test registration goes through the shared harness — counted, visibly
+// skipped when the dev server is absent, and a hard failure under
+// WANYRIX_REQUIRE_LIVE=1 (see tests/api/server-present.test.ts).
+import { BASE_URL, liveTestCount, makeGatedTest, serverUp, skipBanner, test } from './harness'
 
-const BASE_URL = process.env.WANYRIX_TEST_BASE_URL ?? 'http://localhost:3000'
 const FETCH_TIMEOUT_MS = 10_000
+// Registration baseline for this file's counted skip banner (printed at the
+// end of module scope when the server is absent).
+const liveBase = liveTestCount()
 
 // CWD-independent repo root (the suite must pass from any invocation dir —
 // e.g. `cd tests && bun test …` while the sandbox root is unhealthy).
@@ -57,36 +63,14 @@ function expectJson(res: JsonResponse): void {
   expect(res.body).not.toBeNull()
 }
 
-async function serverReachable(): Promise<boolean> {
-  // A few retries absorb transient dev-server recompile windows (parallel
-  // agents edit src/** while this suite runs). Connection refused / timeout
-  // over all attempts → genuinely unreachable.
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/wanyrix/workspaces`, {
-        signal: AbortSignal.timeout(3_000),
-      })
-      if (res.ok) return true
-    } catch {
-      // not reachable this attempt — retry
-    }
-    if (attempt < 4) await new Promise((r) => setTimeout(r, 1_500))
-  }
-  return false
-}
-
 /* ------------------------------------------------- server-dependent setup -- */
 
-const serverUp = await serverReachable()
+// serverUp comes from ./harness — probed once per run (with recompile-window
+// retries) and shared by every suite file in the process.
 
-if (!serverUp) {
-  console.warn(
-    `[wanyrix-api] dev server unreachable at ${BASE_URL} — skipping live API contract tests. ` +
-      'Start it with `bun run dev` (or point WANYRIX_TEST_BASE_URL elsewhere).',
-  )
-}
-
-const describeServer = describe.skipIf(!serverUp)
+/** The guard moved from describe-level to the per-test registration (harness
+ * `test`), so skipped cases stay counted and visible (AUD-4). */
+const describeServer = describe
 
 interface WorkspaceSummaryDto {
   id: string
@@ -135,7 +119,8 @@ if (serverUp && !SERVER_HAS_129_FIX) {
   )
 }
 
-const describe129 = describe.skipIf(!SERVER_HAS_129_FIX)
+const describe129 = describe
+const test129 = makeGatedTest(SERVER_HAS_129_FIX)
 
 /* -------------------------------------------------------------- contracts -- */
 
@@ -619,7 +604,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
   // Skipped (with a stated reason) when the server predates the #129 merge;
   // the same logic is proven server-free by tests/unit/wanyrix-workspace-param.test.ts.
 
-  test(`health happy path under BOTH spellings → 200 echoing ${PRIMARY_ID}`, async () => {
+  test129(`health happy path under BOTH spellings → 200 echoing ${PRIMARY_ID}`, async () => {
     for (const spelling of ['ws', 'workspace'] as const) {
       const res = await fetchJson(`/api/wanyrix/health?${spelling}=${encodeURIComponent(PRIMARY_ID)}`)
       expect(res.status).toBe(200)
@@ -628,7 +613,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
     }
   })
 
-  test('graph + doctor happy path under ?workspace= (the alias reaches the whole family)', async () => {
+  test129('graph + doctor happy path under ?workspace= (the alias reaches the whole family)', async () => {
     for (const route of ['graph', 'doctor']) {
       // NOTE: only some fixture routes echo the resolved id in the payload
       // (doctor does; graph's payload is the scoped graph itself). The honest
@@ -648,7 +633,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
     expect((doctor.body as { workspace?: string }).workspace).toBe(PRIMARY_ID)
   })
 
-  test(`health?workspace=${UNKNOWN_129} → 404 knownWorkspaces envelope (THE #129 bug: was 200 + default data)`, async () => {
+  test129(`health?workspace=${UNKNOWN_129} → 404 knownWorkspaces envelope (THE #129 bug: was 200 + default data)`, async () => {
     const res = await fetchJson(`/api/wanyrix/health?workspace=${encodeURIComponent(UNKNOWN_129)}`)
     expect(res.status).toBe(404)
     expectJson(res)
@@ -659,7 +644,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
     expect(body.workspace).toBeUndefined()
   })
 
-  test(`health 404 envelope is byte-identical under ?ws= and ?workspace=`, async () => {
+  test129(`health 404 envelope is byte-identical under ?ws= and ?workspace=`, async () => {
     for (const spelling of ['ws', 'workspace'] as const) {
       const res = await fetchJson(`/api/wanyrix/health?${spelling}=${encodeURIComponent(UNKNOWN_129)}`)
       expect(res.status).toBe(404)
@@ -669,7 +654,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
     }
   })
 
-  test('?workspace= unknown 404s across the fixture-scoped family (same envelope as ?ws=)', async () => {
+  test129('?workspace= unknown 404s across the fixture-scoped family (same envelope as ?ws=)', async () => {
     for (const route of ['doctor', 'graph', 'diagnostics', 'pr', 'experiments', 'report?format=json']) {
       const sep = route.includes('?') ? '&' : '?'
       const res = await fetchJson(`/api/wanyrix/${route}${sep}workspace=${encodeURIComponent(UNKNOWN_129)}`)
@@ -681,7 +666,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
     }
   })
 
-  test('precedence: both spellings present → ?ws= wins (documented canonical)', async () => {
+  test129('precedence: both spellings present → ?ws= wins (documented canonical)', async () => {
     const atlas = WS_IDS.find((id) => id !== PRIMARY_ID) ?? PRIMARY_ID
     const res = await fetchJson(
       `/api/wanyrix/health?ws=${encodeURIComponent(atlas)}&workspace=${encodeURIComponent(PRIMARY_ID)}`,
@@ -690,7 +675,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
     expect((res.body as { workspace?: string }).workspace).toBe(atlas)
   })
 
-  test('engine-exec family: unknown id 404s under BOTH spellings (engine/doctor accepts ?ws= now)', async () => {
+  test129('engine-exec family: unknown id 404s under BOTH spellings (engine/doctor accepts ?ws= now)', async () => {
     for (const spelling of ['ws', 'workspace'] as const) {
       const doc = await fetchJson(
         `/api/wanyrix/engine/doctor?${spelling}=${encodeURIComponent('ws-local-not-a-real-row-129')}`,
@@ -703,7 +688,7 @@ describe129('Wanyrix API — unified workspace-param contract (issue #129)', () 
     }
   })
 
-  test('GET /workspaces marks fixture ids fixtureOnly:true + serves execCapableIds (issue #129)', async () => {
+  test129('GET /workspaces marks fixture ids fixtureOnly:true + serves execCapableIds (issue #129)', async () => {
     const res = await fetchJson('/api/wanyrix/workspaces')
     expect(res.status).toBe(200)
     expectJson(res)
@@ -1325,3 +1310,8 @@ describeServer('Wanyrix API — engine change intelligence (issue #69)', () => {
     )
   })
 })
+
+// AUD-4 — counted skip banner: exact number of live cases this file skipped.
+// afterAll, not module scope: bun runs describe bodies at collection time
+// (after top-level evaluation), so the counted registration is only final here.
+if (!serverUp) afterAll(() => skipBanner('wanyrix-api.test.ts', liveBase))

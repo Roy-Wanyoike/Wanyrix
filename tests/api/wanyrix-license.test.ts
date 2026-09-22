@@ -27,13 +27,18 @@
  * `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3457 bun test`. Skips
  * honestly when the dev server is down.
  */
-import { describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+// AUD-4: test registration goes through the shared harness — counted, visibly
+// skipped when the dev server is absent, and a hard failure under
+// WANYRIX_REQUIRE_LIVE=1 (see tests/api/server-present.test.ts).
+import { BASE_URL, liveTestCount, makeGatedTest, serverUp, skipBanner, test } from './harness'
 
-const BASE_URL = process.env.WANYRIX_TEST_BASE_URL ?? 'http://localhost:3000'
 const FETCH_TIMEOUT_MS = 10_000
+// Registration baseline for this file's counted skip banner.
+const liveBase = liveTestCount()
 
 // CWD-independent repo root.
 const REPO_ROOT = path.resolve(import.meta.dir, '..', '..')
@@ -68,33 +73,12 @@ async function fetchJson(pathName: string, init?: RequestInit): Promise<JsonResp
   return { status: res.status, contentType, body, headers: res.headers }
 }
 
-async function serverReachable(): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/wanyrix/workspaces`, {
-        signal: AbortSignal.timeout(3_000),
-      })
-      if (res.ok) return true
-    } catch {
-      // not reachable this attempt — retry
-    }
-    if (attempt < 4) await new Promise((r) => setTimeout(r, 1_500))
-  }
-  return false
-}
-
 /* ------------------------------------------------- server-dependent setup -- */
 
-const serverUp = await serverReachable()
-
-if (!serverUp) {
-  console.warn(
-    `[wanyrix-license] dev server unreachable at ${BASE_URL} — skipping live license contract tests. ` +
-      'Start it with `bun run dev` (or point WANYRIX_TEST_BASE_URL elsewhere).',
-  )
-}
-
-const describeServer = describe.skipIf(!serverUp)
+// serverUp comes from ./harness — probed once per run and shared by every
+// suite file in the process. The guard lives in the per-test registration
+// (harness `test`), so skipped cases stay counted and visible (AUD-4).
+const describeServer = describe
 
 describeServer('license issue route — method guards', () => {
   for (const method of ['GET', 'PUT', 'DELETE', 'PATCH']) {
@@ -265,10 +249,11 @@ if (serverUp && !engineBinary) {
   console.warn('[wanyrix-license] engine binary not built — skipping the activate round-trip.')
 }
 
-const describeRoundTrip = describe.skipIf(!(serverUp && pubAvailable && engineBinary))
+const describeRoundTrip = describe
+const testRoundTrip = makeGatedTest(Boolean(serverUp && pubAvailable && engineBinary))
 
 describeRoundTrip('license issue route — issued token verifies OFFLINE (E1→E2 round trip)', () => {
-  test('wanyrix activate accepts the web-issued token and reports an active team entitlement', async () => {
+  testRoundTrip('wanyrix activate accepts the web-issued token and reports an active team entitlement', async () => {
     const { status, body } = await issueToken('trial')
     expect(status).toBe(200)
     const token = (body as unknown as IssuedBody).token
@@ -293,3 +278,8 @@ describeRoundTrip('license issue route — issued token verifies OFFLINE (E1→E
     }
   })
 })
+
+// AUD-4 — counted skip banner: exact number of live cases this file skipped.
+// afterAll, not module scope: bun runs describe bodies at collection time
+// (after top-level evaluation), so the counted registration is only final here.
+if (!serverUp) afterAll(() => skipBanner('wanyrix-license.test.ts', liveBase))

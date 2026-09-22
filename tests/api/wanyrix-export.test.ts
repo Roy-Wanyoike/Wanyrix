@@ -24,13 +24,18 @@
  * e.g. `cd tests && bun test api/wanyrix-export.test.ts`. Skips honestly
  * when the dev server (WANYRIX_TEST_BASE_URL, default :3000) is down.
  */
-import { describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect } from 'bun:test'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+// AUD-4: test registration goes through the shared harness — counted, visibly
+// skipped when the dev server is absent, and a hard failure under
+// WANYRIX_REQUIRE_LIVE=1 (see tests/api/server-present.test.ts).
+import { BASE_URL, liveTestCount, serverUp, skipBanner, test } from './harness'
 
-const BASE_URL = process.env.WANYRIX_TEST_BASE_URL ?? 'http://localhost:3000'
 const FETCH_TIMEOUT_MS = 10_000
+// Registration baseline for this file's counted skip banner.
+const liveBase = liveTestCount()
 
 // CWD-independent repo root (the suite must pass from any invocation dir).
 const REPO_ROOT = path.resolve(import.meta.dir, '..', '..')
@@ -56,31 +61,12 @@ function expectJson(res: JsonResponse): void {
   expect(res.body).not.toBeNull()
 }
 
-async function serverReachable(): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/wanyrix/workspaces`, {
-        signal: AbortSignal.timeout(3_000),
-      })
-      if (res.ok) return true
-    } catch {
-      // not reachable this attempt — retry
-    }
-    if (attempt < 4) await new Promise((r) => setTimeout(r, 1_500))
-  }
-  return false
-}
+/* ------------------------------------------------- server-dependent setup -- */
 
-const serverUp = await serverReachable()
-
-if (!serverUp) {
-  console.warn(
-    `[wanyrix-export] dev server unreachable at ${BASE_URL} — skipping live export contract tests. ` +
-      'Start it with `bun run dev` (or point WANYRIX_TEST_BASE_URL elsewhere).',
-  )
-}
-
-const describeServer = describe.skipIf(!serverUp)
+// serverUp comes from ./harness — probed once per run and shared by every
+// suite file in the process. The guard lives in the per-test registration
+// (harness `test`), so skipped cases stay counted and visible (AUD-4).
+const describeServer = describe
 
 interface ExportArtifactDto {
   file: string
@@ -237,3 +223,8 @@ describeServer('Wanyrix API — artifacts-as-code export (issue #91)', () => {
     )
   })
 })
+
+// AUD-4 — counted skip banner: exact number of live cases this file skipped.
+// afterAll, not module scope: bun runs describe bodies at collection time
+// (after top-level evaluation), so the counted registration is only final here.
+if (!serverUp) afterAll(() => skipBanner('wanyrix-export.test.ts', liveBase))

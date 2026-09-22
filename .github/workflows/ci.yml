@@ -6,6 +6,14 @@ name: CI
 # exactly one engine gate job, no duplicated identical jobs. This file
 # keeps the web platform job.
 
+# AUD-4 (vacuous-green guard): the live API contract suites in tests/api/
+# skip with a visible counted banner when the dev server is down — but a
+# gate run must never report green with zero route coverage. The live step
+# below exports WANYRIX_REQUIRE_LIVE=1, which turns "server absent" into a
+# hard failure (tests/api/server-present.test.ts), and the runner starts the
+# server itself first. Local gate runs: same flag, same semantics
+# (docs/DEVELOPMENT.md → Commands table).
+
 on:
   push:
     branches: [main]
@@ -32,8 +40,29 @@ jobs:
       - name: Typecheck
         run: bunx tsc --noEmit
 
-      - name: Unit + contract tests
-        run: bun run test
+      - name: Unit tests (server-free)
+        run: bun test tests/unit
+
+      # The durable scan-run sync (POST /api/wanyrix/scan-runs) needs a
+      # Prisma client + SQLite schema; the server then serves the optional
+      # durable log honestly (503 when unconfigured, never fabricated rows).
+      - name: Prepare database (durable scan-run sync)
+        run: |
+          bun run db:generate
+          bun run db:push
+
+      - name: Start dev server on :3000 (runner duty)
+        run: |
+          nohup bun run dev > /dev/null 2>&1 &
+          timeout 180 bash -c 'until curl -sf http://localhost:3000/api/wanyrix/workspaces > /dev/null 2>&1; do sleep 2; done'
+
+      # AUD-4 — live contract suite with the vacuous-green guard ON: if the
+      # server is absent this step goes RED instead of skipping everything.
+      - name: Live API contract suite (WANYRIX_REQUIRE_LIVE=1)
+        env:
+          WANYRIX_TEST_BASE_URL: http://localhost:3000
+          WANYRIX_REQUIRE_LIVE: '1'
+        run: bun test tests/api
 
       - name: Brand gate (legacy-token guard)
         run: bash scripts/check-branding.sh

@@ -20,14 +20,18 @@ semantics, honesty architecture); for workflow rules see
 | `bun run dev` | Next.js dev server on :3000, output tee'd to `dev.log` |
 | `bun run lint` | ESLint over the repo — must stay clean |
 | `bun run typecheck` | `tsc --noEmit` (scopes to product code + `tests/`; `examples/`/`skills/` scaffolding excluded) |
-| `bun run test` | full suite: unit + live API contract tests — **374 tests across 22 files** (370 pass / 4 skip with the dev server up; ~5 s, measured 2026-09-22 via `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test`) |
+| `bun run test` | full suite: unit + live API contract tests — **524 tests across 30 files** (523 pass / 1 skip with the dev server up; measured 2026-09-22 via `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test`) |
+| `WANYRIX_REQUIRE_LIVE=1 bun test tests/api` | **gate mode for the live API suite (AUD-4)** — an unreachable dev server FAILS with a named error (`tests/api/server-present.test.ts`) instead of skipping. Used by CI's live step and local gate runs. Without the flag, ad-hoc runs stay ergonomic: each live file prints a counted `SKIPPED (n) — server absent` banner |
 | `bun run build` / `bun run start` | production build + standalone server (not needed for day-to-day dev) |
 | `bash scripts/check-branding.sh` | brand gate — fails on unsanctioned legacy brand tokens (below) |
 | `bun run brand:assets` | regenerate raster brand assets (OG card, banner, icons) from `scripts/generate-brand-assets.mjs` |
 | `bun run db:push` | apply `prisma/schema.prisma` to the SQLite file — **required once** for the optional durable scan-run sync (see Environment below) |
 
-The API contract tests talk to a **live dev server** on :3000; if it is down the API
-suite skips itself with a clear message instead of failing (unit tests always run).
+The API contract tests talk to a **live dev server** on :3000. If it is down, each live
+file prints a counted `SKIPPED (n) — server absent` banner and the suite stays green —
+EXCEPT in gate mode (`WANYRIX_REQUIRE_LIVE=1`, exported by CI's live API step): then
+`tests/api/server-present.test.ts` FAILS with a named error, so a gate run can never go
+vacuously green with zero route coverage (AUD-4). Unit tests always run.
 
 ## Environment variables
 
@@ -52,7 +56,7 @@ Tree below is the complete file list (`ls tests/unit tests/api engine/tests/*.rs
 ```text
 tests/
   bun-env.d.ts                  # bun:test types
-  unit/                         # 19 files — `bun test unit`
+  unit/                         # 26 files — `bun test unit`
     badge-contrast.test.ts      # honesty-badge WCAG-AA contrast (computed, both themes)
     build-telemetry.test.ts     # build-telemetry store + estimated-range semantics
     client-export.test.ts       # in-app download exporters (markdown/CSV envelopes)
@@ -68,11 +72,15 @@ tests/
     palette-filter.test.ts      # command-palette filtering
     patch.test.ts               # Gate 19 new-proposal patch semantics
     register.test.ts            # workspace registration bridge behaviors
+    registered-workspaces.test.ts # merged workspace registry: registered rows first, fixtures after (QA-5-B-1)
     scan-runs.test.ts           # durable scan-run sync client (idempotent POST)
     simulator-intent.test.ts    # intent parsing + impact math invariants (monotonic, finite, always estimated)
     stores.test.ts              # zustand persist stores, offline behaviors
+    workspace-provenance.test.tsx # fixture/registered provenance badge honesty (QA-5-B-1/B-4)
     workspace-selector.test.ts  # workspace switcher behaviors
-  api/                          # 3 files — live contracts against :3000 (auto-skip if down)
+  api/                          # 4 files — live contracts against :3000 (counted skip when down; REQUIRE_LIVE=1 fails instead — AUD-4)
+    harness.ts                  # shared server probe + counted test registration (AUD-4)
+    server-present.test.ts      # vacuous-green gate: REQUIRE_LIVE=1 + server absent → red (AUD-4)
     wanyrix-api.test.ts         # 200 JSON shapes, 400/404/405/413, ws guard, flavors
     wanyrix-export.test.ts      # POST /api/wanyrix/export contract (PR #91)
     wanyrix-license.test.ts     # POST /api/wanyrix/license/issue contract (PR #94)
