@@ -69,11 +69,25 @@ describe('http-hygiene withNoStore', () => {
     }
   })
 
-  test('wrapper preserves the handler arity/signature shape', () => {
-    const inner = async (req: Request, ctx: { params: Promise<{ id: string }> }) =>
-      NextResponse.json({ ok: true })
+  test('wrapper forwards every handler argument verbatim and stamps the response', async () => {
+    // Arity preservation is the TYPE-level contract: `withNoStore` returns
+    // `(...args: A) => Promise<Response>`, so tsc rejects any handler/wrapper
+    // signature mismatch. (The JS `length` of the rest-args wrapper is 0 —
+    // asserting on it would pin an implementation artifact, not a contract.)
+    // The RUNTIME contract pinned here: every argument is forwarded verbatim.
+    const seen: unknown[] = []
+    const inner = async (...args: unknown[]) => {
+      seen.push(...args)
+      return NextResponse.json({ ok: true })
+    }
     const wrapped = withNoStore(inner)
-    expect(wrapped.length).toBe(inner.length)
+    const req = new Request('http://localhost/api/x')
+    const ctx = { params: Promise.resolve({ id: 'x' }) }
+    const res = await wrapped(req, ctx)
+    expect(seen.length).toBe(2)
+    expect(seen[0]).toBe(req)
+    expect(seen[1]).toBe(ctx)
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
   })
 })
 

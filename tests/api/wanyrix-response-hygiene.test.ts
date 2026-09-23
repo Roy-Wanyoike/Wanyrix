@@ -103,7 +103,6 @@ if (serverUp && !SERVER_HAS_141_HEADERS) {
   )
 }
 
-const describeNoStore = describe.skipIf(!SERVER_HAS_141_NO_STORE)
 const describeHeaders = describe.skipIf(!SERVER_HAS_141_HEADERS)
 
 /* ------------------------------------------------------------ helpers ---- */
