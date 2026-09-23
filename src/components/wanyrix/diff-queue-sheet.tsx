@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Check,
@@ -20,6 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { restoreFocusToTrigger } from './cli-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useDiffQueueStore, type DiffEntry } from '@/lib/wanyrix/diff-store'
 import {
@@ -231,12 +232,22 @@ export function DiffQueueSheet({
   const entries = useMemo(() => entriesMap[activeWs] ?? [], [entriesMap, activeWs])
   const pending = entries.filter((e) => e.status === 'pending')
   const resolved = entries.filter((e) => e.status !== 'pending')
+  /* issue #144 (D-2, same class as the finding sheet): opened by state from the
+     topbar "Pending diffs" button — no SheetTrigger, so Radix's default
+     close-focus landed on <body>. Capture the invoking control while it holds
+     focus (onOpenAutoFocus fires before Radix moves focus in) and restore it on
+     every close path via the #131 restoreFocusToTrigger contract. */
+  const invokeRef = useRef<HTMLElement | null>(null)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="flex w-full flex-col gap-0 border-border/80 bg-background p-0 sm:max-w-[560px]"
+        onOpenAutoFocus={() => {
+          invokeRef.current = document.activeElement as HTMLElement | null
+        }}
+        onCloseAutoFocus={(event) => restoreFocusToTrigger(event, invokeRef.current)}
       >
         <div className="rounded-lg bg-gradient-to-r from-amber-500/40 via-primary/30 to-amber-500/40 p-px">
           <SheetHeader className="gap-0 rounded-[calc(0.625rem-1px)] bg-card px-5 pb-4 pt-5 text-left">

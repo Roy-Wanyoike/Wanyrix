@@ -503,7 +503,7 @@ export function ScanHistoryPanel({
                       e.stopPropagation()
                       copyRunId(h.id)
                     }}
-                    className="rounded p-1 text-muted-foreground/90 opacity-0 transition-all hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    className="hit-44 relative rounded p-1 text-muted-foreground/90 opacity-0 transition-all hover:bg-muted/40 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                     aria-label={`Copy run id ${h.id}`}
                     title={h.id}
                   >

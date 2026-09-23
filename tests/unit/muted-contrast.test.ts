@@ -287,3 +287,72 @@ describe('CLI-contract dialog focus restoration (#131)', () => {
     expect(calls).toEqual([])
   })
 })
+
+/* --------------------------------------------- issue #144 a11y batch pins -- */
+
+describe('modal dialog semantics — aria-modal on both primitives (#144)', () => {
+  const sheetTsx = readFileSync(join(ROOT, 'src', 'components', 'ui', 'sheet.tsx'), 'utf8')
+  const dialogTsx = readFileSync(join(ROOT, 'src', 'components', 'ui', 'dialog.tsx'), 'utf8')
+
+  test('SheetContent announces aria-modal (Radix 1.1.15 omits it)', () => {
+    expect(sheetTsx).toMatch(/<SheetPrimitive\.Content\s+data-slot="sheet-content"\s+(?:\/\*[\s\S]*?\*\/\s*)?aria-modal=\{true\}/)
+  })
+
+  test('DialogContent announces aria-modal (Radix 1.1.15 omits it)', () => {
+    expect(dialogTsx).toMatch(/<DialogPrimitive\.Content\s+data-slot="dialog-content"\s+(?:\/\*[\s\S]*?\*\/\s*)?aria-modal=\{true\}/)
+  })
+
+  test('the 16px ✕ close controls carry hit-44 (44×44 touch target)', () => {
+    expect(sheetTsx).toMatch(/<SheetPrimitive\.Close className="hit-44 /)
+    expect(dialogTsx).toMatch(/className="hit-44 ring-offset-background/)
+  })
+})
+
+describe('finding + diff-queue sheets restore focus to their invoking control (#144 D-2)', () => {
+  for (const name of ['finding-sheet', 'diff-queue-sheet']) {
+    const tsx = readFileSync(join(ROOT, 'src', 'components', 'wanyrix', `${name}.tsx`), 'utf8')
+
+    test(`${name}: captures the invoking element on open (onOpenAutoFocus)`, () => {
+      expect(tsx).toMatch(/onOpenAutoFocus=\{\(\) => \{[\s\S]*?invokeRef\.current = document\.activeElement/)
+    })
+
+    test(`${name}: restores it on every close path (onCloseAutoFocus)`, () => {
+      expect(tsx).toMatch(/onCloseAutoFocus=\{\(event\) => restoreFocusToTrigger\(event, invokeRef\.current\)\}/)
+    })
+  }
+})
+
+describe('wayfinding captions — the /60 label variant is gone (#144 D-3)', () => {
+  const appShellTsx = readFileSync(join(ROOT, 'src', 'components', 'wanyrix', 'app-shell.tsx'), 'utf8')
+
+  test('no text-muted-foreground/60 usage remains in app-shell (mobile nav captions use the full token)', () => {
+    // The full token measures 8.0:1 on the dark chrome (canvas-measured) vs the
+    // /60 composite at 3.46:1 — the confirmed axe/QA failure class.
+    expect(appShellTsx).not.toMatch(/text-muted-foreground\/60/)
+  })
+
+  test('the mobile nav caption class is pinned to the full token', () => {
+    expect(appShellTsx).toMatch(
+      /font-mono text-\[9px\] uppercase tracking-\[0\.15em\] text-muted-foreground"/,
+    )
+  })
+})
+
+describe('icon-only controls carry the 44px hit-area contract (#144 D-5)', () => {
+  // Every interactive ICON-ONLY control in the topbar/panels resolves to a
+  // ≥44×44 effective hit area via the `.hit-44` pseudo-element utility
+  // (visual size preserved). The live census is re-measured in the browser;
+  // these source pins keep the named controls from regressing.
+  for (const rel of [
+    'wanyrix/system-status-pill.tsx',
+    'wanyrix/cli-dialog.tsx',
+    'wanyrix/change-intelligence-panel.tsx',
+    'wanyrix/scan-history.tsx',
+    'wanyrix/views/experiments-view.tsx',
+  ]) {
+    test(`${rel} uses hit-44`, () => {
+      const src = readFileSync(join(ROOT, 'src', 'components', rel), 'utf8')
+      expect(src).toMatch(/hit-44/)
+    })
+  }
+})

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Boxes,
@@ -37,6 +37,7 @@ import {
 import type { Finding, RemediationKind } from '@/lib/wanyrix/types'
 import { ConfidenceBadge, CountUp, MeasurementBadge, SeverityBadge } from './shared'
 import { ExplainDialog } from './explain-dialog'
+import { restoreFocusToTrigger } from './cli-dialog'
 
 const REMEDIATION_META: Record<RemediationKind, { icon: LucideIcon; label: string }> = {
   command: { icon: TerminalIcon, label: 'command' },
@@ -192,6 +193,13 @@ export function FindingSheet({
   const { toast } = useToast()
   const activeWs = useWorkspaceStore((s) => s.active)
   const enqueueDiff = useDiffQueueStore((s) => s.enqueue)
+  /* issue #144 (D-2): this sheet is opened by state, not SheetTrigger, so Radix
+     has no trigger registered and default close-focus landed on <body>. The
+     invoking element (the finding card — findings view AND doctor view) is
+     captured while it still holds focus, right as the sheet opens, and
+     onCloseAutoFocus hands focus back on EVERY close path (Escape / ✕ /
+     overlay). restoreFocusToTrigger is the #131 contract helper. */
+  const invokeRef = useRef<HTMLElement | null>(null)
   /* remediations that translate into a reviewable proposed change */
   const queueable = finding !== null && finding.remediationKind !== 'experiment' && finding.remediationKind !== 'architecture'
 
@@ -200,6 +208,11 @@ export function FindingSheet({
       <SheetContent
         side="right"
         className="w-full gap-0 border-border/80 bg-background p-0 sm:max-w-[460px]"
+        onOpenAutoFocus={() => {
+          /* capture the invoking control BEFORE Radix moves focus into the sheet */
+          invokeRef.current = document.activeElement as HTMLElement | null
+        }}
+        onCloseAutoFocus={(event) => restoreFocusToTrigger(event, invokeRef.current)}
       >
         {finding && RemMeta && (
           <>

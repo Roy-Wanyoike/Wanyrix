@@ -532,8 +532,11 @@ export function AppShell({
             {NAV.map((group, gi) => (
               <div key={group.group} className="flex shrink-0 items-center gap-1.5">
                 {gi > 0 && <span className="h-5 w-px shrink-0 bg-border/70" aria-hidden />}
+                {/* issue #144 (D-3): full token — the /60 step composited to
+                    3.46:1 over the dark chrome (measured), failing AA for 9px
+                    type; aria-hidden dims it for AT, not for low-vision eyes. */}
                 <span
-                  className="shrink-0 self-center font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground/60"
+                  className="shrink-0 self-center font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
                   aria-hidden
                 >
                   {group.group}

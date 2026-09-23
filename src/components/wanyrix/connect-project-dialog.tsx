@@ -313,7 +313,8 @@ export function ConnectProjectDialog({ trigger }: { trigger?: React.ReactNode })
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-7 shrink-0"
+                        /* issue #144 (D-5): 28px icon buttons → 44×44 hit area. */
+                        className="hit-44 size-7 shrink-0"
                         onClick={() => onScanNow(ws)}
                         disabled={rescan.isPending}
                         aria-label={`Scan ${ws.name} now with the real engine`}
@@ -328,7 +329,7 @@ export function ConnectProjectDialog({ trigger }: { trigger?: React.ReactNode })
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-7 shrink-0 text-muted-foreground hover:text-red-300"
+                        className="hit-44 size-7 shrink-0 text-muted-foreground hover:text-red-300"
                         onClick={() => onRemove(ws)}
                         disabled={unregister.isPending}
                         aria-label={`Remove ${ws.name} from connected projects`}
