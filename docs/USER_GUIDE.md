@@ -184,10 +184,10 @@ still be approval-gated.
 (Gate 21), and the AI layer is post-validated against exactly that rule.
 
 **Where does the engine live?** In this repo — `engine/` carries `wanyrix-engine` v0.9.0:
-the real Rust binary with 23 command surfaces (`doctor · graph · health · analyze ·
-dependencies · build · experiment · events · ai · git · impact · what-changed · export ·
-sync · activate · entitlement · license · store · daemon · telemetry · synth · init ·
-status`), documented command-by-command in [`docs/CLI.md`](CLI.md) and buildable with
+the real Rust binary with 25 command surfaces (`doctor · graph · health · analyze ·
+dependencies · build · experiment · events · ai · git · impact · what-changed · compare ·
+chain · export · sync · activate · entitlement · license · store · daemon · telemetry ·
+synth · init · status`), documented command-by-command in [`docs/CLI.md`](CLI.md) and buildable with
 `cd engine && cargo build --release`. The web platform mirrors the same versioned payloads
 over HTTP, and the in-app **CLI contract** dialog pins the command set, the flags, and the
 exit codes.

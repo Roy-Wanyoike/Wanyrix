@@ -45,16 +45,16 @@ Core differentiator — the **honesty architecture**:
 
 ## 3. What exists today (measured, in this repository)
 
-Measurement date: **2026-09-22** against the v0.9.0 tree.
+Measurement date: **2026-09-23** against the v0.9.0 tree at `cda2435` (both suites re-run same-checkout).
 
 | Component | State | Evidence |
 | --- | --- | --- |
-| Web platform (Next.js 16 + TS + Tailwind 4 + shadcn/ui) | Production-credible | 602 tests across 36 files — 0 fail / 4 counted skip / 0 product-defect fail (4,900+ `expect()` calls) — re-run 2026-09-22 against the live server; 19 views (`ViewId` registry in `src/lib/wanyrix/types.ts`); 23 `/api/wanyrix/*` route handlers (`find src/app/api -name route.ts`), exercised by live API-contract suites; browser-QA rounds M1–M9 |
-| Rust engine `wanyrix-engine` v0.9.0 (`engine/Cargo.toml`) | Shipped | 302 tests / 0 fail / 2 opt-in perf probes ignored (`cd engine && cargo test --workspace --offline`, measured 2026-09-22); real filesystem measurement behind `scan`/`doctor`/`graph`/`health`/`build`/`daemon`/`store`/`telemetry` surfaces, each emitting versioned JSON (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.build/v1`, `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, …) |
-| CLI binary `wanyrix` (shipped v0.8.0) | Shipped | 23-command surface + exit ladder (`0`/`2`, honest `101` broken-pipe note) pinned in `docs/CLI.md`; wired into the web platform via the workspace registration bridge and engine-exec routes |
+| Web platform (Next.js 16 + TS + Tailwind 4 + shadcn/ui) | Production-credible | 710 tests across 40 files — 706 pass / 4 counted skip / 0 product-defect fail (5,559 `expect()` calls) — re-run 2026-09-23 at `cda2435` against the live server; 19 views (`ViewId` registry in `src/lib/wanyrix/types.ts`); 23 `/api/wanyrix/*` route handlers (`find src/app/api -name route.ts`), exercised by live API-contract suites; browser-QA rounds M1–M9 |
+| Rust engine `wanyrix-engine` v0.9.0 (`engine/Cargo.toml`) | Shipped | 376 tests / 0 fail / 2 opt-in perf probes ignored (`cd engine && cargo test --workspace --offline`, re-measured 2026-09-23 at `cda2435`); real filesystem measurement behind `scan`/`doctor`/`graph`/`health`/`build`/`daemon`/`store`/`telemetry` surfaces, each emitting versioned JSON (`wanyrix.doctor/v1`, `wanyrix.graph/v1`, `wanyrix.build/v1`, `wanyrix.daemon/v1`, `wanyrix.telemetry/v1`, …) |
+| CLI binary `wanyrix` (shipped v0.8.0) | Shipped | 25-command surface + exit ladder (`0`/`2`/`141` — the `141` being the documented clean-stop EPIPE code) pinned in `docs/CLI.md`; wired into the web platform via the workspace registration bridge and engine-exec routes |
 | Engine daemon + SQLite store + telemetry ingestion | Shipped | `engine/src/{daemon,store,telemetry}.rs`; `wanyrix daemon start/call` (incremental analysis over a local socket), `wanyrix store init/save/list/fsck` (WAL-backed SQLite), `wanyrix telemetry ingest` (redacted rustc JSON) — documented in `engine/README.md` (v0.9.0) |
 | Offline entitlement layer | Shipped (sandbox-local) | ed25519 license issuance/activation (`engine/src/entitlement.rs`; `wanyrix license issue` / `activate` / `entitlement`; web Plans portal + `POST /api/wanyrix/license/issue`) — no payment method, never a simulated purchase (#94) |
-| Honest math core | Done | Graph aggregates (blast radius, fan-in/out, recompile sets) derived from a single edge list; byte-deterministic report flavors ×3 |
+| Honest math core | Done | Graph aggregates (blast radius, fan-in/out, recompile sets) derived from a single edge list; byte-deterministic report flavors ×4 (`report`, `markdown`, `release-scorecard`, `scan-history`) |
 | Grounded AI layer | Done | Server-rendered facts; model confined to isolated fields; grounding-violation stripping; 413 payload cap <10 ms |
 | Dual open-source license + public repo | Done | `MIT OR Apache-2.0` (`LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`; `engine/Cargo.toml`); public repo `github.com/Roy-Wanyoike/wanyrix` |
 | Product documentation set | Done | README, USER_GUIDE, ARCHITECTURE, CLI, W-EIR, SECURITY, PRIVACY, PERFORMANCE, DEVELOPMENT, CONTRIBUTING, COMMERCIAL + community/crates/open-source strategies |

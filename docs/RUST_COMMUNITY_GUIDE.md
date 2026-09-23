@@ -28,12 +28,12 @@ what a reader can reproduce today with [`README.md`](../README.md) ("Run locally
 
 | Surface | Status | Allowed in public material |
 | --- | --- | --- |
-| Web platform (19-view dashboard, 23 API routes, 602-test suite: 0 fail / 4 counted skip — measured 2026-09-22 via `bun test`) | **Shipped, verified** (gates green; browser-QA rounds M1–M9) | Real demo, screenshots, live walkthrough |
+| Web platform (19-view dashboard, 23 API routes, 710-test suite: 706 pass / 4 counted skip — measured 2026-09-23 at `cda2435` via `bun test`) | **Shipped, verified** (gates green; browser-QA rounds M1–M9) | Real demo, screenshots, live walkthrough |
 | Honesty architecture (Estimated ≠ Measured ≠ Verified, Gate 21) | **Shipped, test-enforced** | Core differentiator — show it |
 | Grounded AI (server-rendered FACT block, post-validated model output) | **Shipped, tested** | Show a real transcript ([README example](../README.md)) |
 | Versioned API flavors (`wanyrix.report/v1`, `wanyrix.scan-history/v1`, `wanyrix.release-scorecard/v1`) | **Shipped, pinned by tests** | Show as contract examples |
-| CLI (`wanyrix` binary) | **Shipped** — real binary since v0.8.0 (engine v0.9.0), 23-command surface + exit codes (`0`/`2`, honest `101` broken-pipe note) pinned in [`CLI.md`](CLI.md); `cargo install` from crates.io is **Roadmap** (publication plan in [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md)) | Demo the real binary from the repo; label crates.io install as Roadmap |
-| Rust engine | **Shipped** — `wanyrix-engine` v0.9.0 in-tree, wired into the web platform (workspace registration bridge + engine-exec routes); 302 tests / 0 fail (`cargo test --workspace --offline`, measured 2026-09-22) | Real engine demos on local workspaces (doctor/graph/impact/build); no perf claims without fresh measurements |
+| CLI (`wanyrix` binary) | **Shipped** — real binary since v0.8.0 (engine v0.9.0), 25-command surface + exit codes (`0`/`2`/`141` — the `141` being the documented clean-stop EPIPE code) pinned in [`CLI.md`](CLI.md); `cargo install` from crates.io is **Roadmap** (publication plan in [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md)) | Demo the real binary from the repo; label crates.io install as Roadmap |
+| Rust engine | **Shipped** — `wanyrix-engine` v0.9.0 in-tree, wired into the web platform (workspace registration bridge + engine-exec routes); 376 tests / 0 fail (`cargo test --workspace --offline`, measured 2026-09-23 at `cda2435`) | Real engine demos on local workspaces (doctor/graph/impact/build); no perf claims without fresh measurements |
 | Wanyrix Cloud / billing | **Designed, not built** ([`COMMERCIAL.md`](COMMERCIAL.md)) | Never demo or imply live |
 
 ## 2. Project introduction (the 30-second version)
@@ -153,7 +153,9 @@ RUNTIME evidence re-check — the same rule that applies internally.
 
 - The public roadmap is the README's Roadmap section (its shipped list and the
   ordered "next" bullets), with issue-level detail on the tracker (open:
-  #66, #100–#103, #114–119); items are either **shipped**,
+  #66, #101–#103, #114, #116–#118, #120, #121, #141, #148, #149, #150
+  — measured via the GitHub API 2026-09-23 at `cda2435`, excluding #145–#147
+  which the docs wave that added this list closes); items are either **shipped**,
   **in progress**, or **Roadmap** — nothing in between, no euphemisms.
 - Community feedback may reorder Roadmap items; it can never silently redefine what is
   already shipped.

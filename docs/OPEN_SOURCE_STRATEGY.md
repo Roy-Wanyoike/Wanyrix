@@ -45,7 +45,7 @@ NOTICE file remain open items (tracked with the governance bundle, #119).
 | Rust engine + analyzers + collectors | **Open** (dual) | **Shipped** — `wanyrix-engine` v0.9.0 in-tree (`engine/`), dual-licensed | Scrutiny of evidence collection is the product |
 | `wanyrix-protocol` / `wanyrix-core` / `wanyrix` CLI crates | **Open** (dual) | Publication plan in [`CRATES_IO_STRATEGY.md`](CRATES_IO_STRATEGY.md) | Reusable, contract-first, ecosystem-native |
 | W-EIR schema + versioned flavors (`wanyrix.report/v1`, …) | **Open**, spec-public | Shipped & test-pinned | Contract transparency prevents lock-in (COMMERCIAL: exports are not a lock-in format) |
-| Web platform (dashboard UI, API routes) | **Open** (dual) | Shipped, verified (602-test suite: 0 fail / 4 counted skip — measured 2026-09-22) | The demonstrator; runs locally, no telemetry |
+| Web platform (dashboard UI, API routes) | **Open** (dual) | Shipped, verified (710-test suite: 706 pass / 4 counted skip — measured 2026-09-23 at `cda2435`) | The demonstrator; runs locally, no telemetry |
 | Wanyrix Cloud (history sync, team dashboards, hosted AI) | **Proprietary** (service, not code) | Designed, not built (design-only: [`CLOUD_DESIGN.md`](CLOUD_DESIGN.md); the serverless sync rung — `wanyrix sync push\|pull` — is shipped) | The service is the product; the client stack it serves stays open |
 | Billing, entitlements, subscription engine | **Proprietary** | Designed (COMMERCIAL §39) | Inner-shell only; never touches the local core |
 | Enterprise delivery (SSO/SCIM glue, private deployment, SLAs, audit-log backend) | **Proprietary/commercial** | Roadmap (tier plan in [`COMMERCIAL.md`](COMMERCIAL.md)) | Deployment convenience and assurance, not analysis capability |
