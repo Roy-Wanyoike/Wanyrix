@@ -128,7 +128,8 @@ function CommandBlock({ commands }: { commands: string[] }) {
         variant="ghost"
         onClick={copy}
         aria-label="Copy commands"
-        className="absolute right-1.5 top-1.5 size-7 text-muted-foreground hover:text-foreground"
+        /* issue #144 (D-5): 28px icon button → 44×44 hit area, visual size kept. */
+        className="hit-44 absolute right-1.5 top-1.5 size-7 text-muted-foreground hover:text-foreground"
       >
         <Copy className="size-3.5" />
       </Button>

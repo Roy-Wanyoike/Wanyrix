@@ -48,7 +48,9 @@ export function SystemStatusPill({
       type="button"
       onClick={() => onNavigate?.('settings')}
       className={cn(
-        'flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-2.5 transition-colors hover:border-primary/30',
+        /* issue #144 (D-5): hit-44 — 32px pill keeps its visual size but gets a
+           44×44 touch target in the topbar. */
+        'hit-44 relative flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-2.5 transition-colors hover:border-primary/30',
         className,
       )}
       aria-label={`System status: ${connectLabel}, ${AI_LABEL[aiStatus]} — open Settings`}

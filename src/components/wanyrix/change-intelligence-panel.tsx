@@ -372,7 +372,8 @@ export function ChangeIntelligencePanel() {
           <Button
             size="icon"
             variant="outline"
-            className="size-8"
+            /* issue #144 (D-5): 32px icon button → 44×44 hit area. */
+            className="hit-44 size-8"
             onClick={refresh}
             disabled={busy}
             aria-label="Re-run the three engine change-intelligence commands"
