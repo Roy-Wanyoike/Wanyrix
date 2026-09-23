@@ -133,7 +133,7 @@ jobs:
       # 2. `cosign sign-blob` / `gpg --detach-sign` every archive + SHA256SUMS
       # 3. verify signatures in the install docs before any curl|sh story
       - name: Attach to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/**
