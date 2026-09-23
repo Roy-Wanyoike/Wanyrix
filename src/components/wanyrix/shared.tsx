@@ -360,7 +360,16 @@ export function SectionHeading({
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
         {description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && (
+        /* issue #138: the action cluster must be allowed to wrap its own
+           children — without flex-wrap its min-content width is the SUM of
+           every button, so on narrow viewports (375px, Builds · Doctor) the
+           nowrap Run button pushed the row past the viewport edge (378px
+           scrollWidth). flex-wrap + min-w-0 drops the min-content width to
+           the widest single child, so the cluster stacks gracefully; at sm+
+           there is room and nothing wraps (desktop layout untouched). */
+        <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>
+      )}
     </div>
   )
 }
