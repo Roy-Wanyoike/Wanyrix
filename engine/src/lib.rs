@@ -121,8 +121,8 @@ pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
 pub use build::{ArtifactRow, BuildOptions, BuildReport, BUILD_PROFILE, BUILD_SCHEMA};
-pub use compare::{CompareReport, COMPARE_SCHEMA};
 pub use chain::{ChainReport, CHAIN_SCHEMA};
+pub use compare::{CompareReport, COMPARE_SCHEMA};
 pub use entitlement::{
     EntitlementReport, EntitlementState, GateGrant, Plan, SignedToken, TokenPayload,
     ENTITLEMENT_SCHEMA, REVALIDATION_GRACE_DAYS, SURFACE_REGISTRY, TOKEN_SCHEMA,

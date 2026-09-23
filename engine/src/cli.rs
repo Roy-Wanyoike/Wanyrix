@@ -302,6 +302,12 @@ pub enum Command {
         /// The scan id to compare against the baseline.
         #[arg(long)]
         to: i64,
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
+    },
     /// Reconstruct the engineering-memory chain for the stored evidence
     /// (issue #100, wanyrix.chain/v1): scan → finding(s) → experiment(s) →
     /// measurement → verification verdict, joined READ-ONLY from the scan
@@ -1176,6 +1182,9 @@ pub fn compare_run(
         serialize_json(&report, pretty)
     } else {
         Ok(crate::compare::compare_human(&report))
+    }
+}
+
 /// Run `wanyrix chain` — the engineering-memory chain query (issue #100).
 /// Read-only: nothing is measured twice and nothing is written; the JSON
 /// flavor is the versioned `wanyrix.chain/v1` envelope, the default flavor
