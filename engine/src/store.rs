@@ -775,7 +775,7 @@ pub fn finding_occurrences(
     let conn = open_existing(db_path)?;
     let mut stmt = conn
         .prepare(
-            "SELECT s.id, s.workspace, s.started_at, s.finished_at, s.finding_count,
+            "SELECT s.id, s.workspace, s.finished_at, s.finding_count,
                     s.severity_critical, s.severity_warning, s.severity_info, s.schema_version,
                     f.finding_id, f.severity, f.title, f.evidence_json
              FROM findings f JOIN scans s ON s.id = f.scan_id

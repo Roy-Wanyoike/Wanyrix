@@ -768,12 +768,16 @@ mod tests {
 
     #[test]
     fn scan_scope_limits_the_chain_and_names_a_foreign_workspace() {
-        let (ws, db, scan_id, _) = seeded("scan-scope");
+        let (ws, db, scan_id, rows) = seeded("scan-scope");
         let r = chain_report(&ws, &db, None, Some(scan_id)).unwrap();
         assert_eq!(r.scope.mode, "scan");
         assert_eq!(r.scope.scan_id, Some(scan_id));
         assert_eq!(r.scans.len(), 1);
-        assert_eq!(r.scans[0].findings.len(), 4);
+        assert_eq!(
+            r.scans[0].findings.len(),
+            rows.len(),
+            "every stored finding of the scoped scan is in the chain"
+        );
 
         // A scan id that exists but belongs to another workspace.
         let other_ws = tempdir("scan-scope-other");
@@ -785,11 +789,20 @@ mod tests {
         let foreign_id = store::save(&db, &cli::serialize_json(&payload, false).unwrap())
             .unwrap()
             .scan_id;
-        let err = chain_report(&other_ws, &db, None, Some(foreign_id)).unwrap_err();
+        // The foreign scan is a VALID chain from its own workspace root —
+        // and a named refusal from the WRONG one (this chain is scoped to
+        // `ws`, the scan belongs to `other_ws`).
+        let own = chain_report(&other_ws, &db, None, Some(foreign_id)).unwrap();
+        assert_eq!(own.scope.scan_id, Some(foreign_id));
+        assert_eq!(own.workspace, other_ws.file_name().unwrap().to_str().unwrap());
+        let err = chain_report(&ws, &db, None, Some(foreign_id)).unwrap_err();
         let msg = err.to_string();
         assert!(
-            msg.contains(&format!("scan {foreign_id} belongs to workspace")),
-            "got: {msg}"
+            msg.contains(&format!("scan {foreign_id} belongs to workspace"))
+                && msg.contains(
+                    other_ws.file_name().unwrap().to_str().unwrap(),
+                ),
+            "the refusal names the owning workspace: {msg}"
         );
         std::fs::remove_dir_all(&ws).unwrap();
         std::fs::remove_dir_all(&other_ws).unwrap();
