@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import path from 'node:path'
 import { ENGINE_DIR, execEngine } from '@/lib/wanyrix/engine-exec'
+import { CRATE_PARAM_MAX_LENGTH, isValidCrateParam } from '@/lib/wanyrix/api'
 import {
   engineExitResponse,
   engineTimeoutResponse,
@@ -35,10 +36,13 @@ import {
  * `?ws=`) names a REGISTERED local project; absent → the repo engine crate.
  *
  * Error contract: 400 missing `crate` param (ENG-TCA-6b — client input
- * error) · 503 binary missing · 502 engine failure (the engine's named
- * "crate 'X' is not a workspace crate under <root>" is quoted verbatim in
- * `detail`) /unparseable/schema mismatch · 504 timeout · 404 unknown
- * workspace id · 405 wrong method (`Allow: GET`).
+ * error) · 400 invalid `crate` (issue #140 — the value must match
+ * `^[A-Za-z0-9_-]+$` BEFORE it reaches engine argv, so flag-shaped /
+ * whitespace / unicode values get a clean 400 instead of a 502 quoting an
+ * engine clap refusal) · 503 binary missing · 502 engine failure (the
+ * engine's named "crate 'X' is not a workspace crate under <root>" is
+ * quoted verbatim in `detail`) /unparseable/schema mismatch · 504 timeout ·
+ * 404 unknown workspace id · 405 wrong method (`Allow: GET`).
  */
 
 const SCHEMA = 'wanyrix.engine-exec/v1'
@@ -58,6 +62,23 @@ export async function GET(req: NextRequest) {
   if (crate === null || crate.trim() === '') {
     return NextResponse.json({ error: "missing required param 'crate'" }, { status: 400 })
   }
+  // Issue #140 — argv hygiene: the crate name is the ONLY request value that
+  // reaches engine argv verbatim (`impact --crate <value>`), so it must be a
+  // plausible crate name: `^[A-Za-z0-9_-]+$`, ≤64 chars (crates.io cap), and
+  // no leading `-` (a flag lookalike like `--version` is an argv token, never
+  // a crate name). Refuse everything else HERE with a named 400 — before the
+  // spawn — instead of surfacing the engine's clap exit as 502 noise.
+  // (execFile args-array discipline is unchanged; this is input validation,
+  // not shell-escaping.)
+  const crateName = crate.trim()
+  if (!isValidCrateParam(crateName)) {
+    return NextResponse.json(
+      {
+        error: `invalid crate '${crateName}' — must be a crate name: ^[A-Za-z0-9_-]+$, ≤${CRATE_PARAM_MAX_LENGTH} chars, no leading '-'`,
+      },
+      { status: 400 },
+    )
+  }
 
   const target = await resolveExecTarget(req, 'impact')
   if (target instanceof NextResponse) return target
@@ -69,7 +90,7 @@ export async function GET(req: NextRequest) {
   const run = await execEngine([
     'impact',
     '--crate',
-    crate.trim(),
+    crateName,
     '--path',
     target.targetPath,
     '--json',

@@ -8,7 +8,6 @@ import {
 import { isRegisteredWorkspaceId } from '@/lib/wanyrix/register'
 import { resolveScanRunWorkspace } from '@/lib/wanyrix/registered-workspace'
 import { isValidFindingIdList, FINDING_IDS_CAP } from '@/lib/wanyrix/finding-diff'
-import { WORKSPACES_DEFAULT } from '@/lib/wanyrix/data'
 
 /**
  * Server-side scan-run log — `wanyrix.scan-runs/v1`.
@@ -29,7 +28,10 @@ import { WORKSPACES_DEFAULT } from '@/lib/wanyrix/data'
  * it. The `wanyrix.scan-history/v1` report flavor remains a client-export
  * mirror and is unaffected (its server log stays empty by contract).
  *
- * Error contract (ENG-TCA series): unknown `ws`/`workspaceId` → 404
+ * Error contract (ENG-TCA series): missing/empty `ws` (GET) or `workspaceId`
+ * (POST) → 400 with the known-workspace guidance (issue #140 — a MISSING id is
+ * a client input error, never the old `unknown workspace 'undefined'` lookup
+ * and never a phantom `""` query); unknown `ws`/`workspaceId` → 404
  * `{ error, knownWorkspaces }` (never a silent substitution); malformed body
  * → 400 with a named reason; wrong methods → 405 carrying `Allow`.
  *
@@ -80,6 +82,26 @@ function unknownWorkspaceResponse(id: string, registeredIds: string[]): NextResp
   return NextResponse.json(
     { error: `unknown workspace '${id}'`, knownWorkspaces },
     { status: 404 },
+  )
+}
+
+/**
+ * Issue #140 — the named 400 for an absent/empty workspace id (query param
+ * `ws` on GET, body field `workspaceId` on POST). Same guidance envelope as
+ * the 404 family: the full registry, registered ids first (AUD-14 merge
+ * order). `''` counts as missing (#140: empty = absent — the old
+ * `raw ?? default` readers served a phantom `""` workspace instead).
+ */
+function missingWorkspaceResponse(param: 'ws' | 'workspaceId', registeredIds: string[]): NextResponse {
+  return NextResponse.json(
+    {
+      error:
+        param === 'ws'
+          ? 'workspace param is required — pass ?ws=<workspace id> (alias: ?workspace=)'
+          : 'workspaceId is required — a run must name the workspace it belongs to',
+      knownWorkspaces: [...registeredIds, ...WORKSPACE_IDS],
+    },
+    { status: 400 },
   )
 }
 
@@ -190,12 +212,16 @@ function toDto(r: {
 
 export async function GET(req: NextRequest) {
   const raw = workspaceParam(req)
-  let ws = raw ?? WORKSPACES_DEFAULT
-  if (raw !== null && raw !== '') {
-    const resolved = await resolveScanWorkspaceId(raw)
-    if ('error' in resolved) return resolved.error
-    ws = resolved.ws
+  if (raw === null || raw === '') {
+    // Issue #140: a missing/empty param is a named 400 — never a
+    // default-workspace substitution and never a phantom `""` DB query
+    // (the old `raw ?? WORKSPACES_DEFAULT` served workspace:"" for ?ws=).
+    const registeredIds = await registeredWorkspaceIds()
+    return missingWorkspaceResponse('ws', registeredIds ?? [])
   }
+  const resolved = await resolveScanWorkspaceId(raw)
+  if ('error' in resolved) return resolved.error
+  const ws = resolved.ws
 
   let rows: Awaited<ReturnType<typeof db.scanRun.findMany>> = []
   try {
@@ -246,13 +272,20 @@ export async function POST(req: NextRequest) {
   }
 
   const { workspaceId } = body
-  if (typeof workspaceId !== 'string' || !WORKSPACE_IDS.includes(workspaceId)) {
-    if (typeof workspaceId !== 'string') {
-      return NextResponse.json(
-        { error: `unknown workspace '${String(workspaceId)}'`, knownWorkspaces: WORKSPACE_IDS },
-        { status: 404 },
-      )
-    }
+  if (workspaceId === undefined || workspaceId === '') {
+    // Issue #140: a MISSING id is a client input error (named 400), not an
+    // unknown-workspace lookup — the old path answered 404 with the
+    // meaningless `unknown workspace 'undefined'` (String(undefined)).
+    const registeredIds = await registeredWorkspaceIds()
+    return missingWorkspaceResponse('workspaceId', registeredIds ?? [])
+  }
+  if (typeof workspaceId !== 'string') {
+    return NextResponse.json(
+      { error: `unknown workspace '${String(workspaceId)}'`, knownWorkspaces: WORKSPACE_IDS },
+      { status: 404 },
+    )
+  }
+  if (!WORKSPACE_IDS.includes(workspaceId)) {
     const resolved = await resolveScanWorkspaceId(workspaceId)
     if ('error' in resolved) return resolved.error
   }

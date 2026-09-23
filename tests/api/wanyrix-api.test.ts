@@ -304,7 +304,9 @@ describeServer('Wanyrix API — storage & report flavors', () => {
   })
 
   test('GET /api/wanyrix/report with unknown format → 400 JSON error (by design)', async () => {
-    const res = await fetchJson(`/api/wanyrix/report?format=yaml`)
+    // issue #140: ws is now REQUIRED — the param contracts below are exercised
+    // on top of a valid workspace (the phantom-default fallback is gone)
+    const res = await fetchJson(`/api/wanyrix/report?format=yaml&ws=${encodeURIComponent(PRIMARY_ID)}`)
     expect(res.status).toBe(400)
     expectJson(res)
     expect((res.body as { error: string }).error).toContain('unknown format')
@@ -371,7 +373,8 @@ describeServer('Wanyrix API — machine flavors over HTTP (ENG-TCA-2)', () => {
   })
 
   test('unknown flavor → 400 JSON error (by design); default report flavor unchanged', async () => {
-    const bad = await fetchJson(`/api/wanyrix/report?flavor=yaml`)
+    // issue #140: ws is now REQUIRED (explicit id — no phantom default)
+    const bad = await fetchJson(`/api/wanyrix/report?flavor=yaml&ws=${encodeURIComponent(PRIMARY_ID)}`)
     expect(bad.status).toBe(400)
     expectJson(bad)
     expect((bad.body as { error: string }).error).toContain("unknown flavor 'yaml'")
@@ -453,18 +456,21 @@ describeServer('Wanyrix API — graph aggregates reconcile with served edges ove
 
 describeServer('Wanyrix API — impact by-design error contracts', () => {
   test('unknown type → 400 JSON; unknown target → 404 JSON; missing target → 400 JSON (ENG-TCA-6b)', async () => {
-    const badType = await fetchJson('/api/wanyrix/impact?type=teleport')
+    // issue #140: ws is now REQUIRED on workspace-scoped routes — the type/
+    // target param contracts are exercised with an explicit valid ws (the
+    // registry-default fallback no longer exists to paper over a missing ws)
+    const badType = await fetchJson(`/api/wanyrix/impact?type=teleport&ws=${encodeURIComponent(PRIMARY_ID)}`)
     expect(badType.status).toBe(400)
     expectJson(badType)
     expect((badType.body as { error: string }).error).toContain("unknown type 'teleport'")
 
-    const badTarget = await fetchJson('/api/wanyrix/impact?type=edit-file&target=no/such/file.rs')
+    const badTarget = await fetchJson(`/api/wanyrix/impact?type=edit-file&target=no/such/file.rs&ws=${encodeURIComponent(PRIMARY_ID)}`)
     expect(badTarget.status).toBe(404)
     expectJson(badTarget)
     expect((badTarget.body as { error: string }).error).toContain('unknown target')
 
     // ENG-TCA-6b — a MISSING param is a client-input error (400), not 404
-    const missingTarget = await fetchJson('/api/wanyrix/impact?type=edit-file')
+    const missingTarget = await fetchJson(`/api/wanyrix/impact?type=edit-file&ws=${encodeURIComponent(PRIMARY_ID)}`)
     expect(missingTarget.status).toBe(400)
     expectJson(missingTarget)
     expect((missingTarget.body as { error: string }).error).toContain("'target'")
