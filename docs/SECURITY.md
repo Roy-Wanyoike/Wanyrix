@@ -3,8 +3,10 @@
 Scope: this repository (the Next.js web platform). Status: **local-first demonstrator**
 — the shipped threat surface is deliberately minimal, and this document states what is
 actually enforced in code today vs. what is **Roadmap**. See also
-[`docs/PRIVACY.md`](PRIVACY.md) (data flows) and the engine boundary section of [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
-(engine scope).
+[`docs/PRIVACY.md`](PRIVACY.md) (data flows), the engine boundary section of [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
+(engine scope), [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) (assets, trust boundaries,
+STRIDE-lite analysis — the governance-bundle companion to this document), and
+[`GOVERNANCE.md`](../GOVERNANCE.md) (who decides, conduct, release governance).
 
 ## 1. Authentication & authorization
 
@@ -26,21 +28,6 @@ actually enforced in code today vs. what is **Roadmap**. See also
   /api/wanyrix/storage/{rebuild,reclaim}` mutate in-process simulated state only.
   All durable writes land in the local SQLite file on the machine running the server —
   see [`docs/PRIVACY.md`](PRIVACY.md) for exactly what is stored.
-- **Network boundary (QA-3-B-1): the dev server binds loopback only.** The
-  `dev` script starts the server as `next dev -H 127.0.0.1 -p 3000`
-  (guarded in `package.json` by the `//` security-guard key directly above
-  `scripts`), so the unauthenticated surface above is reachable only from
-  the machine itself — matching the "local machine" wording used throughout
-  this document. Two honesty notes: (1) the binding is start-time config —
-  the dev server that was running when this fix landed had been started
-  from the pre-fix script and held the wildcard bind (`ss -tlnp` →
-  `*:3000`, measured 2026-09-22 before it was restarted); the loopback bind
-  is enforced from the first start AFTER this change. (2) The guarded
-  script is the enforced default — a deployment that starts the server
-  through any other harness must pass an equivalent loopback hostname, and
-  if it does not, the reachable set widens beyond what this document
-  claims. Production serving (`next start` of the standalone build) is out
-  of scope for the local-first demonstrator (Roadmap, §8).
 - `POST /explain` remains a pure reasoning endpoint that writes nothing. GET-only
   routes enforce method discipline: `POST/PUT/DELETE/PATCH` return `405` carrying the
   RFC 9110 `Allow` header (ENG-TCA-6a, ENG-TE-1).
@@ -54,7 +41,8 @@ actually enforced in code today vs. what is **Roadmap**. See also
   runtime — they are never embedded in source or shipped to the browser.
 - Checked by: `git check-ignore .env` → ignored, and review of tracked files (only the
   placeholder `.env.example` is committed); a dedicated secret-scanning CI job is
-  **Roadmap**.
+  **Roadmap** — delivery (gitleaks-class config carrying the billing-locked honesty
+  label) is tracked in #149 and mapped in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6.
 
 ## 3. Input validation (defense in depth on every route)
 
@@ -66,20 +54,9 @@ actually enforced in code today vs. what is **Roadmap**. See also
 | Enum params | `/impact` `type`, `/report` `format` + `flavor` | unknown value → `400` naming valid values |
 | Payload caps | `/explain` rejects bodies > 256 KB via `content-length` **and** actual byte count, before parsing or provider work | `413` in ~5 ms (measured — `docs/PERFORMANCE.md`); prompt context truncated at 48,000 chars with `contextTruncated` flag |
 | Method discipline | 405 responses carry the RFC 9110 `Allow` header (ENG-TCA-6a, ENG-TE-1) | clients can discover the correct method |
-| Workspace root confinement | `validateRegistrationPath` (`src/lib/wanyrix/register.ts`) on `POST /workspaces`, applied AFTER the absolute/stat/is-directory/basename validation layers: the realpath-resolved candidate must sit inside an approved root — `WANYRIX_WORKSPACE_ROOTS` (path-delimiter-separated absolute dirs) or, when unset, the documented defaults (this repo's `engine/` + `fixtures/` directories and the system temp dir) | outside roots → `400 path is outside the allowed workspace roots…` (one generic refusal naming the env remedy — no resolved-path echo, no existence information); a contained candidate that is not a scannable Rust project (missing / not a directory / no marker) → `404` with ONE shared message, specific reason server-log only — response differentials cannot enumerate the filesystem (QA-3-B-2) |
 
-There are no SQL or shell inputs: routes read fixture data by id through typed
-getters, and the engine is spawned shell-free (`execFile` + argv array — no
-shell interpolation, no `spawn` with a command string). **One validated user
-string does become a filesystem path**, and this section states it precisely
-(the earlier blanket claim that "no user string is ever used as a file path"
-was contradicted by the QA-3 security audit and is superseded here):
-`POST /api/wanyrix/workspaces` accepts a caller-supplied project directory and
-passes it — only after the validation and workspace-root confinement layers
-above — as the engine's `--path` argv value. It never passes through a shell,
-the route never writes to that path (the engine scan is read-only), and any
-other route uses only ids resolved against the registry or the fixture data,
-never caller-supplied paths.
+There are no SQL, shell, or path-traversal inputs: routes read fixture data by id
+through typed getters; no user string is ever used as a file path or query.
 
 ## 4. XSS posture
 
@@ -114,7 +91,10 @@ never caller-supplied paths.
   Honesty note: the repository's hosted Actions runners are billing-locked (documented
   in the `wanyrix.yml` honesty label) — hosted run records exist but no job steps have
   executed, so these gates are validated locally, not on hosted runners. Renovate /
-  Dependabot: **Roadmap** (not configured).
+  Dependabot dependency-update automation: **tracked in #149** (`.github/dependabot.yml`
+  for cargo + npm + github-actions ecosystems, plus the secret-scanning workflow —
+  governance mapping in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6; this section
+  records the posture, the owning issue owns the config).
 
 ## 6. AI / sandbox data boundaries
 
@@ -150,31 +130,49 @@ never caller-supplied paths.
 
 ## 8. Roadmap (not implemented — do not assume otherwise)
 
-- **THREAT_MODEL.md** and a formal trust-boundary review (the posture above is the
-  current informal equivalent).
-- SAST/DAST and secret-scanning in CI (CI itself exists — see §5; these deeper gates
-  are not wired yet).
-- Renovate/Dependabot dependency-update automation (SBOM + cargo-audit already ship in
-  `release.yml`; see §5).
-- Signed releases and provenance attestation: `release.yml` deliberately stops short of
-  artifact signing — it stages binaries, SBOM, advisory audit, and checksums so signing
-  is the only remaining step (requires maintainer secrets).
-- Authentication, multi-tenancy, plugin sandboxing (hosted-cloud and plugin
-  roadmap — design-only directions in `docs/CLOUD_DESIGN.md` and
-  `docs/PLUGIN_AND_EVENTS.md`; nothing implemented).
-- GitHub **private vulnerability reporting**: planned, tracked in the governance bundle
-  (#119) — **not enabled yet**; do not assume a private channel exists (see Reporting).
+- **THREAT_MODEL.md — drafted (governance bundle, #119):**
+  [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) walks assets, trust boundaries, and a
+  STRIDE-lite analysis with evidence links and review triggers; the informal posture
+  above remains the control surface it references. A *formal* trust-boundary review
+  (method-certified) is still roadmap.
+- **SAST/DAST and secret-scanning in CI** (CI itself exists — see §5): the planned
+  tooling map (gitleaks-class secret scanning, dependabot, CodeQL/Semgrep-class SAST,
+  route-contract fuzzing as the DAST seed) lives in
+  [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6 — secret scanning + dependency
+  automation land via **#149** (config belongs to that issue, not here); SAST/DAST
+  stay roadmap until a hosted runner unlocks (§4.5 of the threat model records the
+  billing-locked evidence gap).
+- **Signed releases and provenance attestation**: `release.yml` deliberately stops
+  short of artifact signing — it stages binaries, SBOM, advisory audit, and checksums
+  so signing is the only remaining step (requires maintainer secrets; the staged
+  checklist is in `release.yml` and [`docs/RELEASE_RUNBOOK.md`](RELEASE_RUNBOOK.md) §5).
+- Authentication, multi-tenancy, plugin sandboxing (Phases 13–14 — roadmap).
+- GitHub **private vulnerability reporting**: **enabled (2026-09-22, maintainer
+  action completed as part of #119)** — the private channel is live (see Reporting).
+  The remaining reporting gap is process maturity (response SLAs are best-effort
+  single-maintainer), not channel availability.
 
 ## Reporting
 
 The repository is public (`github.com/Roy-Wanyoike/wanyrix`) with an open issue
 tracker: ordinary bugs — including security-relevant ones that are safe to disclose —
-can be filed as GitHub issues. For findings you prefer **not** to disclose publicly,
-GitHub's private vulnerability reporting is the intended channel once enabled:
-enabling it is planned and tracked in the governance bundle (#119) — **it is not
-enabled yet**, so please do not assume a private channel exists. Either way, include
-reproduction steps and the affected surface (API route / CLI command / engine
-behavior); process context in [`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
+can be filed as GitHub issues.
+
+**Private channel (enabled 2026-09-22):** for findings you prefer **not** to disclose
+publicly, use GitHub's **private vulnerability reporting** —
+`Security` → `Report a vulnerability` on the repository, or
+<https://github.com/Roy-Wanyoike/wanyrix/security/advisories/new>. It was enabled by
+the maintainer as part of the governance bundle (#119); before that date no private
+channel existed (issues were the only path).
+
+**Process (honest, current scale):** include reproduction steps and the affected
+surface (API route / CLI command / engine behavior). Reports are acknowledged,
+assessed against [`docs/THREAT_MODEL.md`](THREAT_MODEL.md), and fixed with a named
+advisory; coordinated disclosure is the default and reporters are credited on request.
+There is **no formal response SLA yet** — the project is in the single-maintainer
+phase ([`GOVERNANCE.md`](../GOVERNANCE.md)); treat response time as best-effort
+community effort, and say so when a report needs an ETA. Process context in
+[`docs/CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## 9. Adversarial input fixtures (engine, issue #71)
 
