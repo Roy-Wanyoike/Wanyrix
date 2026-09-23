@@ -607,7 +607,13 @@ export default function DoctorView({ onNavigate }: ViewProps) {
               className="gap-2"
             >
               <RefreshCw className={`size-4 ${!scanDone ? 'animate-spin' : ''}`} />
-              Run wanyrix doctor
+              {/* issue #138: the Button base class is whitespace-nowrap + shrink-0,
+                  so the full label is the widest unbreakable child of the header
+                  action cluster. On <sm viewports the CTA carries the short label
+                  (display:none spans are excluded from the accessible name), sm+
+                  keeps the full label — desktop layout untouched. */}
+              <span className="sm:hidden">Run doctor</span>
+              <span className="hidden sm:inline">Run wanyrix doctor</span>
             </Button>
           </>
         }

@@ -303,3 +303,177 @@ describe('explain grounding — full #130 pipeline (browser-QA regression)', () 
     expect(rendered).not.toMatch(/\+—/)
   })
 })
+
+/* ==========================================================================
+ * Issue #137 — provider prose unit drift. The #130 aligner only matched the
+ * "ms" token, so word-form durations ("4 minutes", "2.5 hours") survived
+ * grounding whenever their bare number was grounded by an unrelated fact
+ * ("4 downstream crates"). Browser-QA (wave 1, qa-ux) reproduced this with
+ * the shipped functions: minutes prose in, minutes prose out, 0 violations —
+ * while every app surface renders seconds. The extended normalizeGroundedUnits
+ * contract pinned below:
+ *   - evidence states the exact seconds value → convert ("2 minutes" over
+ *     "save 120s per run" → "120s");
+ *   - bare number grounded → unit relabel, number untouched ("4 minutes" →
+ *     "4s", the same rule the ms path has always used);
+ *   - neither → left verbatim for validateModelGrounding to redact;
+ *   - the corpus itself speaking in minutes ("3 minutes" heuristic budget)
+ *     survives verbatim — the evidence is the unit authority;
+ *   - compact compounds ("14m12s", "1h5m") convert only to an
+ *     evidence-stated total.
+ * ======================================================================== */
+
+/** The exact QA repro corpus: seconds-only evidence; the bare 4 is grounded by "4 downstream crates". */
+const QA_MINUTES_CORPUS = [
+  'critical path 50.0s',
+  'common-runtime 18.3s',
+  'api 12.7s',
+  '4 downstream crates',
+  '2 upgrade scenarios',
+  'save 120s per run',
+].join('\n')
+
+const QA_MINUTES_SECTIONS = {
+  commentary: 'The full build takes about 4 minutes end to end.',
+  inference: '',
+  recommendation: 'Warm the cache to save 2 minutes per run.',
+  uncertainty: '',
+}
+
+describe('explain grounding — normalizeGroundedUnits word durations (issue #137)', () => {
+  test('the exact QA repro: minutes prose no longer survives a seconds-only corpus', () => {
+    const { sections: aligned, relabels } = normalizeGroundedUnits(QA_MINUTES_SECTIONS, QA_MINUTES_CORPUS)
+    // "2 minutes" = 120s and the evidence states exactly that value → converted
+    expect(aligned.recommendation).toBe('Warm the cache to save 120s per run.')
+    // "4 minutes" = 240s is NOT in the evidence, but the bare 4 is → unit relabel, number untouched
+    expect(aligned.commentary).toBe('The full build takes about 4s end to end.')
+    expect(relabels).toEqual([
+      { field: 'commentary', from: '4 minutes', to: '4s' },
+      { field: 'recommendation', from: '2 minutes', to: '120s' },
+    ])
+  })
+
+  test('the aligned QA prose passes validation with zero violations (the #137 leak is closed)', () => {
+    const { sections: aligned } = normalizeGroundedUnits(QA_MINUTES_SECTIONS, QA_MINUTES_CORPUS)
+    expect(validateModelGrounding(aligned, QA_MINUTES_CORPUS)).toEqual([])
+    expect(`${aligned.commentary} ${aligned.recommendation}`).not.toMatch(/\bminutes?\b/)
+  })
+
+  test('hours prose converts when the evidence states the seconds value', () => {
+    const corpus = 'cold ci: 7200s worst case on this runner'
+    const { sections: aligned, relabels } = normalizeGroundedUnits(
+      { commentary: '', inference: 'cold CI can take 2 hours', recommendation: '', uncertainty: '' },
+      corpus,
+    )
+    expect(aligned.inference).toBe('cold CI can take 7200s')
+    expect(relabels).toEqual([{ field: 'inference', from: '2 hours', to: '7200s' }])
+    expect(validateModelGrounding(aligned, corpus)).toEqual([])
+  })
+
+  test('seconds prose is compacted to the canonical Ns form when grounded', () => {
+    const corpus = 'warm incremental run: 30s median'
+    const { sections: aligned, relabels } = normalizeGroundedUnits(
+      { commentary: '', inference: '', recommendation: 'keep the median warm run at 30 seconds', uncertainty: '' },
+      corpus,
+    )
+    expect(aligned.recommendation).toBe('keep the median warm run at 30s')
+    expect(relabels).toEqual([{ field: 'recommendation', from: '30 seconds', to: '30s' }])
+  })
+
+  test('a duration the corpus itself states verbatim survives (evidence is the unit authority)', () => {
+    const corpus = 'heuristic: budget 3 minutes per run\n4 downstream crates'
+    const sections = {
+      commentary: '',
+      inference: '',
+      recommendation: 'stay inside the 3 minutes per run budget',
+      uncertainty: '',
+    }
+    const { sections: aligned, relabels } = normalizeGroundedUnits(sections, corpus)
+    expect(aligned.recommendation).toBe('stay inside the 3 minutes per run budget')
+    expect(relabels).toEqual([])
+    expect(validateModelGrounding(aligned, corpus)).toEqual([])
+  })
+
+  test('ungrounded minute claims are never blessed with a unit — left for the validator to redact', () => {
+    const sections = {
+      commentary: '',
+      inference: 'the nightly clean build takes 9 minutes',
+      recommendation: '',
+      uncertainty: '',
+    }
+    const { sections: aligned, relabels } = normalizeGroundedUnits(sections, QA_MINUTES_CORPUS)
+    expect(aligned.inference).toBe('the nightly clean build takes 9 minutes')
+    expect(relabels).toEqual([])
+    expect(validateModelGrounding(aligned, QA_MINUTES_CORPUS).some((v) => v.kind === 'number' && v.token === '9')).toBe(true)
+  })
+
+  test('compact compound durations ("14m12s" P4 nit) convert to an evidence-stated total', () => {
+    const corpus = 'cold ci start measured 852s on this runner'
+    const { sections: aligned, relabels } = normalizeGroundedUnits(
+      { commentary: '', inference: 'cold start took 14m12s', recommendation: '', uncertainty: '' },
+      corpus,
+    )
+    expect(aligned.inference).toBe('cold start took 852s')
+    expect(relabels).toEqual([{ field: 'inference', from: '14m12s', to: '852s' }])
+    expect(validateModelGrounding(aligned, corpus)).toEqual([])
+  })
+
+  test('compact compounds with hours convert too ("1h5m")', () => {
+    const corpus = 'maintenance window: 3900s'
+    const { sections: aligned, relabels } = normalizeGroundedUnits(
+      { commentary: '', inference: '', recommendation: 'schedule maintenance runs 1h5m long', uncertainty: '' },
+      corpus,
+    )
+    expect(aligned.recommendation).toBe('schedule maintenance runs 3900s long')
+    expect(relabels).toEqual([{ field: 'recommendation', from: '1h5m', to: '3900s' }])
+  })
+
+  test('an unevidenced compound stays verbatim for the validator (no invented totals)', () => {
+    const { sections: aligned, relabels } = normalizeGroundedUnits(
+      { commentary: '', inference: 'cold start took 14m12s', recommendation: '', uncertainty: '' },
+      QA_MINUTES_CORPUS,
+    )
+    expect(aligned.inference).toBe('cold start took 14m12s')
+    expect(relabels).toEqual([])
+    expect(validateModelGrounding(aligned, QA_MINUTES_CORPUS).some((v) => v.kind === 'number' && v.token === '14')).toBe(true)
+  })
+
+  test('mixed corpus: stated ms stays ms, stated minutes stay minutes, drifted minutes get relabeled', () => {
+    const corpus = [
+      'gate measured: startup 84ms',
+      'critical path 50.0s',
+      'heuristic: budget 3 minutes per run',
+      '4 downstream crates',
+    ].join('\n')
+    const { sections: aligned, relabels } = normalizeGroundedUnits(
+      {
+        commentary: 'startup 84ms, critical path 50.0s, budget 3 minutes, plus 4 minutes wasted',
+        inference: '',
+        recommendation: '',
+        uncertainty: '',
+      },
+      corpus,
+    )
+    expect(aligned.commentary).toBe('startup 84ms, critical path 50.0s, budget 3 minutes, plus 4s wasted')
+    expect(relabels).toEqual([{ field: 'commentary', from: '4 minutes', to: '4s' }])
+    expect(validateModelGrounding(aligned, corpus)).toEqual([])
+  })
+
+  test('full pipeline: every word-unit claim ends canonical or redacted — never minutes prose', () => {
+    const sections = {
+      commentary: 'The full build takes about 4 minutes end to end.',
+      inference: 'the nightly clean build takes 9 minutes',
+      recommendation: 'Warm the cache to save 2 minutes per run.',
+      uncertainty: '',
+    }
+    const aligned = normalizeGroundedUnits(sections, QA_MINUTES_CORPUS)
+    const violations = validateModelGrounding(aligned.sections, QA_MINUTES_CORPUS)
+    const redacted = redactViolations(aligned.sections, violations)
+    // normalization output carries no drifting word units
+    expect(`${aligned.sections.commentary} ${aligned.sections.recommendation}`).not.toMatch(/\bminutes?\b/)
+    // the one ungrounded claim was flagged and removed in place
+    expect(violations.some((v) => v.kind === 'number' && v.token === '9')).toBe(true)
+    expect(redacted.inference).toContain(GROUNDING_REDACTED_TOKEN)
+    expect(aligned.relabels.map((r) => `${r.from}→${r.to}`)).toEqual(['4 minutes→4s', '2 minutes→120s'])
+  })
+})

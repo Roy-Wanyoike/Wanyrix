@@ -669,19 +669,71 @@ export interface UnitRelabel {
 const MS_DURATION_RE = /\b(\d+(?:\.\d+)?)\s?ms\b/g
 
 /**
- * Align model-asserted duration units with the app convention (issue #130).
+ * Issue #137 — provider prose durations in word form ("4 minutes", "2.5 hours",
+ * "30 seconds"). The app convention is seconds everywhere, and #130's ms rule
+ * only covered the "ms" token, so word-unit prose slipped through grounding
+ * whenever its bare number was grounded by an unrelated fact ("4 minutes"
+ * surviving on the strength of "4 downstream crates").
+ */
+const WORD_DURATION_RE = /\b(\d+(?:\.\d+)?)\s?(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b/gi
+
+/**
+ * Issue #137 P4 nit — compact compound durations ("14m12s", "1h5m", "1h5m30s",
+ * with optional spaces). Only an evidence-stated total is converted; there is
+ * no bare-number fallback because a compound token has no single number to
+ * keep grounded.
+ */
+const COMPACT_DURATION_RE =
+  /\b(\d+(?:\.\d+)?)\s?h\s?(\d+(?:\.\d+)?)\s?m(?:\s?(\d+(?:\.\d+)?)\s?s)?\b|\b(\d+(?:\.\d+)?)\s?m\s?(\d+(?:\.\d+)?)\s?s\b/gi
+
+/** Multiplier to the app's canonical unit (seconds) per recognized word unit. */
+const WORD_UNIT_SECONDS: Record<string, number> = {
+  sec: 1,
+  secs: 1,
+  second: 1,
+  seconds: 1,
+  min: 60,
+  mins: 60,
+  minute: 60,
+  minutes: 60,
+  hr: 3600,
+  hrs: 3600,
+  hour: 3600,
+  hours: 3600,
+}
+
+/** Canonical seconds numeral — "240", "852", "865.5" (no trailing zeros). */
+const canonicalSeconds = (value: number): string => String(Math.round(value * 100) / 100)
+
+/**
+ * Align model-asserted duration units with the app convention (issues #130, #137).
  *
  * The evidence corpus is the only unit authority:
  *  - a "Nms" claim survives verbatim when the corpus itself states "Nms"
  *    (some engine metrics genuinely are milliseconds, e.g. "startup 84ms");
  *  - when the corpus states only the bare number N, the token is relabeled to
- *    seconds with one decimal — the convention every Wanyrix surface uses for
- *    build-time metrics (overview trend axis "incremental (s)", insight text
+ *    seconds — the convention every Wanyrix surface uses for build-time
+ *    metrics (overview trend axis "incremental (s)", insight text
  *    "6.1s → 12.1s", server-derived facts "8.2s"). The NUMBER is untouched —
  *    only the unit label follows the app's, so nothing is invented;
  *  - when the corpus states neither, the token is left for
  *    {@link validateModelGrounding} to redact — an ungrounded number never
  *    gets blessed with a unit.
+ *
+ * Issue #137 extends the same contract to provider prose durations:
+ *  - word form ("4 minutes", "2.5 hours", "30 seconds") — converted to the
+ *    canonical seconds form when the evidence states the exact seconds value
+ *    ("save 2 minutes per run" over a corpus saying "save 120s per run"
+ *    becomes "120s"); otherwise the unit is relabeled with the number kept
+ *    untouched when the bare number is grounded ("4 minutes" → "4s", the #130
+ *    rule); otherwise left verbatim for the validator to redact;
+ *  - a token the corpus itself states verbatim ("3 minutes" in a heuristic
+ *    budget) survives — the evidence may genuinely speak in minutes;
+ *  - compact compounds ("14m12s", "1h5m30s") convert only to an
+ *    evidence-stated total ("14m12s" over "cold start 852s" → "852s").
+ *
+ * Every rewrite is recorded in the returned relabels and surfaced verbatim in
+ * the explain response (`unitRelabels`), so unit alignment stays auditable.
  */
 export function normalizeGroundedUnits(
   sections: ExplainModelSections,
@@ -695,13 +747,47 @@ export function normalizeGroundedUnits(
   for (const field of fields) {
     const text = out[field]
     if (!text) continue
-    out[field] = text.replace(MS_DURATION_RE, (match: string, num: string) => {
+    let updated = text.replace(MS_DURATION_RE, (match: string, num: string) => {
       if (corpus.includes(match.trim().toLowerCase())) return match // evidence states this exact ms value
       if (!corpus.includes(num.toLowerCase())) return match // number itself ungrounded → validator redacts
       const seconds = `${Number(num).toFixed(1)}s`
       relabels.push({ field, from: match.trim(), to: seconds })
       return seconds
     })
+
+    // Issue #137 (P4 nit) — compact compounds: "1h5m30s" / "1h5m" / "14m12s".
+    updated = updated.replace(
+      COMPACT_DURATION_RE,
+      (match: string, h?: string, hm?: string, hs?: string, m?: string, s?: string) => {
+        if (corpus.includes(match.trim().toLowerCase())) return match // evidence states this exact compound
+        const hours = h !== undefined ? Number(h) : 0
+        const minutes = h !== undefined ? Number(hm) : Number(m)
+        const seconds = h !== undefined ? (hs !== undefined ? Number(hs) : 0) : Number(s)
+        const total = canonicalSeconds(hours * 3600 + minutes * 60 + seconds)
+        if (!corpus.includes(`${total}s`)) return match // total not evidenced → left for the validator
+        relabels.push({ field, from: match.trim(), to: `${total}s` })
+        return `${total}s`
+      },
+    )
+
+    // Issue #137 — word-form durations: "30 seconds", "4 minutes", "2.5 hours".
+    updated = updated.replace(WORD_DURATION_RE, (match: string, num: string, unit: string) => {
+      if (corpus.includes(match.trim().toLowerCase())) return match // evidence itself speaks in this unit
+      const seconds = canonicalSeconds(Number(num) * WORD_UNIT_SECONDS[unit.toLowerCase()])
+      if (corpus.includes(`${seconds}s`)) {
+        // the evidence states the exact seconds value — convert to canonical form
+        relabels.push({ field, from: match.trim(), to: `${seconds}s` })
+        return `${seconds}s`
+      }
+      if (corpus.includes(num.toLowerCase())) {
+        // bare number grounded → the unit label follows the app convention (#130 rule)
+        relabels.push({ field, from: match.trim(), to: `${num}s` })
+        return `${num}s`
+      }
+      return match // number itself ungrounded → validator redacts
+    })
+
+    out[field] = updated
   }
   return { sections: out, relabels }
 }
