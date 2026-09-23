@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { access } from 'node:fs/promises'
 import { constants } from 'node:fs'
+import { withNoStore } from '@/lib/http-hygiene'
 import { DEFAULT_MAX_BUFFER, execEngine } from '@/lib/wanyrix/engine-exec'
 import {
   engineTimeoutResponse,
@@ -61,7 +62,7 @@ import { notAllowedOnPostOnly } from '@/lib/wanyrix/api'
  * 502 unparseable/schema mismatch · 504 timeout.
  */
 
-export async function POST(req: NextRequest) {
+export const POST = withNoStore(async function POST(req: NextRequest) {
   const startedAt = Date.now()
 
   /* ---- request validation (named 400s, never silent coercion) ---------- */
@@ -183,7 +184,7 @@ export async function POST(req: NextRequest) {
       network: 'none — activation is 100% offline (issue #94 E2/E3); zero sockets are opened',
     },
   })
-}
+})
 
 /** POST only — issuance is a mutating act; everything else → 405 with `Allow: POST` (ENG-TCA-6a). */
 export const GET = notAllowedOnPostOnly.GET

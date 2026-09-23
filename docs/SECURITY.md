@@ -31,6 +31,16 @@ STRIDE-lite analysis — the governance-bundle companion to this document), and
 - `POST /explain` remains a pure reasoning endpoint that writes nothing. GET-only
   routes enforce method discipline: `POST/PUT/DELETE/PATCH` return `405` carrying the
   RFC 9110 `Allow` header (ENG-TCA-6a, ENG-TE-1).
+- **Network boundary — loopback-only by construction.** The surface above is meant
+  to be reachable ONLY from the machine running the server, and both start paths pin
+  the bind to the loopback interface explicitly: `dev` runs `next dev -H 127.0.0.1`,
+  and the production `start` script pins `HOSTNAME=127.0.0.1` for the standalone
+  server (which would otherwise bind all interfaces on first use) — issue #141c,
+  closing the latent wildcard-bind footgun flagged in the security audit (SEC-2).
+  Both pins are guarded by the `"//"` SECURITY GUARD key in `package.json` (JSON has
+  no comment syntax; the key exists so the constraint is stated next to the scripts
+  it protects). Do not widen either bind: anything beyond loopback requires the
+  Roadmap authentication work (Phases 13–14) to land first.
 
 ## 2. Secrets
 
@@ -69,6 +79,26 @@ through typed getters; no user string is ever used as a file path or query.
   developer-defined `ChartConfig` prop, not user input.
 - No `innerHTML`/`eval` usage anywhere in `src/`. Markdown rendering (react-markdown)
   does not enable raw-HTML pass-through by default.
+
+### Response-header hygiene (issue #141)
+
+- **No framework banner:** `poweredByHeader: false` in `next.config.ts` removes the
+  `X-Powered-By: Next.js` header from every response.
+- **Global hardening headers** on every response (pages and API, via
+  `next.config.ts` `headers()`): `X-Content-Type-Options: nosniff` (no MIME
+  sniffing), `X-Frame-Options: DENY` (no framing), and
+  `Referrer-Policy: strict-origin-when-cross-origin`.
+- **Mutating endpoints are uncacheable:** every real `POST`/`PUT`/`DELETE` handler
+  (workspaces register/remove, scan-run sync, export, license issue, storage sim
+  mutations, explain) wraps its responses with `Cache-Control: no-store`
+  (`src/lib/http-hygiene.ts`) so no cache may serve a stale answer for a state
+  changing call. 405 method-discipline responses are not wrapped (no
+  representation to cache).
+- CSP remains deliberately out of scope for the local-first tool (no third-party
+  script origins are loaded); it is re-evaluated with the Roadmap deployment work.
+- Config-surface honesty: `next.config.ts` is read at server start, not
+  hot-reloaded — a dev server started before the change serves the new headers only
+  after a restart.
 
 ## 5. Supply chain
 
