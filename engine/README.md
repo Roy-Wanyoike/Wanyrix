@@ -28,6 +28,12 @@ edge list, and serves versioned JSON flavors computed from measured inputs:
 | `wanyrix telemetry ingest` | `wanyrix.telemetry/v1` | redacted, aggregated rustc JSON diagnostics (source + secrets stripped by default) |
 | `wanyrix synth --crates N --seed S` | synthetic fixture | deterministic synthetic workspace for scale testing |
 
+The table shows 8 of the **25 command surfaces**; the complete CLI contract
+(`init`, `status`, `analyze`, `dependencies`, `experiment`, `events`, `ai`,
+`git`, `impact`, `what-changed`, `compare`, `chain`, `export`, `activate`,
+`entitlement`, `license`, `sync`, …) is pinned one-for-one in
+[`docs/CLI.md`](../docs/CLI.md) rows 1–25.
+
 Exit codes: `0` succeeded (findings do NOT affect the exit code — CI
 consumers parse the JSON; a `wanyrix build` whose cargo run FAILED also
 exits 0 with `buildSuccess: false` — the failed build is data;
@@ -181,7 +187,7 @@ field-for-field to the shapes in `src/lib/wanyrix/types.ts` (pinned by
 
 ```sh
 cargo build            # clean, zero warnings
-cargo test             # 182 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored)
+cargo test             # 376 tests — fixtures in tests/fixtures/ (plus 2 opt-in perf probes: cargo test --release --test perf_probe -- --ignored) — measured 2026-09-23 at main cda2435
 cargo clippy --all-targets -- -D warnings   # zero warnings
 ./target/debug/wanyrix doctor --path tests/fixtures/tiny-ws --json | python3 -m json.tool
 ```

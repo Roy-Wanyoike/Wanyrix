@@ -20,7 +20,7 @@ semantics, honesty architecture); for workflow rules see
 | `bun run dev` | Next.js dev server on :3000, output tee'd to `dev.log` |
 | `bun run lint` | ESLint over the repo — must stay clean |
 | `bun run typecheck` | `tsc --noEmit` (scopes to product code + `tests/`; `examples/`/`skills/` scaffolding excluded) |
-| `bun run test` | full suite: unit + live API contract tests — **524 tests across 30 files** (523 pass / 1 skip with the dev server up; measured 2026-09-22 via `cd tests && WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test`) |
+| `bun run test` | full suite: unit + live API contract tests — **710 tests across 40 files** (706 pass / 4 counted skip with the dev server up; measured 2026-09-23 at `cda2435` via `WANYRIX_TEST_BASE_URL=http://localhost:3000 bun test tests/`) |
 | `WANYRIX_REQUIRE_LIVE=1 bun test tests/api` | **gate mode for the live API suite (AUD-4)** — an unreachable dev server FAILS with a named error (`tests/api/server-present.test.ts`) instead of skipping. Used by CI's live step and local gate runs. Without the flag, ad-hoc runs stay ergonomic: each live file prints a counted `SKIPPED (n) — server absent` banner |
 | `bun run build` / `bun run start` | production build + standalone server (not needed for day-to-day dev) |
 | `bash scripts/check-branding.sh` | brand gate — fails on unsanctioned legacy brand tokens (below) |
@@ -51,16 +51,17 @@ and tests it on every push.
 ## Test harness layout
 
 Tree below is the complete file list (`ls tests/unit tests/api engine/tests/*.rs`, measured
-2026-09-22 for issue #111) — keep it exhaustive when adding suites.
+2026-09-23 @ `cda2435` for issue #145) — keep it exhaustive when adding suites.
 
 ```text
 tests/
   bun-env.d.ts                  # bun:test types
-  unit/                         # 27 files — `bun test unit`
+  unit/                         # 33 files — `bun test unit`
     badge-contrast.test.ts      # honesty-badge WCAG-AA contrast (computed, both themes)
     build-telemetry.test.ts     # build-telemetry store + estimated-range semantics
     cli-dialog-command-set.test.ts # CLI-contract dialog pins the docs/CLI.md command set (issue #109)
     client-export.test.ts       # in-app download exporters (markdown/CSV envelopes)
+    doctor-header-wrap.test.ts  # doctor header wraps cleanly at 375px — no overflow (issue #138)
     doctor-replay.test.ts       # doctor view honest REPLAY degraded state (issue #128)
     engine-meta.test.ts         # engine version pin agrees with engine/Cargo.toml
     explain-grounding.test.ts   # grounding validator / redaction units (ENG-TCA-4)
@@ -69,36 +70,46 @@ tests/
     fixtures-and-report.test.ts # finding invariants + wanyrix.report/v1 determinism
     fixtures-barrel.test.ts     # fixture registry barrel exports
     flavors.test.ts             # scorecard/scan-history flavor builders (ENG-TCA-2)
+    issue-140-param-hygiene.test.ts # param-hygiene unit pins: no phantom-workspace fallback (issue #140)
     legacy-migration.test.ts    # AUDIT-I1 P0 regression: storage thunk + copy-before-delete
     license-issue.test.tsx      # license-issue dialog semantics
     muted-contrast.test.ts      # muted-text WCAG-AA contrast (computed, both themes, issue #131)
     palette-filter.test.ts      # command-palette filtering
     palette-search.test.ts      # command-palette data search (crates/findings/PRs, issue #127)
+    palette-workspace-rows.test.tsx # palette workspace rows render registered/fixture provenance, never silent dead-ends (QA-1 F-2)
     patch.test.ts               # Gate 19 new-proposal patch semantics
     register.test.ts            # workspace registration bridge behaviors
+    register-adversarial.test.ts # hostile registration paths + confinement parsing (QA-3-B-2, AUD-8)
     registered-workspaces.test.ts # merged workspace registry: registered rows first, fixtures after (QA-5-B-1)
     scan-runs.test.ts           # durable scan-run sync client (idempotent POST)
     simulator-intent.test.ts    # intent parsing + impact math invariants (monotonic, finite, always estimated)
     stores.test.ts              # zustand persist stores, offline behaviors
+    storage-rebuild-cta.test.ts # storage rebuild CTA enabled with an honest 0 MB outcome (QA-1 F-3)
+    view-hash.test.ts           # hash-based view routing — shareable views + Back/Forward (QA-1 F-1)
     wanyrix-workspace-param.test.ts # unified ?workspace= / ?ws= param contract, handler-level (issue #129)
     workspace-count-consistency.test.ts # ONE count selector across surfaces (QA-5-B-3)
     workspace-provenance.test.tsx # fixture/registered provenance badge honesty (QA-5-B-1/B-4)
     workspace-selector.test.ts  # workspace switcher behaviors
-  api/                          # 7 files — live contracts against :3000 (counted skip when down; REQUIRE_LIVE=1 fails instead — AUD-4)
+  api/                          # 7 test files + harness.ts — live contracts against :3000 (counted skip when down; REQUIRE_LIVE=1 fails instead — AUD-4)
     harness.ts                  # shared server probe + counted test registration (AUD-4)
+    issue-140-param-hygiene.test.ts # ?workspace=/?ws= alias + unknown-id 404 route pins (issue #140)
     server-present.test.ts      # vacuous-green gate: REQUIRE_LIVE=1 + server absent → red (AUD-4)
     wanyrix-api.test.ts         # 200 JSON shapes, 400/404/405/413, ws guard, flavors
     wanyrix-export.test.ts      # POST /api/wanyrix/export contract (PR #91)
     wanyrix-license.test.ts     # POST /api/wanyrix/license/issue contract (PR #94)
     wanyrix-scan-runs.test.ts   # POST/GET /api/wanyrix/scan-runs route contracts (AUD-2)
     wanyrix-storage-mutations.test.ts # POST /api/wanyrix/storage/{rebuild,reclaim} contracts (AUD-3)
-engine/tests/                   # 22 Rust suites — `cargo test --workspace --offline`
-                                # (302 tests / 0 fail / 2 opt-in probes ignored, measured 2026-09-22)
+engine/tests/                   # 29 Rust suites — `cargo test --workspace --offline`
+                                # (376 tests / 0 fail / 2 opt-in probes ignored, measured 2026-09-23 at `cda2435`)
   adversarial.rs                # hostile-input hardening: unicode paths, symlinks, huge/deep trees (issue #71, PR #74)
   ai_cli.rs                     # wanyrix ai — digest-only grounding, https refusal, named errors
   binary_matrix.rs              # release-binary matrix checks (PR #89)
+  broken_pipe_cli.rs            # closed-stdout EPIPE → clean exit 141, never the raw 101 panic (issue #143)
   build_cli.rs                  # instrumented build surface end-to-end
+  chain_cli.rs                  # wanyrix chain — memory-chain query joins, scoping, named refusals (issue #100, PR #156)
+  change_cli.rs                 # impact / what-changed / experiment-measure binary contracts (AUD-9)
   chaos.rs                      # 9 fault-injection tests: truncated payloads, garbage DBs, dead sockets
+  compare_cli.rs                # wanyrix compare — stored-scan diff, verbatim readback, corrupt-entry refusals (issue #115, PR #155)
   conformance.rs                # engine envelopes vs web contracts (documented divergences 1–4)
   daemon_ipc.rs                 # daemon over the local Unix socket
   doctor_rules.rs               # deterministic finding rules
@@ -106,11 +117,14 @@ engine/tests/                   # 22 Rust suites — `cargo test --workspace --o
   entitlement_gate_cli.rs       # dispatch-time entitlement gate + CI/dev hatch (AUD-1)
   entitlement_offline_pin.rs    # zero-network activation pinned at source level (PR #94)
   exclude_cli.rs                # --exclude on every scan surface (issue #76, PR #86)
+  experiment_margin_cli.rs      # experiment verify --min-margin-pct: within-noise verdicts never rewrite the ledger (issue #143)
   export_cli.rs                 # export artifacts + sha256 index (issue #91, PR #91)
+  git_cli.rs                    # wanyrix git binary contract: envelope shape, named refusals, unconditional redaction (AUD-9)
   human_format.rs               # human-readable output formatting
   perf_probe.rs                 # 2 opt-in perf probes (cargo test --release --test perf_probe -- --ignored)
   pretty_cli.rs                 # --pretty output contract (PR #89)
   stdin_shorthand_cli.rs        # positional `-` stdin sugar for store save / telemetry ingest (QA-4-B-3)
+  store_json_cli.rs             # store list/fsck --json envelopes: wanyrix.store-scans/v1 + wanyrix.store-fsck/v1 (issue #143)
   store_recovery.rs             # SQLite WAL crash-recovery
   sync_cli.rs                   # sync push/pull roundtrip, conflicts, tier downgrade (issue #92, PR #92)
   synth.rs                      # deterministic synth (same seed+count ⇒ byte-identical)
