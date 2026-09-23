@@ -7,6 +7,7 @@ import {
 } from '@/lib/wanyrix/api'
 import { isRegisteredWorkspaceId } from '@/lib/wanyrix/register'
 import { resolveScanRunWorkspace } from '@/lib/wanyrix/registered-workspace'
+import { withNoStore } from '@/lib/http-hygiene'
 import { isValidFindingIdList, FINDING_IDS_CAP } from '@/lib/wanyrix/finding-diff'
 
 /**
@@ -252,7 +253,7 @@ export async function GET(req: NextRequest) {
 
 /* ----------------------------------------------------------------- POST --- */
 
-export async function POST(req: NextRequest) {
+export const POST = withNoStore(async function POST(req: NextRequest) {
   const contentLength = Number(req.headers.get('content-length') ?? '0')
   if (contentLength > MAX_BODY_BYTES) {
     return NextResponse.json(
@@ -393,7 +394,7 @@ export async function POST(req: NextRequest) {
       { status: 503 },
     )
   }
-}
+})
 
 /** GET + POST implemented; everything else → 405 with `Allow: GET, POST`. */
 export const PUT = () => methodNotAllowed('GET, POST')

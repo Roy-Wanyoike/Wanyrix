@@ -1,0 +1,23 @@
+# Gitleaks configuration (issue #149 — SEC-3, wave-1 security audit).
+#
+# Extends the DEFAULT gitleaks rule set (the full built-in detector library:
+# AWS keys, GitHub tokens, OpenAI keys, private-key PEM blocks, …) and adds
+# exactly one repository-specific allowlist.
+#
+# Why the allowlist exists (evidence: wave-1 security audit §V-8): the engine's
+# `scrub_secrets` redaction layer (engine/src/telemetry.rs) and its test suite
+# (engine/tests/telemetry_cli.rs) DEFINE secret-SHAPED pattern strings as
+# positive controls — they are redaction rules and fixtures, not credentials.
+# Without the allowlist, gitleaks flags its own detector patterns. Nothing else
+# in the tree is exempted: adding a path here requires a documented reason in
+# this file (same honesty standard as the security audit that produced it).
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "Engine redaction-layer positive controls — secret-shaped pattern DEFINITIONS, not credentials (SEC-3 / V-8)"
+  paths = [
+    '''engine/src/telemetry\.rs''',
+    '''engine/tests/telemetry_cli\.rs''',
+  ]

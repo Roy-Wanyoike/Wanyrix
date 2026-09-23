@@ -31,6 +31,16 @@ STRIDE-lite analysis — the governance-bundle companion to this document), and
 - `POST /explain` remains a pure reasoning endpoint that writes nothing. GET-only
   routes enforce method discipline: `POST/PUT/DELETE/PATCH` return `405` carrying the
   RFC 9110 `Allow` header (ENG-TCA-6a, ENG-TE-1).
+- **Network boundary — loopback-only by construction.** The surface above is meant
+  to be reachable ONLY from the machine running the server, and both start paths pin
+  the bind to the loopback interface explicitly: `dev` runs `next dev -H 127.0.0.1`,
+  and the production `start` script pins `HOSTNAME=127.0.0.1` for the standalone
+  server (which would otherwise bind all interfaces on first use) — issue #141c,
+  closing the latent wildcard-bind footgun flagged in the security audit (SEC-2).
+  Both pins are guarded by the `"//"` SECURITY GUARD key in `package.json` (JSON has
+  no comment syntax; the key exists so the constraint is stated next to the scripts
+  it protects). Do not widen either bind: anything beyond loopback requires the
+  Roadmap authentication work (Phases 13–14) to land first.
 
 ## 2. Secrets
 
@@ -40,9 +50,16 @@ STRIDE-lite analysis — the governance-bundle companion to this document), and
 - The AI provider credentials are resolved server-side by the `z-ai-web-dev-sdk` at
   runtime — they are never embedded in source or shipped to the browser.
 - Checked by: `git check-ignore .env` → ignored, and review of tracked files (only the
-  placeholder `.env.example` is committed); a dedicated secret-scanning CI job is
-  **Roadmap** — delivery (gitleaks-class config carrying the billing-locked honesty
-  label) is tracked in #149 and mapped in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6.
+  placeholder `.env.example` is committed).
+- **Secret scanning is now configured** (issue #149 — SEC-3; the delivery that #119's
+  governance mapping and [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6 pointed at):
+  `.github/workflows/secret-scanning.yml` runs gitleaks over the full git history on
+  push/PR + a weekly schedule, with `.gitleaks.toml` extending the default rule set
+  (one documented allowlist: the engine's redaction positive-control fixtures, which
+  define secret-SHAPED patterns on purpose).
+  Honesty note: the workflow carries the billing-locked honesty label and the gitleaks
+  binary is not installed in the dev environment — local validation was YAML/TOML parse
+  only; the first hosted run is the real smoke test (still **no hosted-run evidence**).
 
 ## 3. Input validation (defense in depth on every route)
 
@@ -70,6 +87,26 @@ through typed getters; no user string is ever used as a file path or query.
 - No `innerHTML`/`eval` usage anywhere in `src/`. Markdown rendering (react-markdown)
   does not enable raw-HTML pass-through by default.
 
+### Response-header hygiene (issue #141)
+
+- **No framework banner:** `poweredByHeader: false` in `next.config.ts` removes the
+  `X-Powered-By: Next.js` header from every response.
+- **Global hardening headers** on every response (pages and API, via
+  `next.config.ts` `headers()`): `X-Content-Type-Options: nosniff` (no MIME
+  sniffing), `X-Frame-Options: DENY` (no framing), and
+  `Referrer-Policy: strict-origin-when-cross-origin`.
+- **Mutating endpoints are uncacheable:** every real `POST`/`PUT`/`DELETE` handler
+  (workspaces register/remove, scan-run sync, export, license issue, storage sim
+  mutations, explain) wraps its responses with `Cache-Control: no-store`
+  (`src/lib/http-hygiene.ts`) so no cache may serve a stale answer for a state
+  changing call. 405 method-discipline responses are not wrapped (no
+  representation to cache).
+- CSP remains deliberately out of scope for the local-first tool (no third-party
+  script origins are loaded); it is re-evaluated with the Roadmap deployment work.
+- Config-surface honesty: `next.config.ts` is read at server start, not
+  hot-reloaded — a dev server started before the change serves the new headers only
+  after a restart.
+
 ## 5. Supply chain
 
 - Dependencies are pinned in `package.json` with a committed lockfile (`bun.lock`);
@@ -90,11 +127,26 @@ through typed getters; no user string is ever used as a file path or query.
   **cargo-audit** advisory-audit job alongside multi-target binaries and checksums.
   Honesty note: the repository's hosted Actions runners are billing-locked (documented
   in the `wanyrix.yml` honesty label) — hosted run records exist but no job steps have
-  executed, so these gates are validated locally, not on hosted runners. Renovate /
-  Dependabot dependency-update automation: **tracked in #149** (`.github/dependabot.yml`
-  for cargo + npm + github-actions ecosystems, plus the secret-scanning workflow —
-  governance mapping in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6; this section
-  records the posture, the owning issue owns the config).
+  executed, so these gates are validated locally, not on hosted runners. A fifth
+  workflow, `secret-scanning.yml` (gitleaks), is described in §2 above.
+- **Dependency-update automation is configured** (issue #149 — SEC-3; governance
+  mapping in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6):
+  `.github/dependabot.yml` covers all three dependency surfaces — `cargo` in `engine/`,
+  `npm` at the repository root, and `github-actions` — each on a weekly schedule.
+  Honest limitation: Dependabot's npm ecosystem tracks `package.json` ranges and cannot
+  regenerate the `bun.lock` lockfile, so applying an npm update stays a maintainer step
+  (`bun install` / `bun update`) with the lockfile committed in the same PR. Dependabot
+  itself is not Actions-billed, but this repository has no hosted evidence of any
+  automation yet — until the first hosted Dependabot PR appears, treat this as prepared
+  config, not a proven-running control.
+- **cargo-audit for maintainers** (local invocation, mirrors the `release.yml` audit
+  job — `cargo install --locked cargo-audit && cargo audit --file Cargo.lock` from
+  `engine/`, i.e. `cargo audit --file engine/Cargo.lock` from the repository root):
+  audits the committed `engine/Cargo.lock` against the RustSec advisory database.
+  The advisory audit runs on release tags in hosted CI (billing-locked, see above);
+  maintainers can and should also run it locally before publishing — the binary is
+  NOT preinstalled in this dev environment (verified in the SEC-3 audit), so the first
+  local run is `cargo install --locked cargo-audit`.
 
 ## 6. AI / sandbox data boundaries
 
@@ -135,13 +187,14 @@ through typed getters; no user string is ever used as a file path or query.
   STRIDE-lite analysis with evidence links and review triggers; the informal posture
   above remains the control surface it references. A *formal* trust-boundary review
   (method-certified) is still roadmap.
-- **SAST/DAST and secret-scanning in CI** (CI itself exists — see §5): the planned
-  tooling map (gitleaks-class secret scanning, dependabot, CodeQL/Semgrep-class SAST,
-  route-contract fuzzing as the DAST seed) lives in
-  [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6 — secret scanning + dependency
-  automation land via **#149** (config belongs to that issue, not here); SAST/DAST
-  stay roadmap until a hosted runner unlocks (§4.5 of the threat model records the
-  billing-locked evidence gap).
+- **SAST/DAST in CI** (CI itself exists — see §5): secret scanning + dependency
+  automation are now wired as prepared config via `secret-scanning.yml`/gitleaks (§2)
+  and `.github/dependabot.yml` (§5) — delivered by #149 per the tooling map in
+  [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6; SAST/DAST stay roadmap until a hosted
+  runner unlocks (§4.5 of the threat model records the billing-locked evidence gap).
+- **First hosted-run evidence for the delivered automation** (Dependabot PRs, gitleaks,
+  the release cargo-audit job) — blocked by the Actions billing lock; the configs are
+  prepared and honestly labeled until then.
 - **Signed releases and provenance attestation**: `release.yml` deliberately stops
   short of artifact signing — it stages binaries, SBOM, advisory audit, and checksums
   so signing is the only remaining step (requires maintainer secrets; the staged

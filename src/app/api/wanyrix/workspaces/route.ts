@@ -4,6 +4,7 @@ import type { Dirent } from 'node:fs'
 import path from 'node:path'
 import { getWorkspaces } from '@/lib/wanyrix/data'
 import { methodNotAllowed } from '@/lib/wanyrix/api'
+import { withNoStore } from '@/lib/http-hygiene'
 import { db } from '@/lib/db'
 import {
   checkedBinaryPaths,
@@ -127,7 +128,7 @@ export async function GET(_req: NextRequest) {
 
 /* ----------------------------------------------------------------- POST --- */
 
-export async function POST(req: NextRequest) {
+export const POST = withNoStore(async function POST(req: NextRequest) {
   let body: unknown
   try {
     body = await req.json()
@@ -340,11 +341,11 @@ export async function POST(req: NextRequest) {
       { status: 503 },
     )
   }
-}
+})
 
 /* --------------------------------------------------------------- DELETE --- */
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withNoStore(async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id')
   if (id === null || id === '') {
     return NextResponse.json(
@@ -365,7 +366,7 @@ export async function DELETE(req: NextRequest) {
       { status: 503 },
     )
   }
-}
+})
 
 /** GET + POST + DELETE implemented; everything else → 405 with `Allow`. */
 export const PUT = () => methodNotAllowed('GET, POST, DELETE')

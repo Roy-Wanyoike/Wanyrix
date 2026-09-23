@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import path from 'node:path'
+import { withNoStore } from '@/lib/http-hygiene'
 import { ENGINE_DIR, execEngine } from '@/lib/wanyrix/engine-exec'
 import {
   engineTimeoutResponse,
@@ -58,7 +59,7 @@ function toRelative(targetPath: string): string {
   return rel === '' ? '.' : rel
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withNoStore(async function POST(req: NextRequest) {
   const startedAt = Date.now()
 
   const target = await resolveExecTarget(req, 'export')
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
     note: surfaceNote('wanyrix export', target.registered !== null),
     report,
   })
-}
+})
 
 /** POST only — export mutates the target's `.wanyrix/exports`; everything else → 405 with `Allow: POST` (ENG-TCA-6a). */
 export const GET = () =>

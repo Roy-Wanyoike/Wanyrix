@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { FINDINGS, ISSUES } from '@/lib/wanyrix/data'
+import { withNoStore } from '@/lib/http-hygiene'
 import {
   EXPLAIN_MAX_BODY_BYTES,
   EXPLAIN_MAX_PROMPT_CONTEXT_CHARS,
@@ -402,7 +403,7 @@ export async function GET() {
   )
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withNoStore(async function POST(req: NextRequest) {
   // ENG-TCA-7: reject oversized payloads BEFORE parsing/provider work.
   // Next.js route handlers impose no default body limit, so this is the guard.
   const declaredLength = Number(req.headers.get('content-length') ?? '0')
@@ -638,7 +639,7 @@ export async function POST(req: NextRequest) {
       provenance,
     })
   }
-}
+})
 
 // Minimal structural type so the race() cast stays honest without importing SDK types.
 type ChatCompletion = {
