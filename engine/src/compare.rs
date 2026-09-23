@@ -349,8 +349,9 @@ pub fn diff_crates(baseline: &[CrateSnapshot], current: &[CrateSnapshot]) -> Cra
 
 // ------------------------------------------------------------- assembly
 
-/// Read one stored scan row by id (from the ordered `list` scan — ids are
-/// monotonic, so this is a binary search; no extra SQL surface needed).
+/// Read one stored scan row by id (from the id-ordered `list` scan —
+/// linear over the summaries; no extra SQL surface needed for a store
+/// whose whole point is a small set of scans).
 fn scan_row_by_id(rows: &[ScanRow], id: i64) -> Option<&ScanRow> {
     rows.iter().find(|r| r.id == id)
 }
@@ -395,7 +396,11 @@ fn integrity_check(
 /// `--to` ids in the store at `db`). Refusals are named and actionable:
 /// unknown ids, cross-workspace pairs, and corrupt (incomplete/mismatched)
 /// store entries. Identical scans are a valid zero-delta envelope.
-pub fn compare_scan_refs(db: &Path, from_id: i64, to_id: i64) -> Result<CompareReport, EngineError> {
+pub fn compare_scan_refs(
+    db: &Path,
+    from_id: i64,
+    to_id: i64,
+) -> Result<CompareReport, EngineError> {
     let rows = store::list(db, None)?;
     let not_found = |id: i64| {
         EngineError::Compare(format!(
@@ -444,7 +449,10 @@ pub fn compare_scan_refs(db: &Path, from_id: i64, to_id: i64) -> Result<CompareR
     };
 
     let mut notes = Vec::new();
-    for (side, row, recorded) in [("from", from_row, from_recorded), ("to", to_row, to_recorded)] {
+    for (side, row, recorded) in [
+        ("from", from_row, from_recorded),
+        ("to", to_row, to_recorded),
+    ] {
         if !recorded {
             notes.push(format!(
                 "scan #{} ({}) has no recorded crate/toolchain inventory — saved by an older engine or the save was interrupted before the inventory commit; crate and toolchain deltas are labeled not-recorded (re-save the scan to record them)",
@@ -484,9 +492,17 @@ pub fn compare_human(r: &CompareReport) -> String {
     ));
     out.push_str(&format!("db: {}\n", r.db));
     for (side, s) in [("from", &r.from), ("to", &r.to)] {
+        // The side label is width-padded (`from: ` / `to:   `) so the two
+        // reference lines align column-for-column.
         out.push_str(&format!(
-            "{side}: scan #{} (measured {}) — {} findings ({} critical, {} warning, {} info)\n",
-            s.scan_id, s.finished_at, s.finding_count, s.critical, s.warning, s.info
+            "{:<6}scan #{} (measured {}) — {} findings ({} critical, {} warning, {} info)\n",
+            format!("{side}:"),
+            s.scan_id,
+            s.finished_at,
+            s.finding_count,
+            s.critical,
+            s.warning,
+            s.info
         ));
     }
     match (&r.from.toolchain, &r.to.toolchain) {
@@ -567,7 +583,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn tempdir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("wanyrix-compare-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("wanyrix-compare-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -659,12 +676,24 @@ mod tests {
             snap("delta", "0.3.0"), // added
         ];
         let d = diff_crates(&baseline, &current);
-        assert_eq!(d.added, vec![DiffCrate { name: "delta".into(), version: "0.3.0".into() }]);
+        assert_eq!(
+            d.added,
+            vec![DiffCrate {
+                name: "delta".into(),
+                version: "0.3.0".into()
+            }]
+        );
         assert_eq!(
             d.removed,
             vec![
-                DiffCrate { name: "dup".into(), version: "0.1.0".into() },
-                DiffCrate { name: "gamma".into(), version: "0.2.0".into() },
+                DiffCrate {
+                    name: "dup".into(),
+                    version: "0.1.0".into()
+                },
+                DiffCrate {
+                    name: "gamma".into(),
+                    version: "0.2.0".into()
+                },
             ],
             "removed rows are sorted by (name, version)"
         );
@@ -700,7 +729,9 @@ mod tests {
         store::save(&db, &other).unwrap();
         let err = compare_scan_refs(&db, 1, 2).unwrap_err().to_string();
         assert!(
-            err.contains("different workspaces") && err.contains("tiny-ws") && err.contains("other-ws"),
+            err.contains("different workspaces")
+                && err.contains("tiny-ws")
+                && err.contains("other-ws"),
             "cross-workspace pair is a named refusal, got: {err}"
         );
         std::fs::remove_dir_all(&dir).ok();
@@ -715,11 +746,15 @@ mod tests {
         // exactly the kill-between-commits state `store fsck` detects.
         let scan = store::parse_payload(&tiny_ws_payload("2026-09-18T13:28:56Z")).unwrap();
         let scan_id = store::save_scan_row(&db, &scan).unwrap();
-        let err = compare_scan_refs(&db, scan_id, scan_id).unwrap_err().to_string();
+        let err = compare_scan_refs(&db, scan_id, scan_id)
+            .unwrap_err()
+            .to_string();
         assert!(
-            err.contains("compare error: scan #1 is corrupt")
+            err.contains("compare error: scan #1")
+                && err.contains("is corrupt")
                 && err.contains("finding_count=4, but 0 findings rows exist")
-                && err.contains("store fsck"),
+                && err.contains("store fsck")
+                && err.contains("--repair"),
             "corrupt entry is a named refusal naming the remediation, got: {err}"
         );
         std::fs::remove_dir_all(&dir).ok();
@@ -739,7 +774,9 @@ mod tests {
         assert!(!r.coverage.crates_recorded && !r.coverage.toolchain_recorded);
         assert!(r.coverage.findings_recorded && !r.coverage.edges_recorded);
         assert!(
-            r.notes.iter().any(|n| n.contains("no recorded crate/toolchain inventory")),
+            r.notes
+                .iter()
+                .any(|n| n.contains("no recorded crate/toolchain inventory")),
             "the gap is named with a remediation, got: {:?}",
             r.notes
         );
@@ -761,7 +798,10 @@ mod tests {
         let a = crate::cli::serialize_json(&compare_scan_refs(&db, 1, 2).unwrap(), false).unwrap();
         let b = crate::cli::serialize_json(&compare_scan_refs(&db, 1, 2).unwrap(), false).unwrap();
         assert_eq!(a, b, "repeated invocations are byte-identical");
-        assert!(a.contains("\"generatedAt\":\"not-measured\""), "no wall-clock: {a}");
+        assert!(
+            a.contains("\"generatedAt\":\"not-measured\""),
+            "no wall-clock: {a}"
+        );
         // generatedAt is the LAST emitted key (envelope field order is the contract).
         let tail = &a[a.len().saturating_sub(60)..];
         assert!(
@@ -781,12 +821,24 @@ mod tests {
         for (from, to) in [(1, 2), (2, 2)] {
             let r = compare_scan_refs(&db, from, to).unwrap();
             assert_eq!(r.from.workspace, "tiny-ws");
-            assert!(r.findings.added.is_empty() && r.findings.resolved.is_empty() && r.findings.changed.is_empty());
-            assert!(r.crates.added.is_empty() && r.crates.removed.is_empty() && r.crates.version_changed.is_empty());
+            assert!(
+                r.findings.added.is_empty()
+                    && r.findings.resolved.is_empty()
+                    && r.findings.changed.is_empty()
+            );
+            assert!(
+                r.crates.added.is_empty()
+                    && r.crates.removed.is_empty()
+                    && r.crates.version_changed.is_empty()
+            );
             assert_eq!(r.crates.unchanged, 3, "every crate paired unchanged");
             assert_eq!(
                 r.severity_delta,
-                SeverityDelta { critical: 0, warning: 0, info: 0 }
+                SeverityDelta {
+                    critical: 0,
+                    warning: 0,
+                    info: 0
+                }
             );
             assert!(r.coverage.crates_recorded, "a full save records inventory");
         }

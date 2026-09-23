@@ -1180,7 +1180,10 @@ mod tests {
         }
 
         let report = fsck(&db, false).unwrap();
-        assert!(!report.healthy(), "orphan inventory makes the store unhealthy");
+        assert!(
+            !report.healthy(),
+            "orphan inventory makes the store unhealthy"
+        );
         assert_eq!(report.orphan_inventory, vec![999]);
         assert!(
             report.summary().contains("orphan inventory rows"),
@@ -1190,7 +1193,10 @@ mod tests {
 
         let repaired = fsck(&db, true).unwrap();
         assert_eq!(repaired.removed_inventory, 2, "both orphan rows removed");
-        assert!(fsck(&db, false).unwrap().healthy(), "store consistent after repair");
+        assert!(
+            fsck(&db, false).unwrap().healthy(),
+            "store consistent after repair"
+        );
         // The healthy scan survived untouched.
         assert_eq!(list(&db, None).unwrap().len(), 1);
         assert_eq!(crates_for(&db, 1).unwrap().len(), 3);
@@ -1209,7 +1215,11 @@ mod tests {
         conn.execute_batch("DROP TABLE scan_crates; DROP TABLE scan_toolchain;")
             .unwrap();
         drop(conn);
-        assert_eq!(toolchain_for(&db, 1).unwrap(), None, "missing tables read as not-recorded");
+        assert_eq!(
+            toolchain_for(&db, 1).unwrap(),
+            None,
+            "missing tables read as not-recorded"
+        );
         assert!(crates_for(&db, 1).unwrap().is_empty());
         // ...and the write path self-heals: the next save re-creates them.
         save(&db, &tiny_ws_payload()).unwrap();

@@ -122,14 +122,33 @@ fn assert_compare_conformance(v: &Value) {
             "compare.findings.{key} is a required envelope key"
         );
     }
-    for key in ["findingsRecorded", "cratesRecorded", "toolchainRecorded", "edgesRecorded"] {
+    for key in [
+        "findingsRecorded",
+        "cratesRecorded",
+        "toolchainRecorded",
+        "edgesRecorded",
+    ] {
         assert!(
             v["coverage"].get(key).is_some(),
             "compare.coverage.{key} is a required envelope key"
         );
     }
-    for key in ["schema", "db", "from", "to", "crates", "findings", "severityDelta", "coverage", "measurement", "generatedAt"] {
-        assert!(v.get(key).is_some(), "compare.{key} is a required envelope key");
+    for key in [
+        "schema",
+        "db",
+        "from",
+        "to",
+        "crates",
+        "findings",
+        "severityDelta",
+        "coverage",
+        "measurement",
+        "generatedAt",
+    ] {
+        assert!(
+            v.get(key).is_some(),
+            "compare.{key} is a required envelope key"
+        );
     }
     assert_eq!(
         v["generatedAt"], "not-measured",
@@ -218,7 +237,15 @@ fn compare_golden_delta_pair_through_the_real_store_pipeline() {
         .iter()
         .map(|f| f["id"].as_str().unwrap())
         .collect();
-    assert_eq!(added, ["FER-ENG-001-c0002", "FER-ENG-002-c0002", "FER-ENG-003-c0000", "FER-ENG-005-c0000"]);
+    assert_eq!(
+        added,
+        [
+            "FER-ENG-001-c0002",
+            "FER-ENG-002-c0002",
+            "FER-ENG-003-c0000",
+            "FER-ENG-005-c0000"
+        ]
+    );
     assert_eq!(resolved, ["FER-ENG-001-c0000", "FER-ENG-002-c0000"]);
     assert_eq!(v["findings"]["changed"], Value::Array(Vec::new()));
 
@@ -229,8 +256,10 @@ fn compare_golden_delta_pair_through_the_real_store_pipeline() {
     );
     assert_eq!(v["coverage"]["cratesRecorded"], true);
     assert_eq!(v["coverage"]["toolchainRecorded"], true);
-    assert_eq!(v["coverage"]["edgesRecorded"], false,
-        "the store persists doctor payloads, which carry no edge list — labeled, never guessed");
+    assert_eq!(
+        v["coverage"]["edgesRecorded"], false,
+        "the store persists doctor payloads, which carry no edge list — labeled, never guessed"
+    );
     assert!(
         v["notes"]
             .as_array()
@@ -375,7 +404,8 @@ fn compare_refusal_ladder_is_named_and_byte_stable() {
     assert_eq!(out.code, 2, "missing store must be exit 2");
     assert!(out.stdout.is_empty(), "never a partial payload");
     assert!(
-        out.stderr.starts_with("wanyrix: error: scan store error: store not found at ")
+        out.stderr
+            .starts_with("wanyrix: error: scan store error: store not found at ")
             && out.stderr.contains("wanyrix store init"),
         "named refusal with remediation, got: {}",
         out.stderr
@@ -423,7 +453,8 @@ fn compare_refusal_ladder_is_named_and_byte_stable() {
             assert_eq!(out.code, 2, "unknown scan id must be exit 2");
             assert!(out.stdout.is_empty(), "never a partial diff");
             assert!(
-                out.stderr.starts_with("wanyrix: error: compare error: scan #99 not found in ")
+                out.stderr
+                    .starts_with("wanyrix: error: compare error: scan #99 not found in ")
                     && out.stderr.contains("wanyrix store list"),
                 "named refusal with remediation, got: {}",
                 out.stderr
@@ -504,17 +535,40 @@ fn compare_human_output_names_the_diff_with_the_established_markers() {
     let human = &out.stdout;
     let ws_name = ws.file_name().unwrap().to_str().unwrap();
     assert!(
-        human.starts_with(&format!("wanyrix compare — {ws_name} (wanyrix.compare/v1)\n")),
+        human.starts_with(&format!(
+            "wanyrix compare — {ws_name} (wanyrix.compare/v1)\n"
+        )),
         "header names the surface, workspace and schema: {human}"
     );
-    assert!(human.contains("from: scan #1 (measured "), "side reference: {human}");
-    assert!(human.contains("to:   scan #2 (measured "), "side reference: {human}");
-    assert!(human.contains("findings: 2 added, 2 resolved, 0 changed"), "{human}");
-    assert!(human.contains("+ [warning] FER-ENG-003-c0000"), "added marker: {human}");
-    assert!(human.contains("+ [critical] FER-ENG-005-c0000"), "critical is visible: {human}");
-    assert!(human.contains("- [warning] FER-ENG-001-c0000"), "resolved marker: {human}");
+    assert!(
+        human.contains("from: scan #1 (measured "),
+        "side reference: {human}"
+    );
+    assert!(
+        human.contains("to:   scan #2 (measured "),
+        "side reference: {human}"
+    );
+    assert!(
+        human.contains("findings: 2 added, 2 resolved, 0 changed"),
+        "{human}"
+    );
+    assert!(
+        human.contains("+ [warning] FER-ENG-003-c0000"),
+        "added marker: {human}"
+    );
+    assert!(
+        human.contains("+ [critical] FER-ENG-005-c0000"),
+        "critical is visible: {human}"
+    );
+    assert!(
+        human.contains("- [warning] FER-ENG-001-c0000"),
+        "resolved marker: {human}"
+    );
     assert!(human.contains("severity delta: 1 critical"), "{human}");
-    assert!(human.contains("edges NOT recorded"), "coverage is honest in human output: {human}");
+    assert!(
+        human.contains("edges NOT recorded"),
+        "coverage is honest in human output: {human}"
+    );
     assert!(
         !human.contains("generatedAt"),
         "the human summary carries no clock — the diff is between recorded instants"
