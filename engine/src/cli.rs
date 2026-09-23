@@ -302,6 +302,30 @@ pub enum Command {
         /// The scan id to compare against the baseline.
         #[arg(long)]
         to: i64,
+    /// Reconstruct the engineering-memory chain for the stored evidence
+    /// (issue #100, wanyrix.chain/v1): scan → finding(s) → experiment(s) →
+    /// measurement → verification verdict, joined READ-ONLY from the scan
+    /// store (--db), the experiment ledger and the event log under --path.
+    /// Evidence labels (estimated / measured / verified) are echoed VERBATIM
+    /// — never upgraded, never downgraded. --finding/--scan scope the chain
+    /// (mutually exclusive; unknown ids are named exit-2 refusals);
+    /// orphaned links, corrupt ledger/event lines and inconsistent store
+    /// rows are NAMED in the envelope, never silently dropped. No
+    /// wall-clock: repeat queries over unchanged inputs are byte-identical.
+    Chain {
+        /// Workspace root: its measured name scopes the store join, and its
+        /// .wanyrix ledger + event log are the ledger side of the chain.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// SQLite scan store to join (wanyrix store init/save).
+        #[arg(long)]
+        db: PathBuf,
+        /// Restrict the chain to this stored finding id.
+        #[arg(long)]
+        finding: Option<String>,
+        /// Restrict the chain to this stored scan id (store list prints ids).
+        #[arg(long)]
+        scan: Option<i64>,
         #[arg(long)]
         json: bool,
         /// Pretty-print the JSON (has no effect without --json).
@@ -446,6 +470,12 @@ pub enum ExperimentCmd {
         /// The claim this experiment is expected to verify.
         #[arg(long)]
         claim: String,
+        /// Optional stored finding id this experiment investigates — the
+        /// scan → finding → experiment link `wanyrix chain` joins (issue
+        /// #100). Echoed verbatim, never validated here; a dangling link is
+        /// NAMED by the chain query, never guessed.
+        #[arg(long)]
+        finding: Option<String>,
         #[arg(long, default_value = ".")]
         path: PathBuf,
         #[arg(long)]
@@ -941,11 +971,12 @@ pub fn product_experiment_run(cmd: crate::cli::ExperimentCmd) -> Result<String, 
         ExperimentCmd::Record {
             name,
             claim,
+            finding,
             path,
             json,
             pretty,
         } => {
-            let rec = product::experiment_record(&path, &name, &claim)?;
+            let rec = product::experiment_record(&path, &name, &claim, finding.as_deref())?;
             if json {
                 serialize_json(&rec, pretty)
             } else {
@@ -1145,6 +1176,23 @@ pub fn compare_run(
         serialize_json(&report, pretty)
     } else {
         Ok(crate::compare::compare_human(&report))
+/// Run `wanyrix chain` — the engineering-memory chain query (issue #100).
+/// Read-only: nothing is measured twice and nothing is written; the JSON
+/// flavor is the versioned `wanyrix.chain/v1` envelope, the default flavor
+/// is the pinned human tree.
+pub fn chain_run(
+    path: &Path,
+    db: &Path,
+    finding: Option<&str>,
+    scan: Option<i64>,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let report = crate::chain::chain_report(path, db, finding, scan)?;
+    if json {
+        serialize_json(&report, pretty)
+    } else {
+        Ok(crate::chain::chain_human(&report))
     }
 }
 

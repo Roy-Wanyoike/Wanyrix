@@ -64,7 +64,7 @@
 
 use std::path::Path;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::model::EngineError;
 use crate::timestamp::{iso8601_from_unix, unix_from_iso8601};
@@ -752,6 +752,112 @@ pub fn findings_for(db_path: &Path, scan_id: i64) -> Result<Vec<FindingRow>, Eng
         .collect::<Result<Vec<_>, _>>()
         .map_err(store_err)?;
     Ok(rows)
+}
+
+// ---------------------------------------------------------- chain queries
+
+/// One finding row plus the scan row it was stored under — the join unit of
+/// the engineering-memory chain query (issue #100). Read-only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FindingOccurrence {
+    pub scan: ScanRow,
+    pub finding: FindingRow,
+}
+
+/// Every stored occurrence of one finding id, ordered by scan id
+/// (deterministic). Spans ALL workspaces in the store — the chain query
+/// scopes by workspace and names a cross-workspace hit with its remediation
+/// instead of silently dropping it.
+pub fn finding_occurrences(
+    db_path: &Path,
+    finding_id: &str,
+) -> Result<Vec<FindingOccurrence>, EngineError> {
+    let conn = open_existing(db_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.id, s.workspace, s.started_at, s.finished_at, s.finding_count,
+                    s.severity_critical, s.severity_warning, s.severity_info, s.schema_version,
+                    f.finding_id, f.severity, f.title, f.evidence_json
+             FROM findings f JOIN scans s ON s.id = f.scan_id
+             WHERE f.finding_id = ?1
+             ORDER BY s.id ASC",
+        )
+        .map_err(store_err)?;
+    let rows = stmt
+        .query_map(rusqlite::params![finding_id], |r| {
+            Ok(FindingOccurrence {
+                scan: ScanRow {
+                    id: r.get(0)?,
+                    workspace: r.get(1)?,
+                    finished_at: r.get(2)?,
+                    finding_count: r.get(3)?,
+                    severity_critical: r.get(4)?,
+                    severity_warning: r.get(5)?,
+                    severity_info: r.get(6)?,
+                    schema_version: r.get(7)?,
+                },
+                finding: FindingRow {
+                    finding_id: r.get(8)?,
+                    severity: r.get(9)?,
+                    title: r.get(10)?,
+                    evidence_json: r.get(11)?,
+                },
+            })
+        })
+        .map_err(store_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(store_err)?;
+    Ok(rows)
+}
+
+/// The (deduped, sorted) workspace names that hold a stored occurrence of
+/// one finding id — the actionable remediation when a chain query is scoped
+/// to a different workspace than the one holding the finding.
+pub fn finding_workspaces(db_path: &Path, finding_id: &str) -> Result<Vec<String>, EngineError> {
+    let conn = open_existing(db_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT s.workspace
+             FROM findings f JOIN scans s ON s.id = f.scan_id
+             WHERE f.finding_id = ?1
+             ORDER BY s.workspace ASC",
+        )
+        .map_err(store_err)?;
+    let rows = stmt
+        .query_map(rusqlite::params![finding_id], |r| r.get(0))
+        .map_err(store_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(store_err)?;
+    Ok(rows)
+}
+
+/// One scan row by id (`None` when absent) — the `wanyrix chain --scan`
+/// scope lookup. Read-only.
+pub fn scan_by_id(db_path: &Path, scan_id: i64) -> Result<Option<ScanRow>, EngineError> {
+    let conn = open_existing(db_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, workspace, finished_at, finding_count, severity_critical,
+                    severity_warning, severity_info, schema_version
+             FROM scans WHERE id = ?1",
+        )
+        .map_err(store_err)?;
+    let row = stmt
+        .query_row(rusqlite::params![scan_id], |r| {
+            Ok(ScanRow {
+                id: r.get(0)?,
+                workspace: r.get(1)?,
+                finished_at: r.get(2)?,
+                finding_count: r.get(3)?,
+                severity_critical: r.get(4)?,
+                severity_warning: r.get(5)?,
+                severity_info: r.get(6)?,
+                schema_version: r.get(7)?,
+            })
+        })
+        .optional()
+        .map_err(store_err)?;
+    Ok(row)
 }
 
 // ----------------------------------------------------------------- fsck

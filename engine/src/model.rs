@@ -274,6 +274,15 @@ pub enum EngineError {
     /// reason and a remediation are preserved verbatim — never a partial
     /// diff, never a guessed one.
     Compare(String),
+    /// The engineering-memory chain query (issue #100) refused: an unknown
+    /// `--finding`/`--scan` scope id, a scope that belongs to a different
+    /// workspace than the one measured at `--path`, or mutually exclusive
+    /// scope flags. Data-level problems in the linked records (orphaned
+    /// links, corrupt ledger/event lines, inconsistent store rows) are NOT
+    /// this — the chain is read-only, so those are NAMED inside the
+    /// `wanyrix.chain/v1` envelope and the query still serves what is
+    /// provable.
+    Chain(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -317,6 +326,7 @@ impl std::fmt::Display for EngineError {
             EngineError::SyncConflict(e) => write!(f, "sync conflict: {e}"),
             EngineError::Sync(e) => write!(f, "sync error: {e}"),
             EngineError::Compare(e) => write!(f, "compare error: {e}"),
+            EngineError::Chain(e) => write!(f, "memory chain error: {e}"),
         }
     }
 }
