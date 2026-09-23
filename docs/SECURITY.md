@@ -50,9 +50,16 @@ STRIDE-lite analysis — the governance-bundle companion to this document), and
 - The AI provider credentials are resolved server-side by the `z-ai-web-dev-sdk` at
   runtime — they are never embedded in source or shipped to the browser.
 - Checked by: `git check-ignore .env` → ignored, and review of tracked files (only the
-  placeholder `.env.example` is committed); a dedicated secret-scanning CI job is
-  **Roadmap** — delivery (gitleaks-class config carrying the billing-locked honesty
-  label) is tracked in #149 and mapped in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6.
+  placeholder `.env.example` is committed).
+- **Secret scanning is now configured** (issue #149 — SEC-3; the delivery that #119's
+  governance mapping and [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6 pointed at):
+  `.github/workflows/secret-scanning.yml` runs gitleaks over the full git history on
+  push/PR + a weekly schedule, with `.gitleaks.toml` extending the default rule set
+  (one documented allowlist: the engine's redaction positive-control fixtures, which
+  define secret-SHAPED patterns on purpose).
+  Honesty note: the workflow carries the billing-locked honesty label and the gitleaks
+  binary is not installed in the dev environment — local validation was YAML/TOML parse
+  only; the first hosted run is the real smoke test (still **no hosted-run evidence**).
 
 ## 3. Input validation (defense in depth on every route)
 
@@ -120,11 +127,26 @@ through typed getters; no user string is ever used as a file path or query.
   **cargo-audit** advisory-audit job alongside multi-target binaries and checksums.
   Honesty note: the repository's hosted Actions runners are billing-locked (documented
   in the `wanyrix.yml` honesty label) — hosted run records exist but no job steps have
-  executed, so these gates are validated locally, not on hosted runners. Renovate /
-  Dependabot dependency-update automation: **tracked in #149** (`.github/dependabot.yml`
-  for cargo + npm + github-actions ecosystems, plus the secret-scanning workflow —
-  governance mapping in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6; this section
-  records the posture, the owning issue owns the config).
+  executed, so these gates are validated locally, not on hosted runners. A fifth
+  workflow, `secret-scanning.yml` (gitleaks), is described in §2 above.
+- **Dependency-update automation is configured** (issue #149 — SEC-3; governance
+  mapping in [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6):
+  `.github/dependabot.yml` covers all three dependency surfaces — `cargo` in `engine/`,
+  `npm` at the repository root, and `github-actions` — each on a weekly schedule.
+  Honest limitation: Dependabot's npm ecosystem tracks `package.json` ranges and cannot
+  regenerate the `bun.lock` lockfile, so applying an npm update stays a maintainer step
+  (`bun install` / `bun update`) with the lockfile committed in the same PR. Dependabot
+  itself is not Actions-billed, but this repository has no hosted evidence of any
+  automation yet — until the first hosted Dependabot PR appears, treat this as prepared
+  config, not a proven-running control.
+- **cargo-audit for maintainers** (local invocation, mirrors the `release.yml` audit
+  job — `cargo install --locked cargo-audit && cargo audit --file Cargo.lock` from
+  `engine/`, i.e. `cargo audit --file engine/Cargo.lock` from the repository root):
+  audits the committed `engine/Cargo.lock` against the RustSec advisory database.
+  The advisory audit runs on release tags in hosted CI (billing-locked, see above);
+  maintainers can and should also run it locally before publishing — the binary is
+  NOT preinstalled in this dev environment (verified in the SEC-3 audit), so the first
+  local run is `cargo install --locked cargo-audit`.
 
 ## 6. AI / sandbox data boundaries
 
@@ -165,13 +187,14 @@ through typed getters; no user string is ever used as a file path or query.
   STRIDE-lite analysis with evidence links and review triggers; the informal posture
   above remains the control surface it references. A *formal* trust-boundary review
   (method-certified) is still roadmap.
-- **SAST/DAST and secret-scanning in CI** (CI itself exists — see §5): the planned
-  tooling map (gitleaks-class secret scanning, dependabot, CodeQL/Semgrep-class SAST,
-  route-contract fuzzing as the DAST seed) lives in
-  [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6 — secret scanning + dependency
-  automation land via **#149** (config belongs to that issue, not here); SAST/DAST
-  stay roadmap until a hosted runner unlocks (§4.5 of the threat model records the
-  billing-locked evidence gap).
+- **SAST/DAST in CI** (CI itself exists — see §5): secret scanning + dependency
+  automation are now wired as prepared config via `secret-scanning.yml`/gitleaks (§2)
+  and `.github/dependabot.yml` (§5) — delivered by #149 per the tooling map in
+  [`docs/THREAT_MODEL.md`](THREAT_MODEL.md) §6; SAST/DAST stay roadmap until a hosted
+  runner unlocks (§4.5 of the threat model records the billing-locked evidence gap).
+- **First hosted-run evidence for the delivered automation** (Dependabot PRs, gitleaks,
+  the release cargo-audit job) — blocked by the Actions billing lock; the configs are
+  prepared and honestly labeled until then.
 - **Signed releases and provenance attestation**: `release.yml` deliberately stops
   short of artifact signing — it stages binaries, SBOM, advisory audit, and checksums
   so signing is the only remaining step (requires maintainer secrets; the staged

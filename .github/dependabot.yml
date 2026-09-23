@@ -1,0 +1,30 @@
+# Dependabot configuration (issue #149 — SEC-3, wave-1 security audit).
+#
+# Three ecosystems cover every dependency manifest in the repository:
+#   - cargo  → engine/ (the Rust engine crate; Cargo.lock is committed)
+#   - npm    → repository root (the Next.js web platform's package.json)
+#   - github-actions → the workflows under .github/workflows/
+#
+# Honesty note (matches the billing-locked label on the workflows): Dependabot
+# itself is not Actions-billed, but this repository has no hosted-run evidence
+# for ANY automation yet — treat this file as prepared config until the first
+# hosted Dependabot PR actually appears. Also: the npm ecosystem tracks
+# package.json ranges; Dependabot cannot regenerate the bun.lock lockfile, so
+# lockfile refresh for dependency-update PRs remains a maintainer step
+# (`bun install` / `bun update`) — see docs/SECURITY.md §5.
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/engine"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
