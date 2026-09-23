@@ -9,7 +9,7 @@
  * handlers directly — the logic is proven here the moment the branch exists,
  * and the live pins activate post-merge.
  *
- * Contract under test (ENG-TCA-1 + issue #129):
+ * Contract under test (ENG-TCA-1 + issue #129 + issue #140):
  *   - every fixture-scoped route accepts BOTH `?ws=` (canonical) and
  *     `?workspace=` (alias); `ws` wins when both are present;
  *   - an unknown id under EITHER spelling → 404
@@ -17,6 +17,11 @@
  *     NEVER default-workspace data (the #129 bug: `health?workspace=x` used
  *     to return 200 with the default workspace's payload because only `ws`
  *     was read);
+ *   - issue #140: an absent OR empty (`?ws=`) param is a NAMED 400 with the
+ *     same guidance envelope — the registry default is never substituted
+ *     silently and a phantom `""` workspace can never reach a payload (the
+ *     #140 bug: `raw ?? default` missed `''`, so `/experiments?ws=` served
+ *     `{workspace:""}` and `/report?ws=` emitted `wanyrix-report--*.json`);
  *   - no route.ts under src/app/api/wanyrix reads the param inline — the
  *     reader is centralized in `workspaceParam` (src/lib/wanyrix/api.ts).
  */
@@ -64,14 +69,23 @@ describe('issue #129 — workspaceParam precedence', () => {
     })
   })
 
-  test('absent or empty under both spellings → registry default (unchanged)', async () => {
-    expect(workspaceParam(req('/api/wanyrix/health'))).toBeNull()
-    expect(resolveWorkspace(req('/api/wanyrix/health'))).toEqual({ ws: HELIOS, error: null })
-    // present-but-empty (`?ws=&workspace=`) = absent at the handler level
-    // (ENG-TCA-1 convention): the default workspace's data is served.
+  test('issue #140: absent or empty under both spellings → named 400 (param is REQUIRED)', async () => {
+    // Was (pre-#140): absent/empty resolved to the registry default — and
+    // `raw ?? WORKSPACES_DEFAULT` missed `''`, so `?ws=` served a PHANTOM
+    // `""` workspace. Now both are the named client-input 400.
+    const missing = resolveWorkspace(req('/api/wanyrix/health'))
+    expect(missing.error).not.toBeNull()
+    expect(missing.error?.status).toBe(400)
+    const empty = resolveWorkspace(req('/api/wanyrix/health?ws=&workspace='))
+    expect(empty.error).not.toBeNull()
+    expect(empty.error?.status).toBe(400)
+    const body = await jsonOf(empty.error as Response)
+    expect(String(body.error)).toContain('workspace param is required')
+    expect(body.knownWorkspaces).toEqual(WORKSPACE_IDS)
+    // the handler serves exactly that envelope (never default data)
     const res = await healthGET(req('/api/wanyrix/health?ws=&workspace='))
-    expect(res.status).toBe(200)
-    expect((await jsonOf(res)).workspace).toBe(HELIOS)
+    expect(res.status).toBe(400)
+    expect((await jsonOf(res)).knownWorkspaces).toEqual(WORKSPACE_IDS)
   })
 })
 
