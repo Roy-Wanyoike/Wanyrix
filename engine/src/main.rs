@@ -191,6 +191,13 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             json,
             pretty,
         } => cli::what_changed_run(&path, &db, &excludes, json, pretty),
+        Command::Compare {
+            db,
+            from,
+            to,
+            json,
+            pretty,
+        } => cli::compare_run(&db, from, to, json, pretty),
         Command::Export {
             path,
             out,

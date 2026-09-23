@@ -34,18 +34,33 @@
 //! crash states are reproduced in tests by dropping the connection with
 //! the second transaction uncommitted.
 //!
+//! # Crate/toolchain inventory (issue #115)
+//!
+//! Besides findings, `save` records a per-scan CRATE INVENTORY (name,
+//! version, band, node kind, manifest path) and the measured toolchain
+//! string — the identity fields the doctor payload carries, stored so
+//! `wanyrix compare` can diff two stored scans beyond findings. The
+//! inventory is written in a THIRD commit after the findings rows; a scan
+//! saved by an older engine (or whose save was killed before the third
+//! commit) simply has NO inventory rows — reads report that honestly as
+//! "not recorded" (never fabricated), and `wanyrix store fsck --repair`
+//! cleans inventory rows left orphaned by external tools.
+//!
 //! # Layout
 //!
 //! - [`init`] — create the schema (idempotent)
 //! - [`save`] / [`save_scan_row`] / [`save_findings_rows`] — persistence
 //!   (the two `save_*_row` halves are the public crash seam used by tests)
+//! - [`save_inventory`] — the third commit: crate + toolchain snapshot
 //! - [`list`] — scan summaries, newest last
+//! - [`crates_for`] / [`toolchain_for`] — per-scan inventory reads
 //! - [`fsck`] — report (and optionally repair) partial/orphaned writes
 //!
 //! The `findings.scan_id` foreign key is enforced on every connection the
 //! store opens (`PRAGMA foreign_keys=ON`), so a dangling findings row
 //! cannot be written through this module; the fsck orphan-findings check
-//! stays as defense-in-depth for databases touched by other tools.
+//! stays as defense-in-depth for databases touched by other tools. The
+//! inventory tables carry the same enforced foreign key.
 
 use std::path::Path;
 
@@ -63,7 +78,7 @@ pub const STORE_SCHEMA_VERSION: i64 = 1;
 /// the store documents what it holds, it does not guess.
 pub const ACCEPTED_PAYLOAD_SCHEMA: &str = "wanyrix.doctor/v1";
 
-const DDL: [&str; 3] = [
+const DDL: [&str; 5] = [
     "CREATE TABLE IF NOT EXISTS scans (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace        TEXT    NOT NULL,
@@ -85,6 +100,21 @@ const DDL: [&str; 3] = [
     // speed + deterministic ordering for per-scan reads; the FK itself is
     // deliberately un-enforced (see module docs)
     "CREATE INDEX IF NOT EXISTS idx_findings_scan_id ON findings(scan_id)",
+    // Crate inventory per scan (issue #115): the identity fields of every
+    // measured crate, stored verbatim so two stored scans can be diffed.
+    "CREATE TABLE IF NOT EXISTS scan_crates (
+        scan_id       INTEGER NOT NULL REFERENCES scans(id),
+        name          TEXT    NOT NULL,
+        version       TEXT    NOT NULL,
+        band          TEXT    NOT NULL,
+        node_kind     TEXT    NOT NULL,
+        manifest_path TEXT    NOT NULL
+    )",
+    // The measured toolchain string of the scan (one row per scan).
+    "CREATE TABLE IF NOT EXISTS scan_toolchain (
+        scan_id   INTEGER NOT NULL REFERENCES scans(id),
+        toolchain TEXT    NOT NULL
+    )",
 ];
 
 /// What one `store save` wrote (reported honestly, in commit order).
@@ -95,6 +125,9 @@ pub struct SaveOutcome {
     /// Findings rows committed for that scan (== the payload's summary
     /// total; enforced before writing).
     pub findings: usize,
+    /// Inventory rows committed for that scan (1 toolchain row + one row
+    /// per measured crate) — the third commit.
+    pub inventory: usize,
     /// Workspace name as measured by the doctor scan.
     pub workspace: String,
 }
@@ -146,10 +179,17 @@ pub struct FsckReport {
     pub count_mismatches: Vec<(i64, i64, i64)>,
     /// Findings rows whose scan_id has no scans row (dangling children).
     pub orphan_findings: Vec<i64>,
+    /// Scan ids that still have crate/toolchain inventory rows but no
+    /// scans row (dangling inventory, issue #115 — same defense-in-depth
+    /// class as `orphan_findings`, reported sorted and deduped).
+    pub orphan_inventory: Vec<i64>,
     /// When `repair` ran: scans rows deleted (incomplete/mismatched).
     pub removed_scans: usize,
     /// When `repair` ran: findings rows deleted (orphans + partial sets).
     pub removed_findings: usize,
+    /// When `repair` ran: inventory rows deleted (doomed scans' snapshots
+    /// + orphaned inventory).
+    pub removed_inventory: usize,
 }
 
 impl FsckReport {
@@ -157,6 +197,7 @@ impl FsckReport {
         self.incomplete_scans.is_empty()
             && self.count_mismatches.is_empty()
             && self.orphan_findings.is_empty()
+            && self.orphan_inventory.is_empty()
     }
 
     /// Deterministic human summary (one line per problem class, plus the
@@ -194,13 +235,26 @@ impl FsckReport {
                 "    finding row {id}: references a scan that does not exist\n"
             ));
         }
-        if self.removed_scans > 0 || self.removed_findings > 0 {
+        out.push_str(&format!(
+            "  orphan inventory rows (crate/toolchain snapshots of missing scans): {}\n",
+            self.orphan_inventory.len()
+        ));
+        for id in &self.orphan_inventory {
             out.push_str(&format!(
-                "  repaired: removed {} scan rows and {} findings rows\n",
-                self.removed_scans, self.removed_findings
+                "    scan {id}: inventory rows reference a scan that does not exist\n"
             ));
         }
-        if self.healthy() && self.removed_scans == 0 && self.removed_findings == 0 {
+        if self.removed_scans > 0 || self.removed_findings > 0 || self.removed_inventory > 0 {
+            out.push_str(&format!(
+                "  repaired: removed {} scan rows, {} findings rows and {} inventory rows\n",
+                self.removed_scans, self.removed_findings, self.removed_inventory
+            ));
+        }
+        if self.healthy()
+            && self.removed_scans == 0
+            && self.removed_findings == 0
+            && self.removed_inventory == 0
+        {
             out.push_str("  store consistent — every scan has its complete findings row set\n");
         }
         out
@@ -358,27 +412,58 @@ fn payload_fields(payload: &serde_json::Value) -> Result<PayloadScan, EngineErro
             evidence_json,
         });
     }
+    // Crate inventory (issue #115): name + version are the diff keys and
+    // are REQUIRED (a doctor payload whose crates lack them is not an
+    // honest doctor payload); the display fields default to "" when an
+    // exotic payload omits them — they are never diff keys, so nothing is
+    // silently invented.
+    let crates_json = payload["crates"]
+        .as_array()
+        .ok_or_else(|| EngineError::Store("payload has no `crates` array".into()))?;
+    let mut crates = Vec::with_capacity(crates_json.len());
+    for c in crates_json {
+        let name = c["name"]
+            .as_str()
+            .ok_or_else(|| EngineError::Store("a crate has no string `name`".into()))?;
+        let version = c["version"]
+            .as_str()
+            .ok_or_else(|| EngineError::Store(format!("crate {name} has no string `version`")))?;
+        crates.push(CrateSnapshot {
+            name: name.to_owned(),
+            version: version.to_owned(),
+            band: c["band"].as_str().unwrap_or_default().to_owned(),
+            node_kind: c["kind"].as_str().unwrap_or_default().to_owned(),
+            manifest_path: c["manifestPath"].as_str().unwrap_or_default().to_owned(),
+        });
+    }
+    let toolchain = payload["toolchain"]
+        .as_str()
+        .ok_or_else(|| EngineError::Store("payload has no string `toolchain` field".into()))?;
     Ok(PayloadScan {
         workspace: workspace.to_owned(),
         finished_at,
+        toolchain: toolchain.to_owned(),
         critical: crit,
         warning: warn,
         info,
         total,
         findings: rows,
+        crates,
     })
 }
 
 /// Persist one doctor-scan payload: scan row committed FIRST, then the
-/// findings rows (two transactions — see the module docs for why the seam
-/// is deliberate).
+/// findings rows, then the crate/toolchain inventory (three transactions —
+/// see the module docs for why the seams are deliberate).
 pub fn save(db_path: &Path, payload_text: &str) -> Result<SaveOutcome, EngineError> {
     let scan = parse_payload(payload_text)?;
     let scan_id = save_scan_row(db_path, &scan)?;
     let n = save_findings_rows(db_path, scan_id, &scan.findings)?;
+    let inventory = save_inventory(db_path, scan_id, &scan)?;
     Ok(SaveOutcome {
         scan_id,
         findings: n,
+        inventory,
         workspace: scan.workspace,
     })
 }
@@ -401,11 +486,17 @@ pub struct PayloadScan {
     pub workspace: String,
     /// Integer epoch (seconds) — the payload's `generatedAt`.
     pub finished_at: i64,
+    /// The payload's measured `toolchain` string (never empty for a
+    /// conformant doctor payload — absence is a named rejection).
+    pub toolchain: String,
     pub critical: i64,
     pub warning: i64,
     pub info: i64,
     pub total: i64,
     pub findings: Vec<FindingRow>,
+    /// The measured crate inventory (issue #115) — identity fields only,
+    /// verbatim from the payload's `crates` array.
+    pub crates: Vec<CrateSnapshot>,
 }
 
 /// One finding row to persist (evidence kept verbatim as JSON text).
@@ -415,6 +506,17 @@ pub struct FindingRow {
     pub severity: String,
     pub title: String,
     pub evidence_json: String,
+}
+
+/// One crate-inventory row to persist / read back (issue #115): the
+/// identity fields of a measured crate, verbatim from the payload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CrateSnapshot {
+    pub name: String,
+    pub version: String,
+    pub band: String,
+    pub node_kind: String,
+    pub manifest_path: String,
 }
 
 /// Commit ONLY the `scans` row. This is the first half of [`save`] and the
@@ -466,6 +568,126 @@ pub fn save_findings_rows(
     }
     txn.commit().map_err(store_err)?;
     Ok(findings.len())
+}
+
+/// Commit the crate/toolchain inventory for `scan_id` (issue #115). Third
+/// half of [`save`]; a separate transaction so the public crash seam
+/// (`save_scan_row` + `save_findings_rows`) keeps its exact issue-#58
+/// semantics — a scan whose save died before this commit has findings but
+/// NO inventory, which reads report honestly as "not recorded".
+/// Returns the number of rows committed (1 toolchain row + one per crate).
+pub fn save_inventory(
+    db_path: &Path,
+    scan_id: i64,
+    scan: &PayloadScan,
+) -> Result<usize, EngineError> {
+    let mut conn = open_existing(db_path)?;
+    // Self-healing idempotent DDL (same philosophy as the per-open WAL
+    // pragma): a store file created by a pre-#115 engine has no inventory
+    // tables yet — `save` migrates it on first write instead of failing.
+    for stmt in [&DDL[3], &DDL[4]] {
+        conn.execute_batch(stmt).map_err(store_err)?;
+    }
+    let txn = conn.transaction().map_err(store_err)?;
+    txn.execute(
+        "INSERT INTO scan_toolchain (scan_id, toolchain) VALUES (?1, ?2)",
+        rusqlite::params![scan_id, scan.toolchain],
+    )
+    .map_err(store_err)?;
+    {
+        let mut stmt = txn
+            .prepare(
+                "INSERT INTO scan_crates (scan_id, name, version, band, node_kind, manifest_path)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )
+            .map_err(store_err)?;
+        for c in &scan.crates {
+            stmt.execute(rusqlite::params![
+                scan_id,
+                c.name,
+                c.version,
+                c.band,
+                c.node_kind,
+                c.manifest_path
+            ])
+            .map_err(store_err)?;
+        }
+    }
+    txn.commit().map_err(store_err)?;
+    Ok(scan.crates.len() + 1)
+}
+
+// ------------------------------------------------------- inventory reads
+
+/// True when this database file has the inventory tables (stores created by
+/// pre-#115 engines never ran the new DDL). Read-only: missing tables are
+/// reported, never silently created by a read path.
+fn has_inventory_tables(conn: &Connection) -> Result<bool, EngineError> {
+    let tables: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table'
+             AND name IN ('scan_crates','scan_toolchain')",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(store_err)?;
+    Ok(tables == 2)
+}
+
+/// The measured toolchain of one stored scan; `Ok(None)` when the scan has
+/// no recorded inventory (saved by a pre-#115 engine, or its save was
+/// killed before the inventory commit). Callers label that "not recorded" —
+/// never a fabricated value.
+pub fn toolchain_for(db_path: &Path, scan_id: i64) -> Result<Option<String>, EngineError> {
+    let conn = open_existing(db_path)?;
+    if !has_inventory_tables(&conn)? {
+        return Ok(None);
+    }
+    let mut stmt = conn
+        .prepare("SELECT toolchain FROM scan_toolchain WHERE scan_id = ?1")
+        .map_err(store_err)?;
+    let mut rows = stmt
+        .query_map(rusqlite::params![scan_id], |r| r.get::<_, String>(0))
+        .map_err(store_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(store_err)?;
+    // One row per scan by construction; if an external tool inserted more,
+    // take the lexicographically smallest so reads stay deterministic.
+    rows.sort();
+    Ok(rows.into_iter().next())
+}
+
+/// The recorded crate inventory of one stored scan, ordered by
+/// (name, version, manifest_path) — deterministic. Empty when the scan has
+/// no recorded inventory (see [`toolchain_for`]); the caller distinguishes
+/// "not recorded" from "recorded empty" via [`toolchain_for`].
+pub fn crates_for(db_path: &Path, scan_id: i64) -> Result<Vec<CrateSnapshot>, EngineError> {
+    let conn = open_existing(db_path)?;
+    if !has_inventory_tables(&conn)? {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn
+        .prepare(
+            "SELECT name, version, band, node_kind, manifest_path
+             FROM scan_crates
+             WHERE scan_id = ?1
+             ORDER BY name ASC, version ASC, manifest_path ASC",
+        )
+        .map_err(store_err)?;
+    let rows = stmt
+        .query_map(rusqlite::params![scan_id], |r| {
+            Ok(CrateSnapshot {
+                name: r.get(0)?,
+                version: r.get(1)?,
+                band: r.get(2)?,
+                node_kind: r.get(3)?,
+                manifest_path: r.get(4)?,
+            })
+        })
+        .map_err(store_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(store_err)?;
+    Ok(rows)
 }
 
 // ----------------------------------------------------------------- list
@@ -596,6 +818,27 @@ pub fn fsck(db_path: &Path, repair: bool) -> Result<FsckReport, EngineError> {
             .map_err(store_err)?;
     }
 
+    // Inventory orphans (issue #115): same defense-in-depth class as the
+    // orphan-findings check — reachable only through tools that bypass the
+    // enforced foreign keys (manual edits, older writers).
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT c.scan_id FROM scan_crates c
+                 WHERE NOT EXISTS (SELECT 1 FROM scans s WHERE s.id = c.scan_id)
+                 UNION
+                 SELECT DISTINCT t.scan_id FROM scan_toolchain t
+                 WHERE NOT EXISTS (SELECT 1 FROM scans s WHERE s.id = t.scan_id)
+                 ORDER BY 1",
+            )
+            .map_err(store_err)?;
+        report.orphan_inventory = stmt
+            .query_map([], |r| r.get(0))
+            .map_err(store_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(store_err)?;
+    }
+
     if repair {
         // Measure the exact number of findings rows that belong to the
         // scans we are about to remove, BEFORE removing them — the report
@@ -617,8 +860,40 @@ pub fn fsck(db_path: &Path, repair: bool) -> Result<FsckReport, EngineError> {
                     .map_err(store_err)? as usize;
             }
         }
+        // Same measured-before-removal accounting for the doomed scans'
+        // inventory rows (they must go first — the enforced FK forbids
+        // deleting a scans row that children still reference).
+        let mut inventory_of_removed_scans = 0usize;
+        {
+            let mut stmt = conn
+                .prepare("SELECT count(*) FROM scan_crates WHERE scan_id = ?1")
+                .map_err(store_err)?;
+            for id in &doomed_scans {
+                inventory_of_removed_scans += stmt
+                    .query_row(rusqlite::params![id], |r| r.get::<_, i64>(0))
+                    .map_err(store_err)? as usize;
+            }
+            let mut stmt = conn
+                .prepare("SELECT count(*) FROM scan_toolchain WHERE scan_id = ?1")
+                .map_err(store_err)?;
+            for id in &doomed_scans {
+                inventory_of_removed_scans += stmt
+                    .query_row(rusqlite::params![id], |r| r.get::<_, i64>(0))
+                    .map_err(store_err)? as usize;
+            }
+        }
         let txn = conn.transaction().map_err(store_err)?;
         for id in &doomed_scans {
+            txn.execute(
+                "DELETE FROM scan_crates WHERE scan_id = ?1",
+                rusqlite::params![id],
+            )
+            .map_err(store_err)?;
+            txn.execute(
+                "DELETE FROM scan_toolchain WHERE scan_id = ?1",
+                rusqlite::params![id],
+            )
+            .map_err(store_err)?;
             txn.execute(
                 "DELETE FROM findings WHERE scan_id = ?1",
                 rusqlite::params![id],
@@ -634,8 +909,24 @@ pub fn fsck(db_path: &Path, repair: bool) -> Result<FsckReport, EngineError> {
             )
             .map_err(store_err)?;
         }
+        let mut removed_inventory = inventory_of_removed_scans;
+        for id in &report.orphan_inventory {
+            removed_inventory += txn
+                .execute(
+                    "DELETE FROM scan_crates WHERE scan_id = ?1",
+                    rusqlite::params![id],
+                )
+                .map_err(store_err)?;
+            removed_inventory += txn
+                .execute(
+                    "DELETE FROM scan_toolchain WHERE scan_id = ?1",
+                    rusqlite::params![id],
+                )
+                .map_err(store_err)?;
+        }
         report.removed_scans = report.incomplete_scans.len() + report.count_mismatches.len();
         report.removed_findings = rows_of_removed_scans + report.orphan_findings.len();
+        report.removed_inventory = removed_inventory;
         txn.commit().map_err(store_err)?;
     }
 
@@ -819,6 +1110,110 @@ mod tests {
         v["schema"] = serde_json::json!("wanyrix.doctor/v9");
         let err = save(&db, &v.to_string()).unwrap_err();
         assert!(err.to_string().contains("only accepts"), "got: {err}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn inventory_round_trips_verbatim_for_issue_115() {
+        let dir = tempdir("inventory");
+        let db = dir.join("scans.db");
+        init(&db).unwrap();
+        let outcome = save(&db, &tiny_ws_payload()).unwrap();
+        assert_eq!(outcome.inventory, 4, "1 toolchain row + 3 crate rows");
+        assert_eq!(
+            toolchain_for(&db, outcome.scan_id).unwrap().as_deref(),
+            Some("unspecified (no rust-toolchain.toml)"),
+            "the measured toolchain string is stored verbatim"
+        );
+        let crates = crates_for(&db, outcome.scan_id).unwrap();
+        assert_eq!(
+            crates.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            vec!["alpha", "beta", "gamma"],
+            "crates read back in deterministic (name) order"
+        );
+        assert_eq!(crates[0].version, "0.1.0");
+        assert_eq!(crates[0].manifest_path, "alpha/Cargo.toml");
+        assert_eq!(crates[0].band, "lib");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn seam_save_without_inventory_reads_as_not_recorded() {
+        let dir = tempdir("no-inventory");
+        let db = dir.join("scans.db");
+        init(&db).unwrap();
+        let scan = parse_payload(&tiny_ws_payload()).unwrap();
+        let scan_id = save_scan_row(&db, &scan).unwrap();
+        save_findings_rows(&db, scan_id, &scan.findings).unwrap();
+        assert_eq!(
+            toolchain_for(&db, scan_id).unwrap(),
+            None,
+            "a scan saved before the inventory commit has NO recorded toolchain"
+        );
+        assert!(crates_for(&db, scan_id).unwrap().is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn fsck_detects_and_repairs_orphan_inventory_rows() {
+        let dir = tempdir("orphan-inventory");
+        let db = dir.join("scans.db");
+        init(&db).unwrap();
+        save(&db, &tiny_ws_payload()).unwrap();
+
+        // A tool without FK enforcement injects inventory rows for a scan
+        // that does not exist — the file state fsck must clean up.
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.pragma_update(None, "foreign_keys", "OFF").unwrap();
+            conn.execute(
+                "INSERT INTO scan_crates (scan_id, name, version, band, node_kind, manifest_path)
+                 VALUES (999, 'ghost', '0.1.0', 'lib', 'workspace', 'ghost/Cargo.toml')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO scan_toolchain (scan_id, toolchain) VALUES (999, 'ghost-toolchain')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let report = fsck(&db, false).unwrap();
+        assert!(!report.healthy(), "orphan inventory makes the store unhealthy");
+        assert_eq!(report.orphan_inventory, vec![999]);
+        assert!(
+            report.summary().contains("orphan inventory rows"),
+            "the summary names the class: {}",
+            report.summary()
+        );
+
+        let repaired = fsck(&db, true).unwrap();
+        assert_eq!(repaired.removed_inventory, 2, "both orphan rows removed");
+        assert!(fsck(&db, false).unwrap().healthy(), "store consistent after repair");
+        // The healthy scan survived untouched.
+        assert_eq!(list(&db, None).unwrap().len(), 1);
+        assert_eq!(crates_for(&db, 1).unwrap().len(), 3);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn legacy_store_without_inventory_tables_reads_as_not_recorded() {
+        let dir = tempdir("legacy-tables");
+        let db = dir.join("scans.db");
+        // Simulate a pre-#115 store: init, save, then DROP the inventory
+        // tables (what an old engine's file looks like to the new binary).
+        init(&db).unwrap();
+        save(&db, &tiny_ws_payload()).unwrap();
+        let conn = open_existing(&db).unwrap();
+        conn.execute_batch("DROP TABLE scan_crates; DROP TABLE scan_toolchain;")
+            .unwrap();
+        drop(conn);
+        assert_eq!(toolchain_for(&db, 1).unwrap(), None, "missing tables read as not-recorded");
+        assert!(crates_for(&db, 1).unwrap().is_empty());
+        // ...and the write path self-heals: the next save re-creates them.
+        save(&db, &tiny_ws_payload()).unwrap();
+        assert!(toolchain_for(&db, 2).unwrap().is_some());
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -285,6 +285,29 @@ pub enum Command {
         #[arg(long)]
         pretty: bool,
     },
+    /// Time machine: diff two STORED scans (wanyrix.compare/v1, issue #115)
+    /// — findings added/resolved/changed, crate add/remove/version deltas
+    /// and severity deltas, read back verbatim from the store. Clock-free
+    /// and byte-stable: repeated invocations are identical (generatedAt is
+    /// the literal `not-measured`). Unknown ids, cross-workspace pairs and
+    /// corrupt store entries are NAMED refusals; identical scans are a
+    /// valid zero-delta envelope.
+    Compare {
+        /// SQLite scan store both scans live in (wanyrix store init/save).
+        #[arg(long)]
+        db: PathBuf,
+        /// The baseline scan id (`wanyrix store list` prints the ids).
+        #[arg(long)]
+        from: i64,
+        /// The scan id to compare against the baseline.
+        #[arg(long)]
+        to: i64,
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
+    },
     /// Export the freshly measured doctor/graph/health envelopes as
     /// deterministic JSON artifacts (artifacts-as-code, wanyrix.export/v1):
     /// one file per envelope plus an index.json manifest binding each
@@ -677,8 +700,13 @@ pub fn store_run(cmd: StoreCmd) -> Result<String, EngineError> {
             let payload = read_scan_payload(Path::new(&source))?;
             let outcome = store::save(&db, &payload)?;
             Ok(format!(
-                "wanyrix store save — persisted scan {} ({})\n  findings rows written: {}\n  db: {} (journal_mode=wal)\n  commit order: scans row committed, then findings rows (two-phase — see src/store.rs; `store fsck` detects a kill between them)\n",
-                outcome.scan_id, outcome.workspace, outcome.findings, db.display()
+                "wanyrix store save — persisted scan {} ({})\n  findings rows written: {}\n  inventory rows written: {} (1 toolchain + {} crate snapshot(s), issue #115)\n  db: {} (journal_mode=wal)\n  commit order: scans row committed, then findings rows (two-phase — see src/store.rs; `store fsck` detects a kill between them), then the crate/toolchain inventory (a save killed before that third commit leaves the scan honestly labeled not-recorded by `wanyrix compare`)\n",
+                outcome.scan_id,
+                outcome.workspace,
+                outcome.findings,
+                outcome.inventory,
+                outcome.inventory.saturating_sub(1),
+                db.display()
             ))
         }
         StoreCmd::List { db, workspace } => {
@@ -1099,6 +1127,24 @@ pub fn what_changed_run(
         serialize_json(&report, pretty)
     } else {
         Ok(crate::change::what_changed_human(&report))
+    }
+}
+
+/// Run `wanyrix compare` — the time-machine diff of two STORED scans
+/// (issue #115). Both sides come from the store, so the output is fully
+/// deterministic: no fresh scan, no wall-clock, byte-stable across runs.
+pub fn compare_run(
+    db: &Path,
+    from: i64,
+    to: i64,
+    json: bool,
+    pretty: bool,
+) -> Result<String, EngineError> {
+    let report = crate::compare::compare_scan_refs(db, from, to)?;
+    if json {
+        serialize_json(&report, pretty)
+    } else {
+        Ok(crate::compare::compare_human(&report))
     }
 }
 
