@@ -85,11 +85,18 @@
 //!   merges by (workspace id, finding id) + content hash with conflicts as
 //!   named findings and evidence tiers that never upgrade
 //!   (`wanyrix.sync/v1`)
+//! - [`chain`] — engineering-memory chain query (issue #100): one
+//!   deterministic read-only join of the scan store, the experiment ledger
+//!   and the event log into the per-finding evidence chain — scan →
+//!   finding(s) → experiment(s) → measurement → verification verdict
+//!   (`wanyrix.chain/v1`; evidence labels echoed verbatim, no wall-clock,
+//!   byte-identical reruns)
 //! - [`cli`] — clap definition + human formatting (`main.rs` is a wrapper)
 
 pub mod ai;
 pub mod analysis;
 pub mod build;
+pub mod chain;
 pub mod change;
 pub mod cli;
 pub mod compare;
@@ -114,6 +121,7 @@ pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
 pub use build::{ArtifactRow, BuildOptions, BuildReport, BUILD_PROFILE, BUILD_SCHEMA};
+pub use chain::{ChainReport, CHAIN_SCHEMA};
 pub use compare::{CompareReport, COMPARE_SCHEMA};
 pub use entitlement::{
     EntitlementReport, EntitlementState, GateGrant, Plan, SignedToken, TokenPayload,

@@ -198,6 +198,14 @@ fn run(command: Command) -> Result<String, wanyrix_engine::EngineError> {
             json,
             pretty,
         } => cli::compare_run(&db, from, to, json, pretty),
+        Command::Chain {
+            path,
+            db,
+            finding,
+            scan,
+            json,
+            pretty,
+        } => cli::chain_run(&path, &db, finding.as_deref(), scan, json, pretty),
         Command::Export {
             path,
             out,

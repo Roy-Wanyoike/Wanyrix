@@ -51,7 +51,9 @@ fn state_path(root: &Path) -> PathBuf {
     wanyrix_dir(root).join(STATE_FILE)
 }
 
-fn ledger_path(root: &Path) -> PathBuf {
+/// The workspace's experiment-ledger path (`<root>/.wanyrix/experiments.jsonl`).
+/// Public because the read-only chain query (issue #100) reads the same file.
+pub fn ledger_path(root: &Path) -> PathBuf {
     wanyrix_dir(root).join(LEDGER_FILE)
 }
 
@@ -515,6 +517,16 @@ pub struct ExperimentRecord {
     pub name: String,
     /// The hypothesis, stated up-front (never retro-fitted by verify).
     pub claim: String,
+    /// The stored finding id this experiment investigates (issue #100) —
+    /// the scan → finding → experiment link of the engineering-memory
+    /// chain. OPTIONAL: records written before issue #100 have no link and
+    /// read back as `None` (`serde(default)` — old ledger lines parse
+    /// unchanged, and a `None` link is never re-serialized, so pre-#100
+    /// records stay byte-identical on rewrite). The chain query echoes the
+    /// id verbatim and names links that dangle (no stored finding with
+    /// that id in scope); it never guesses a link from claim text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finding_id: Option<String>,
     /// estimated → measured → verified. Downgrades never happen silently:
     /// status transitions are validated by this module or rejected.
     pub status: String,
@@ -528,11 +540,12 @@ pub struct ExperimentRecord {
     pub verified_at: Option<String>,
 }
 
-fn experiment(name: &str, claim: &str, now: &str) -> ExperimentRecord {
+fn experiment(name: &str, claim: &str, finding_id: Option<&str>, now: &str) -> ExperimentRecord {
     ExperimentRecord {
         schema: EXPERIMENT_SCHEMA.to_owned(),
         name: name.to_owned(),
         claim: claim.to_owned(),
+        finding_id: finding_id.map(|f| f.to_owned()),
         status: "estimated".to_owned(),
         created_at: now.to_owned(),
         baseline: None,
@@ -603,15 +616,27 @@ fn write_ledger(root: &Path, records: &[ExperimentRecord]) -> Result<(), EngineE
 
 /// `wanyrix experiment record` — append a hypothesis with status
 /// `estimated`. Duplicate names are an honest error, never a silent upsert.
+/// `finding_id` (optional, `--finding`) is the stored finding id the
+/// experiment investigates — the chain link for `wanyrix chain` (issue
+/// #100); it is echoed verbatim and never validated against a store here
+/// (the ledger has none) — a dangling link is NAMED by the chain query.
 pub fn experiment_record(
     root: &Path,
     name: &str,
     claim: &str,
+    finding_id: Option<&str>,
 ) -> Result<ExperimentRecord, EngineError> {
     if name.trim().is_empty() || claim.trim().is_empty() {
         return Err(EngineError::Experiment(
             "--name and --claim must both be non-empty (an unnamed or unclaimed experiment is not a hypothesis)".into(),
         ));
+    }
+    if let Some(f) = finding_id {
+        if f.trim().is_empty() {
+            return Err(EngineError::Experiment(
+                "--finding must be non-empty when given (a blank link is not a finding id)".into(),
+            ));
+        }
     }
     let mut records = read_ledger(root)?;
     if records.iter().any(|r| r.name == name) {
@@ -620,7 +645,7 @@ pub fn experiment_record(
             ledger_path(root).display()
         )));
     }
-    let rec = experiment(name, claim, &iso8601_now());
+    let rec = experiment(name, claim, finding_id, &iso8601_now());
     records.push(rec.clone());
     write_ledger(root, &records)?;
     emit_event(root, "experiment.recorded", &rec);
@@ -764,6 +789,9 @@ pub fn experiment_human(rec: &ExperimentRecord) -> String {
         "[{}] {} — {}\n  claim: {}\n",
         rec.status, rec.name, rec.created_at, rec.claim
     );
+    if let Some(f) = &rec.finding_id {
+        out.push_str(&format!("  finding: {f}\n"));
+    }
     out.push_str(&fmt_m(&rec.baseline, "baseline"));
     out.push('\n');
     out.push_str(&fmt_m(&rec.candidate, "candidate"));
@@ -880,7 +908,7 @@ mod tests {
     }
 
     fn rec(name: &str) -> ExperimentRecord {
-        experiment(name, "make it faster", "2026-01-01T00:00:00Z")
+        experiment(name, "make it faster", None, "2026-01-01T00:00:00Z")
     }
 
     #[test]
@@ -999,16 +1027,56 @@ mod tests {
         assert!(err.to_string().contains("not fully measured"));
     }
 
+    /// Issue #100: the optional finding link round-trips, a blank `--finding`
+    /// is refused, and a pre-#100 ledger line (no `findingId` key) parses as
+    /// unlinked and re-serializes byte-identically (migration-safe store).
+    #[test]
+    fn finding_link_roundtrips_and_pre100_records_stay_unlinked() {
+        let ws = tmpdir("chain-link");
+        crate::synth::synth(&ws, 1, 42).unwrap();
+
+        let linked = experiment_record(&ws, "linked", "claim", Some("FER-ENG-001")).unwrap();
+        assert_eq!(linked.finding_id.as_deref(), Some("FER-ENG-001"));
+        let listed = experiment_list(&ws).unwrap();
+        assert_eq!(listed[0].finding_id.as_deref(), Some("FER-ENG-001"));
+
+        // A blank link is not a finding id — named refusal, nothing written.
+        assert!(
+            experiment_record(&ws, "blank", "claim", Some("   ")).is_err(),
+            "blank --finding must be refused"
+        );
+        assert_eq!(experiment_list(&ws).unwrap().len(), 1);
+
+        // A pre-#100 ledger line (no findingId key) reads back unlinked and
+        // re-serializes to the exact same bytes — old records are never
+        // "upgraded" with a phantom key by a rewrite.
+        std::fs::create_dir_all(wanyrix_dir(&ws)).unwrap();
+        let line = "{\"schema\":\"wanyrix.experiment/v1\",\"name\":\"old\",\"claim\":\"c\",\"status\":\"estimated\",\"createdAt\":\"t0\"}";
+        std::fs::write(ledger_path(&ws), format!("{line}\n")).unwrap();
+        let records = read_ledger(&ws).unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(
+            records[0].finding_id.is_none(),
+            "pre-#100 lines parse as unlinked"
+        );
+        let rewritten = cli::serialize_json(&records[0], false).unwrap();
+        assert_eq!(
+            rewritten, line,
+            "a pre-#100 record re-serializes byte-identically"
+        );
+        std::fs::remove_dir_all(&ws).unwrap();
+    }
+
     #[test]
     fn experiment_ledger_roundtrip_and_guards() {
         let ws = tmpdir("ledger");
         crate::synth::synth(&ws, 1, 42).unwrap();
 
-        let r0 = experiment_record(&ws, "exp-a", "halve the build").unwrap();
+        let r0 = experiment_record(&ws, "exp-a", "halve the build", None).unwrap();
         assert_eq!(r0.status, "estimated");
 
         // duplicate name refused — the ledger never overwrites
-        assert!(experiment_record(&ws, "exp-a", "other claim").is_err());
+        assert!(experiment_record(&ws, "exp-a", "other claim", None).is_err());
 
         // unknown name refused on measure
         assert!(experiment_measure_gate(&ws, "nope").is_err());
@@ -1061,7 +1129,7 @@ mod tests {
     #[test]
     fn experiment_record_appends_a_matching_event() {
         let ws = tmpdir("events-record");
-        let rec = experiment_record(&ws, "ev-recorded", "a hypothesis").unwrap();
+        let rec = experiment_record(&ws, "ev-recorded", "a hypothesis", None).unwrap();
         let log = events::read_events(&ws).unwrap();
         assert_eq!(log.events.len(), 1);
         assert_eq!(log.events[0].schema, "wanyrix.event/v1");
@@ -1076,7 +1144,7 @@ mod tests {
     #[test]
     fn refused_verify_emits_no_event() {
         let ws = tmpdir("events-refused");
-        experiment_record(&ws, "ev-refused", "a hypothesis").unwrap();
+        experiment_record(&ws, "ev-refused", "a hypothesis", None).unwrap();
         let before = events::read_events(&ws).unwrap().events.len();
         let err = experiment_verify(&ws, "ev-refused").unwrap_err();
         assert!(err.to_string().contains("not fully measured"));
@@ -1090,7 +1158,7 @@ mod tests {
     #[test]
     fn verified_transition_mints_a_verified_event() {
         let ws = tmpdir("events-verified");
-        let rec = experiment_record(&ws, "ev-verified", "a hypothesis").unwrap();
+        let rec = experiment_record(&ws, "ev-verified", "a hypothesis", None).unwrap();
         let measured = apply_measurement(rec, "baseline", 500, true, "cargo build", "t1").unwrap();
         write_ledger(&ws, &[measured]).unwrap();
         let listed = experiment_list(&ws).unwrap();

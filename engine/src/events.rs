@@ -242,6 +242,7 @@ mod tests {
             schema: crate::product::EXPERIMENT_SCHEMA.to_owned(),
             name: "inline-deps".to_owned(),
             claim: "fewer crates recompile".to_owned(),
+            finding_id: Some("FER-ENG-001".to_owned()),
             status: "verified".to_owned(),
             created_at: "t0".to_owned(),
             baseline: None,
