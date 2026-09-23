@@ -794,14 +794,15 @@ mod tests {
         // `ws`, the scan belongs to `other_ws`).
         let own = chain_report(&other_ws, &db, None, Some(foreign_id)).unwrap();
         assert_eq!(own.scope.scan_id, Some(foreign_id));
-        assert_eq!(own.workspace, other_ws.file_name().unwrap().to_str().unwrap());
+        assert_eq!(
+            own.workspace,
+            other_ws.file_name().unwrap().to_str().unwrap()
+        );
         let err = chain_report(&ws, &db, None, Some(foreign_id)).unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains(&format!("scan {foreign_id} belongs to workspace"))
-                && msg.contains(
-                    other_ws.file_name().unwrap().to_str().unwrap(),
-                ),
+                && msg.contains(other_ws.file_name().unwrap().to_str().unwrap(),),
             "the refusal names the owning workspace: {msg}"
         );
         std::fs::remove_dir_all(&ws).unwrap();
