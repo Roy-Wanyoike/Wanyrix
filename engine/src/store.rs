@@ -65,6 +65,7 @@
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
+use serde::Serialize;
 
 use crate::model::EngineError;
 use crate::timestamp::{iso8601_from_unix, unix_from_iso8601};
@@ -133,7 +134,8 @@ pub struct SaveOutcome {
 }
 
 /// One row of `store list` output.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScanRow {
     pub id: i64,
     pub workspace: String,
@@ -260,6 +262,56 @@ impl FsckReport {
         out
     }
 }
+
+/// `wanyrix store list --json` envelope (issue #143, design rule 1):
+/// `wanyrix.store-scans/v1`. Field order is the emitted order —
+/// `generatedAt` is LAST (the envelope rule every report honors).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreScansEnvelope<'a> {
+    pub schema: &'static str,
+    pub db: String,
+    /// The `--workspace` filter exactly as given (`null` = unfiltered —
+    /// never a silent default).
+    pub workspace: Option<&'a String>,
+    pub count: usize,
+    pub scans: Vec<ScanRow>,
+    pub generated_at: String,
+}
+
+pub const STORE_SCANS_SCHEMA: &str = "wanyrix.store-scans/v1";
+
+/// One named problem triple of the fsck envelope (never a positional
+/// array — every number is labeled).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreFsckTriple {
+    pub scan_id: i64,
+    pub finding_count: i64,
+    pub actual_rows: i64,
+}
+
+/// `wanyrix store fsck --json` envelope (issue #143, design rule 1):
+/// `wanyrix.store-fsck/v1`. Field order is the emitted order —
+/// `generatedAt` is LAST.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreFsckEnvelope {
+    pub schema: &'static str,
+    pub db: String,
+    pub repair: bool,
+    pub healthy: bool,
+    pub scans_checked: usize,
+    pub findings_rows: usize,
+    pub incomplete_scans: Vec<StoreFsckTriple>,
+    pub count_mismatches: Vec<StoreFsckTriple>,
+    pub orphan_findings: Vec<i64>,
+    pub removed_scans: usize,
+    pub removed_findings: usize,
+    pub generated_at: String,
+}
+
+pub const STORE_FSCK_SCHEMA: &str = "wanyrix.store-fsck/v1";
 
 // ---------------------------------------------------------------- errors
 

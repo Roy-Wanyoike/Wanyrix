@@ -645,9 +645,12 @@ mod tests {
             "2026-09-18T14:01:00Z",
         )
         .unwrap();
-        let verified = product::verify_record(rec, "2026-09-18T14:02:00Z").unwrap();
+        let verified = match product::verify_record(rec, "2026-09-18T14:02:00Z").unwrap() {
+            crate::product::VerifyOutcome::Verified(rec) => rec,
+            other => panic!("expected Verified, got {other:?}"),
+        };
         assert_eq!(verified.status, "verified");
-        write_ledger(&ws, &[verified]);
+        write_ledger(&ws, std::slice::from_ref(&verified));
 
         let r = chain_report(&ws, &db, None, None).unwrap();
         assert_eq!(r.schema, CHAIN_SCHEMA);
@@ -1021,7 +1024,10 @@ mod tests {
             product::apply_measurement(rec, "baseline", 1_000, true, "cargo build", "t1").unwrap();
         let rec =
             product::apply_measurement(rec, "candidate", 500, true, "cargo build", "t2").unwrap();
-        let verified = product::verify_record(rec, "t3").unwrap();
+        let verified = match product::verify_record(rec, "t3").unwrap() {
+            crate::product::VerifyOutcome::Verified(rec) => rec,
+            other => panic!("expected Verified, got {other:?}"),
+        };
         write_ledger(&ws, &[verified]);
 
         let r = chain_report(&ws, &db, None, None).unwrap();

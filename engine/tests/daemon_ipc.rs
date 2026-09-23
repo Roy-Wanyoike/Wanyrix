@@ -257,3 +257,92 @@ fn daemon_call_surfaces_scan_failures_with_exit_code_2() {
 
     let _ = std::fs::remove_file(&sock);
 }
+
+/// Issue #143: `daemon start --path <ws>` anchors the daemon — the client
+/// can then request `doctor` WITHOUT `--path` (the CLI default ".") and the
+/// server resolves the RELATIVE request path against the anchor. This is
+/// the parity the common-flags contract promises (`daemon call --path`
+/// already worked; `daemon start --path` used to be refused).
+#[test]
+fn daemon_start_accepts_path_and_anchors_relative_request_paths() {
+    let sock =
+        std::env::temp_dir().join(format!("wanyrix-daemon-anchor-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&sock);
+    let tiny = fixture("tiny-ws");
+
+    // Nonexistent anchor: named refusal BEFORE anything binds (exit 2).
+    let output = Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+        .args([
+            "daemon",
+            "start",
+            "--socket",
+            sock.to_str().unwrap(),
+            "--path",
+            "/wanyrix/definitely/missing-anchor",
+            "--max-requests",
+            "1",
+        ])
+        .output()
+        .expect("spawn anchored daemon");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("does not exist or is not a directory"),
+        "named anchor refusal: {stderr}"
+    );
+    assert!(!sock.exists(), "nothing bound for a refused anchor");
+
+    // Real anchor: start with --path, then a RELATIVE doctor request.
+    let mut child = ChildGuard(
+        Command::new(env!("CARGO_BIN_EXE_wanyrix"))
+            .args([
+                "daemon",
+                "start",
+                "--socket",
+                sock.to_str().unwrap(),
+                "--path",
+                tiny.parent().unwrap().to_str().unwrap(),
+                "--max-requests",
+                "3",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn anchored daemon"),
+    );
+    assert!(wait_for_socket(&sock), "anchored daemon never listened");
+
+    // status echoes the anchor…
+    let status = daemon::call(&sock, r#"{"id":"s1","method":"status"}"#).unwrap();
+    let sv: Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(
+        sv["data"]["workspaceRoot"].as_str().unwrap(),
+        tiny.parent().unwrap().display().to_string(),
+        "the anchor is echoed in the status frame"
+    );
+
+    // …and a RELATIVE request path resolves against it: the doctor
+    // envelope measured tiny-ws (4 findings), reachable by name only.
+    let rel_line = r#"{"id":"r1","method":"doctor","params":{"path":"tiny-ws"}}"#;
+    let rel = daemon::call(&sock, rel_line).unwrap();
+    let rv: Value = serde_json::from_str(&rel).unwrap();
+    assert_eq!(
+        rv["ok"], true,
+        "relative request resolved via the anchor: {rel}"
+    );
+    assert_eq!(rv["data"]["schema"], "wanyrix.doctor/v1");
+    assert_eq!(
+        rv["data"]["summary"]["total"], 4,
+        "the anchored scan measured tiny-ws (4 findings)"
+    );
+
+    let _ = daemon::call(&sock, r#"{"id":"bye","method":"shutdown"}"#);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if child.0.try_wait().unwrap().is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(!sock.exists(), "socket removed on exit");
+}

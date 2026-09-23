@@ -193,6 +193,13 @@ signing**, the private half lives only in the release signing environment
 (never committed, never in the repo), and the public half is embedded into the
 binary. Until then (and for Enterprise on-prem entitlement servers and tests)
 the documented `WANYRIX_ACTIVATION_PUBKEY` override names the trusted key.
+Honesty about that placeholder (issue #142): on a stock build — no override —
+EVERY activation fails **closed** with a named, actionable refusal (exit 2)
+that says the embedded release verification key is unusable, that no token can
+verify against it, and that names the `WANYRIX_ACTIVATION_PUBKEY` override
+(`wanyrix license keygen` writes the public half to `wanyrix-license-pub.hex`)
+plus this document. The refusal is a clean error, never a raw crypto/hex
+panic, and a refused activation caches nothing.
 `ed25519-dalek` (default features off) is the one deliberate dependency
 deviation from the hand-rolled-crypto policy — hand-rolling signatures would
 be a security liability, not an auditability win (documented in

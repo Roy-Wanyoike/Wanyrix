@@ -635,12 +635,40 @@ pub fn verifying_key_from_hex(hex: &str) -> Result<VerifyingKey, EngineError> {
 /// `WANYRIX_ACTIVATION_PUBKEY` override when set (on-prem entitlement
 /// servers, tests), else the embedded release key (dev key until release
 /// signing).
+///
+/// Issue #142: an UNUSABLE embedded key (today the `PENDING_RELEASE_KEY`
+/// placeholder) is a build/packaging state the operator cannot fix by
+/// re-typing — the refusal must therefore NAME the documented escape hatch
+/// (`WANYRIX_ACTIVATION_PUBKEY` + docs/COMMERCIAL.md) instead of surfacing
+/// a raw low-level hex error. A malformed OVERRIDE, by contrast, is the
+/// operator's own input and keeps its specific hex error.
 pub fn authority() -> Result<VerifyingKey, EngineError> {
-    let hex_str = match std::env::var(PUBKEY_OVERRIDE_ENV) {
-        Ok(v) if !v.trim().is_empty() => v,
-        _ => RELEASE_PUBLIC_KEY_HEX.to_owned(),
+    let override_hex = match std::env::var(PUBKEY_OVERRIDE_ENV) {
+        Ok(v) if !v.trim().is_empty() => Some(v),
+        _ => None,
     };
-    verifying_key_from_hex(&hex_str)
+    authority_from_parts(override_hex.as_deref())
+}
+
+/// Pure core of [`authority`] (unit-testable without touching process env):
+/// the override hex when the operator set one, `None` for "use the
+/// embedded release key".
+pub fn authority_from_parts(override_hex: Option<&str>) -> Result<VerifyingKey, EngineError> {
+    match override_hex {
+        Some(hex) => verifying_key_from_hex(hex),
+        None => verifying_key_from_hex(RELEASE_PUBLIC_KEY_HEX)
+            .map_err(|cause| embedded_release_key_unavailable(&cause.to_string())),
+    }
+}
+
+/// The named, actionable refusal for an unusable EMBEDDED release key
+/// (issue #142). Fails closed exactly like every other verification
+/// refusal — nothing is cached, nothing is skipped — but says what to do
+/// instead of a bare crypto error.
+fn embedded_release_key_unavailable(cause: &str) -> EngineError {
+    EngineError::Entitlement(format!(
+        "activation is unavailable on this build: the embedded release verification key is unusable ({cause}) — this build still carries the development placeholder, so no token can be verified against it and activation always fails closed. Set {PUBKEY_OVERRIDE_ENV}=<public-key hex> to verify against your own keypair (`wanyrix license keygen` writes the public half to wanyrix-license-pub.hex; see docs/COMMERCIAL.md). Release builds embed the real key at release signing."
+    ))
 }
 
 /* --------------------------------------------------------------- cache ---- */
@@ -1931,6 +1959,58 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, EngineError::Entitlement(ref m) if m.contains("malformed hex")));
+    }
+
+    /* -- authority resolution (issue #142) ------------------------------ */
+
+    #[test]
+    fn embedded_placeholder_key_is_a_named_actionable_refusal() {
+        // The placeholder is not hex at all — parsing it must fail closed…
+        assert!(verifying_key_from_hex(RELEASE_PUBLIC_KEY_HEX).is_err());
+        // …and the NO-override authority path must turn that into the
+        // named, actionable refusal (never a bare low-level hex error).
+        let err = authority_from_parts(None).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains(PUBKEY_OVERRIDE_ENV),
+            "refusal must name the override env var: {msg}"
+        );
+        assert!(
+            msg.contains("docs/COMMERCIAL.md"),
+            "refusal must point at the docs: {msg}"
+        );
+        assert!(
+            msg.contains("wanyrix-license-pub.hex"),
+            "refusal must name the keygen artifact: {msg}"
+        );
+        assert!(
+            msg.contains("fails closed"),
+            "refusal must state that nothing is activated: {msg}"
+        );
+    }
+
+    #[test]
+    fn operator_override_keeps_its_specific_input_errors() {
+        // A malformed OVERRIDE is the operator's own input: the error stays
+        // the specific hex complaint (with the env var named), NOT the
+        // placeholder guidance.
+        for bad in ["", "zz", "PENDING_RELEASE_KEY"] {
+            let err = authority_from_parts(Some(bad)).unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                msg.contains(PUBKEY_OVERRIDE_ENV),
+                "operator-input error names the env var: {msg}"
+            );
+            assert!(
+                !msg.contains("activation is unavailable"),
+                "operator-input error must not claim a build defect: {msg}"
+            );
+        }
+        // A VALID override resolves to a working verifying key: the DERIVED
+        // public half (the seed bytes themselves are usually NOT a valid
+        // curve point — the keygen flow always hands over the derived half).
+        let vk = signer(&SEED_A).verifying_key();
+        authority_from_parts(Some(&hex_encode(vk.as_bytes()))).unwrap();
     }
 
     #[test]
