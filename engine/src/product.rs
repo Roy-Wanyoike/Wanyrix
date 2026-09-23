@@ -39,6 +39,19 @@ pub const EXPERIMENT_SCHEMA: &str = "wanyrix.experiment/v1";
 /// The `experiment list --json` envelope.
 pub const EXPERIMENTS_SCHEMA: &str = "wanyrix.experiments/v1";
 
+/// Default minimum margin for `experiment verify` (issue #143), overridable
+/// per call with `--min-margin-pct`. The candidate build must be faster
+/// than the baseline by MORE than this percentage of the measured baseline
+/// wall clock before the evidence tier upgrades to `verified`. 10% is the
+/// documented default because build-timing noise scales with build size
+/// and two sub-second builds routinely differ by a few percent of pure
+/// noise (QA wave 1: two ~120 ms builds "improved" by a few ms of noise
+/// still reached `verified` — evidence upgraded on nothing). A delta at or
+/// below the margin is an explicit `within-noise` outcome: measured, but
+/// never claimed as certainty. The honesty contract is absolute — verify
+/// never claims more than was measured.
+pub const DEFAULT_MIN_MARGIN_PCT: f64 = 10.0;
+
 const DIR_NAME: &str = ".wanyrix";
 const STATE_FILE: &str = "state.json";
 const LEDGER_FILE: &str = "experiments.jsonl";
@@ -719,13 +732,54 @@ pub fn experiment_measure(
     Ok(updated)
 }
 
-/// Pure verify gate — unit-testable without running cargo.
-pub fn verify_record(
-    mut record: ExperimentRecord,
+/// The verdict of `experiment verify` (issue #143). `verified` is minted
+/// ONLY when the measured delta strictly exceeds the minimum margin; a
+/// delta at or below it is an explicit [`VerifyOutcome::WithinNoise`] —
+/// the record stays `measured` in the ledger, no event is minted, and the
+/// CLI says so. Never claim more certainty than measured.
+#[derive(Debug)]
+pub enum VerifyOutcome {
+    /// The tier upgrades: candidate faster by more than the margin.
+    Verified(ExperimentRecord),
+    /// Faster, but by at most the margin — the delta could be pure
+    /// build-timing noise. The record is NOT persisted again (the ledger
+    /// already holds it at `measured`) and no event fires (no transition
+    /// happened).
+    WithinNoise {
+        record: ExperimentRecord,
+        baseline_ms: u64,
+        candidate_ms: u64,
+        /// `baseline_ms - candidate_ms` (> 0 here — the not-faster refusal
+        /// already fired otherwise).
+        delta_ms: u64,
+        /// The margin the delta failed to exceed (`ceil(baseline × pct)`).
+        margin_ms: u64,
+    },
+}
+
+/// Pure verify gate — unit-testable without running cargo. Validates the
+/// margin first (a nonsensical margin is a named refusal, never a silent
+/// clamp), then applies the three refusals (not fully measured, failed
+/// build, not faster) and finally the margin rule.
+pub fn verify_record_with_margin(
+    record: ExperimentRecord,
     now: &str,
-) -> Result<ExperimentRecord, EngineError> {
+    min_margin_pct: f64,
+) -> Result<VerifyOutcome, EngineError> {
+    if !min_margin_pct.is_finite() || min_margin_pct < 0.0 || min_margin_pct > 100.0 {
+        return Err(EngineError::Experiment(format!(
+            "--min-margin-pct must be a finite percentage in 0..=100 (got {min_margin_pct}) — 0 accepts any strictly faster delta; the default is {DEFAULT_MIN_MARGIN_PCT}%"
+        )));
+    }
+    let verified = |mut record: ExperimentRecord| {
+        record.status = "verified".to_owned();
+        record.verified_at = Some(now.to_owned());
+        VerifyOutcome::Verified(record)
+    };
+    // Clone the two small measurement structs so the record itself can be
+    // moved into the outcome afterwards (the borrows end here).
     let (base, cand) = match (&record.baseline, &record.candidate) {
-        (Some(b), Some(c)) => (b, c),
+        (Some(b), Some(c)) => (b.clone(), c.clone()),
         _ => {
             return Err(EngineError::Experiment(format!(
                 "experiment {:?} is not fully measured (baseline: {}, candidate: {}) — Estimated ≠ Measured ≠ Verified: nothing can be verified from a hypothesis alone",
@@ -747,14 +801,38 @@ pub fn verify_record(
             record.name, cand.wall_clock_ms, base.wall_clock_ms
         )));
     }
-    record.status = "verified".to_owned();
-    record.verified_at = Some(now.to_owned());
-    Ok(record)
+    let delta_ms = base.wall_clock_ms - cand.wall_clock_ms;
+    let margin_ms = ((base.wall_clock_ms as f64) * min_margin_pct / 100.0).ceil() as u64;
+    if delta_ms <= margin_ms {
+        return Ok(VerifyOutcome::WithinNoise {
+            record,
+            baseline_ms: base.wall_clock_ms,
+            candidate_ms: cand.wall_clock_ms,
+            delta_ms,
+            margin_ms,
+        });
+    }
+    Ok(verified(record))
+}
+
+/// Pure verify gate at the DEFAULT margin — the shape callers had before
+/// the margin rule existed (issue #143); prefer [`verify_record_with_margin`]
+/// when the margin is operator-configured.
+pub fn verify_record(record: ExperimentRecord, now: &str) -> Result<VerifyOutcome, EngineError> {
+    verify_record_with_margin(record, now, DEFAULT_MIN_MARGIN_PCT)
 }
 
 /// `wanyrix experiment verify` — grant `verified` ONLY on a real measured
-/// improvement between two successful real builds.
-pub fn experiment_verify(root: &Path, name: &str) -> Result<ExperimentRecord, EngineError> {
+/// improvement (candidate faster by MORE than the minimum margin, default
+/// [`DEFAULT_MIN_MARGIN_PCT`]%) between two successful real builds. A
+/// delta within the margin is the explicit `within-noise` verdict: the
+/// ledger is NOT rewritten (the record stays `measured`), no event is
+/// minted, and the outcome is returned for the CLI to state honestly.
+pub fn experiment_verify(
+    root: &Path,
+    name: &str,
+    min_margin_pct: f64,
+) -> Result<VerifyOutcome, EngineError> {
     let mut records = read_ledger(root)?;
     let idx = records.iter().position(|r| r.name == name).ok_or_else(|| {
         EngineError::Experiment(format!(
@@ -762,12 +840,14 @@ pub fn experiment_verify(root: &Path, name: &str) -> Result<ExperimentRecord, En
             ledger_path(root).display()
         ))
     })?;
-    let updated = verify_record(records[idx].clone(), &iso8601_now())?;
-    records[idx] = updated.clone();
-    write_ledger(root, &records)?;
-    // The verify gate just passed on REAL measured builds — this event is the
-    // durable record of the ONLY transition that can mint a "verified".
-    emit_event(root, "experiment.verified", &updated);
+    let updated = verify_record_with_margin(records[idx].clone(), &iso8601_now(), min_margin_pct)?;
+    if let VerifyOutcome::Verified(rec) = &updated {
+        records[idx] = rec.clone();
+        write_ledger(root, &records)?;
+        // The verify gate just passed on REAL measured builds — this event is the
+        // durable record of the ONLY transition that can mint a "verified".
+        emit_event(root, "experiment.verified", rec);
+    }
     Ok(updated)
 }
 
@@ -1014,9 +1094,18 @@ mod tests {
         assert!(verify_record(failed, "t4").is_err());
 
         let rec = apply_measurement(rec, "candidate", 700, true, "cargo build", "t3").unwrap();
-        let verified = verify_record(rec, "t4").unwrap();
+        let verified = verified_record(verify_record(rec, "t4").unwrap());
         assert_eq!(verified.status, "verified");
         assert_eq!(verified.verified_at.as_deref(), Some("t4"));
+    }
+
+    /// Test seam: unwrap the Verified variant (the default margin upgrades
+    /// every record these tests feed it).
+    fn verified_record(outcome: crate::product::VerifyOutcome) -> ExperimentRecord {
+        match outcome {
+            crate::product::VerifyOutcome::Verified(rec) => rec,
+            other => panic!("expected Verified, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1067,6 +1156,127 @@ mod tests {
         std::fs::remove_dir_all(&ws).unwrap();
     }
 
+    /* -- issue #143: the verify margin rule ----------------------------- */
+
+    fn measured_pair(baseline_ms: u64, candidate_ms: u64) -> ExperimentRecord {
+        let rec = rec("margin");
+        let with_base =
+            apply_measurement(rec, "baseline", baseline_ms, true, "cargo build", "t1").unwrap();
+        apply_measurement(
+            with_base,
+            "candidate",
+            candidate_ms,
+            true,
+            "cargo build",
+            "t2",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn within_noise_delta_never_upgrades_the_tier() {
+        // The QA wave-1 repro: two ~120 ms builds a few ms apart. Default
+        // margin 10% of 120 → 12 ms; a 2 ms delta is noise, not evidence.
+        let outcome = verify_record(measured_pair(120, 118), "t3").unwrap();
+        match outcome {
+            VerifyOutcome::WithinNoise {
+                record,
+                baseline_ms,
+                candidate_ms,
+                delta_ms,
+                margin_ms,
+            } => {
+                assert_eq!(
+                    (baseline_ms, candidate_ms, delta_ms, margin_ms),
+                    (120, 118, 2, 12)
+                );
+                // The tier does NOT upgrade — the ledger record is returned
+                // exactly as it was measured.
+                assert_eq!(record.status, "measured");
+                assert_eq!(record.verified_at, None);
+            }
+            VerifyOutcome::Verified(rec) => {
+                panic!("a 2 ms delta on a 120 ms baseline must NOT verify: {rec:?}")
+            }
+        }
+    }
+
+    #[test]
+    fn the_margin_boundary_is_strict_exceed_not_reach() {
+        // baseline 100, default margin → ceil(10.0) = 10 ms.
+        // delta == margin → within-noise…
+        match verify_record(measured_pair(100, 90), "t3").unwrap() {
+            VerifyOutcome::WithinNoise {
+                delta_ms,
+                margin_ms,
+                ..
+            } => {
+                assert_eq!(
+                    (delta_ms, margin_ms),
+                    (10, 10),
+                    "equal to the margin is within-noise"
+                );
+            }
+            VerifyOutcome::Verified(rec) => panic!("delta == margin verified: {rec:?}"),
+        }
+        // …delta one millisecond above the margin → verified.
+        let verified = verified_record(verify_record(measured_pair(100, 89), "t3").unwrap());
+        assert_eq!(verified.status, "verified");
+        assert_eq!(verified.verified_at.as_deref(), Some("t3"));
+    }
+
+    #[test]
+    fn explicit_zero_margin_verifies_any_strictly_faster_delta() {
+        // An operator-configured 0% margin is the documented "I accept the
+        // noise risk" override: any strictly faster candidate verifies.
+        let verified =
+            verified_record(verify_record_with_margin(measured_pair(500, 499), "t3", 0.0).unwrap());
+        assert_eq!(verified.status, "verified");
+    }
+
+    #[test]
+    fn nonsensical_margins_are_named_refusals_never_silent_clamps() {
+        for bad in [f64::NAN, f64::INFINITY, -1.0, 100.5] {
+            let err = verify_record_with_margin(measured_pair(100, 50), "t3", bad).unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                msg.contains("--min-margin-pct"),
+                "refusal names the flag: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn within_noise_verify_touches_neither_ledger_nor_events() {
+        let ws = tmpdir("events-within-noise");
+        let rec = experiment_record(&ws, "ev-noise", "a hypothesis", None).unwrap();
+        let measured = apply_measurement(rec, "baseline", 200, true, "cargo build", "t1").unwrap();
+        let measured =
+            apply_measurement(measured, "candidate", 195, true, "cargo build", "t2").unwrap();
+        write_ledger(&ws, &[measured]).unwrap();
+        let before_events = events::read_events(&ws).unwrap().events.len();
+        assert_eq!(
+            before_events, 1,
+            "the recorded event only — apply_measurement is the pure seam (events fire on the real measure/verify transitions), the measured pair was persisted directly"
+        );
+
+        // delta 5 ms vs margin ceil(20) = 20 ms → within-noise, exit-level
+        // success, but NO ledger rewrite and NO event (no transition).
+        let outcome = experiment_verify(&ws, "ev-noise", DEFAULT_MIN_MARGIN_PCT).unwrap();
+        assert!(matches!(outcome, VerifyOutcome::WithinNoise { .. }));
+
+        let listed = experiment_list(&ws).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].status, "measured", "the tier stays measured");
+        assert_eq!(listed[0].verified_at, None);
+        assert_eq!(
+            events::read_events(&ws).unwrap().events.len(),
+            before_events,
+            "a within-noise verdict mints NO event — only transitions do"
+        );
+        std::fs::remove_dir_all(&ws).unwrap();
+    }
+
     #[test]
     fn experiment_ledger_roundtrip_and_guards() {
         let ws = tmpdir("ledger");
@@ -1084,11 +1294,13 @@ mod tests {
         // freeze after verify
         let with_b = apply_measurement(r0, "baseline", 800, true, "cargo build", "t1").unwrap();
         write_ledger(&ws, std::slice::from_ref(&with_b)).unwrap();
-        let verified = verify_record(
-            apply_measurement(with_b, "candidate", 400, true, "cargo build", "t2").unwrap(),
-            "t3",
-        )
-        .unwrap();
+        let verified = verified_record(
+            verify_record(
+                apply_measurement(with_b, "candidate", 400, true, "cargo build", "t2").unwrap(),
+                "t3",
+            )
+            .unwrap(),
+        );
         write_ledger(&ws, std::slice::from_ref(&verified)).unwrap();
         let frozen = apply_measurement(verified, "baseline", 10, true, "cargo build", "t4");
         assert!(frozen.is_err(), "verified records are frozen");
@@ -1146,7 +1358,7 @@ mod tests {
         let ws = tmpdir("events-refused");
         experiment_record(&ws, "ev-refused", "a hypothesis", None).unwrap();
         let before = events::read_events(&ws).unwrap().events.len();
-        let err = experiment_verify(&ws, "ev-refused").unwrap_err();
+        let err = experiment_verify(&ws, "ev-refused", DEFAULT_MIN_MARGIN_PCT).unwrap_err();
         assert!(err.to_string().contains("not fully measured"));
         let after = events::read_events(&ws).unwrap();
         assert_eq!(after.events.len(), before, "a refusal never mints an event");
@@ -1176,7 +1388,9 @@ mod tests {
         // existing ledger tests do: verify the pure gate, persist, then check
         // that the event log is append-only and consistent with the ledger.
         let listed = experiment_list(&ws).unwrap();
-        let verified = verify_record(listed[0].clone(), "t3").unwrap();
+        let verified = verified_record(
+            verify_record_with_margin(listed[0].clone(), "t3", DEFAULT_MIN_MARGIN_PCT).unwrap(),
+        );
         write_ledger(&ws, std::slice::from_ref(&verified)).unwrap();
         events::append_event(
             &ws,

@@ -538,3 +538,57 @@ fn activate_refuses_garbage_and_missing_key_material_by_name() {
     }
     std::fs::remove_dir_all(&root).ok();
 }
+
+#[test]
+fn activate_without_an_override_names_the_unusable_embedded_key() {
+    // Issue #142, binary level: out of the box (no WANYRIX_ACTIVATION_PUBKEY)
+    // the embedded release key is the development placeholder
+    // (`PENDING_RELEASE_KEY`), so activation fails CLOSED with the named,
+    // actionable guidance — even when the token itself is perfectly
+    // well-formed. Exit 2, a refusal that names the override and the docs,
+    // no panic, and NOTHING cached.
+    let root = temp_dir("placeholder");
+    let (priv_hex, _) = mint_keypair(&root, "placeholder");
+    let (stdout, stderr, ok) = run_in(
+        &root,
+        &[],
+        &[
+            "license", "issue", "--plan", "team", "--team", "acme", "--days", "30", "--key",
+            &priv_hex, "--json",
+        ],
+    );
+    assert!(ok, "issue must succeed without any override: {stderr}");
+    let token_file = root.join("token.json");
+    std::fs::write(&token_file, stdout.trim()).unwrap();
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_wanyrix"));
+    cmd.args(["activate", "--key", token_file.to_str().unwrap()])
+        .current_dir(&root)
+        // Hermetic regardless of the host: the whole point is the NO-override
+        // path, so an operator-set variable on the CI machine must not leak in.
+        .env_remove("WANYRIX_ACTIVATION_PUBKEY");
+    let out = cmd.output().unwrap();
+    assert_eq!(out.status.code(), Some(2), "the documented error exit");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("WANYRIX_ACTIVATION_PUBKEY"),
+        "the refusal must name the override env var: {stderr}"
+    );
+    assert!(
+        stderr.contains("docs/COMMERCIAL.md"),
+        "the refusal must point at the docs: {stderr}"
+    );
+    assert!(
+        stderr.contains("activation is unavailable"),
+        "the refusal must name the build state: {stderr}"
+    );
+    assert!(
+        !stderr.contains("panicked") && !stderr.contains("RUST_BACKTRACE"),
+        "a clean refusal, never a panic: {stderr}"
+    );
+    assert!(
+        !root.join(".wanyrix/entitlement.json").exists(),
+        "a refused activation caches nothing"
+    );
+    std::fs::remove_dir_all(&root).ok();
+}

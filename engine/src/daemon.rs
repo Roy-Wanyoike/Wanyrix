@@ -88,9 +88,17 @@ pub struct ServerReport {
 }
 
 /// Server options. `max_requests = 0` means "no limit".
-#[derive(Debug, Clone, Copy, Default)]
+///
+/// `workspace_root` (`daemon start --path <dir>`, issue #143) anchors the
+/// daemon to a workspace: RELATIVE request paths are then resolved against
+/// this root instead of the server process CWD — the same `--path` flag
+/// `daemon call` accepts, honored server-side. Absolute request paths pass
+/// through unchanged; `None` (no flag) keeps the historical behavior
+/// exactly (relative paths resolve against the process CWD).
+#[derive(Debug, Clone, Default)]
 pub struct ServerOptions {
     pub max_requests: u64,
+    pub workspace_root: Option<std::path::PathBuf>,
 }
 
 /// One cached measured workspace. The cache holds at most one — the daemon
@@ -118,6 +126,10 @@ pub struct DaemonState {
     cache_misses: u64,
     cache: Option<CacheEntry>,
     stop_requested: bool,
+    /// `daemon start --path` anchor (issue #143): relative request paths
+    /// resolve against this root. `None` = resolve against the process CWD
+    /// (the pre-anchor behavior, unchanged default).
+    workspace_root: Option<PathBuf>,
 }
 
 impl Default for DaemonState {
@@ -128,6 +140,11 @@ impl Default for DaemonState {
 
 impl DaemonState {
     pub fn new() -> Self {
+        Self::with_anchor(None)
+    }
+
+    /// State anchored to a workspace root (`daemon start --path <dir>`).
+    pub fn with_anchor(workspace_root: Option<PathBuf>) -> Self {
         DaemonState {
             started: Instant::now(),
             requests_served: 0,
@@ -135,6 +152,17 @@ impl DaemonState {
             cache_misses: 0,
             cache: None,
             stop_requested: false,
+            workspace_root,
+        }
+    }
+
+    /// Resolve a request path against the anchor: RELATIVE paths join the
+    /// anchored workspace root (issue #143 parity with `daemon call
+    /// --path`); absolute paths are never touched.
+    fn resolve_request_path(&self, p: PathBuf) -> PathBuf {
+        match (&self.workspace_root, p.is_absolute()) {
+            (Some(root), false) => root.join(p),
+            _ => p,
         }
     }
 
@@ -236,7 +264,7 @@ impl DaemonState {
                 now,
             );
         };
-        let path = PathBuf::from(path_str);
+        let path = self.resolve_request_path(PathBuf::from(path_str));
         let scan = match self.scan_cached(&path, now) {
             Ok((scan, cached)) => (scan, cached),
             Err(e) => {
@@ -316,6 +344,7 @@ impl DaemonState {
             "requestsServed": self.requests_served,
             "cacheHits": self.cache_hits,
             "cacheMisses": self.cache_misses,
+            "workspaceRoot": self.workspace_root.as_ref().map(|p| p.display().to_string()),
             "cachedWorkspace": self.cache.as_ref().map(|e| e.scan.workspace_name.clone()),
             "cachedManifests": self.cache.as_ref().map(|e| e.scan.manifests_found),
         })
@@ -420,11 +449,21 @@ struct DaemonRequest {
 
 /// Bind, serve until stop, and return the measured server report.
 ///
+/// - validates the `--path` anchor BEFORE binding (a nonexistent workspace
+///   root is a named refusal, never a daemon that serves only errors);
 /// - binds `socket` with mode `0600`;
 /// - refuses to steal a LIVE socket (one that answers a probe connect);
 /// - removes a STALE socket file before binding;
 /// - removes the socket file on exit.
 pub fn run_server(socket: &Path, opts: &ServerOptions) -> Result<ServerReport, EngineError> {
+    if let Some(root) = &opts.workspace_root {
+        if !root.is_dir() {
+            return Err(EngineError::Daemon(format!(
+                "daemon workspace root {} does not exist or is not a directory — pass --path <workspace dir> or start without it (request paths then resolve against the process CWD)",
+                root.display()
+            )));
+        }
+    }
     unix_run_server(socket, opts)
 }
 
@@ -485,7 +524,9 @@ fn unix_run_server(socket: &Path, opts: &ServerOptions) -> Result<ServerReport, 
         .set_nonblocking(true)
         .map_err(|e| EngineError::Daemon(format!("cannot set listener non-blocking: {e}")))?;
 
-    let state = Arc::new(Mutex::new(DaemonState::new()));
+    let state = Arc::new(Mutex::new(DaemonState::with_anchor(
+        opts.workspace_root.clone(),
+    )));
     let started = Instant::now();
     loop {
         match listener.accept() {
@@ -914,11 +955,81 @@ mod tests {
         assert!(client_request_line("exec", None).is_err());
     }
 
+    /// Issue #143: `daemon start --path <root>` anchors the server — a
+    /// RELATIVE request path resolves against the anchor, an absolute one
+    /// is untouched, and the status frame echoes the anchor.
+    #[test]
+    fn anchored_start_resolves_relative_request_paths() {
+        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let tiny = fixture("tiny-ws");
+        let mut anchored = DaemonState::with_anchor(Some(fixtures.clone()));
+
+        // status echoes the anchor before any analysis request.
+        let status = anchored.handle_request(&req_line("s1", "status", None), "now");
+        let sv: Value = serde_json::from_str(&status).unwrap();
+        assert_eq!(
+            sv["data"]["workspaceRoot"].as_str().unwrap(),
+            fixtures.display().to_string(),
+            "the anchor is visible in the status frame"
+        );
+
+        // Relative request path → resolved against the anchor (this scan
+        // measured the SAME workspace the absolute form measures).
+        let rel = anchored.handle_request(
+            &req_line("r1", "doctor", Some(Path::new("tiny-ws"))),
+            "2026-01-01T00:00:00Z",
+        );
+        let rv: Value = serde_json::from_str(&rel).unwrap();
+        assert_eq!(
+            rv["ok"], true,
+            "relative path anchored to the fixture: {rel}"
+        );
+        assert_eq!(rv["data"]["workspace"], "tiny-ws");
+
+        let mut plain = DaemonState::new();
+        let abs = plain.handle_request(&doctor_req(&tiny), "2026-01-01T00:00:00Z");
+        let av: Value = serde_json::from_str(&abs).unwrap();
+        assert_eq!(
+            rv["data"]["findings"], av["data"]["findings"],
+            "anchored relative path and absolute path measure the same bytes"
+        );
+
+        // An unanchored state keeps the historical behavior: the status
+        // frame reports no root and a relative path resolves against CWD.
+        let plain_status = plain.handle_request(&req_line("s2", "status", None), "now");
+        let pv: Value = serde_json::from_str(&plain_status).unwrap();
+        assert!(pv["data"]["workspaceRoot"].is_null());
+    }
+
+    /// Issue #143: a nonexistent `--path` anchor is refused BEFORE the
+    /// socket binds — a daemon that could only serve errors must not start.
+    #[test]
+    fn run_server_refuses_a_missing_workspace_root() {
+        let missing = std::env::temp_dir().join("wanyrix-does-not-exist-anchor");
+        let opts = ServerOptions {
+            max_requests: 0,
+            workspace_root: Some(missing),
+        };
+        let err = super::run_server(Path::new("/tmp/never-bound.sock"), &opts).unwrap_err();
+        match err {
+            EngineError::Daemon(msg) => {
+                assert!(
+                    msg.contains("does not exist or is not a directory"),
+                    "{msg}"
+                );
+            }
+            other => panic!("expected a Daemon error, got {other:?}"),
+        }
+    }
+
     #[test]
     fn refuse_to_steal_a_live_socket_and_recover_a_stale_one() {
         let sock =
             std::env::temp_dir().join(format!("wanyrix-daemon-steal-{}.sock", std::process::id()));
-        let opts = ServerOptions { max_requests: 1 };
+        let opts = ServerOptions {
+            max_requests: 1,
+            ..Default::default()
+        };
         // Start a server that stops after ONE request.
         let server_thread = std::thread::spawn({
             let sock = sock.clone();
@@ -944,7 +1055,10 @@ mod tests {
         let stale =
             std::env::temp_dir().join(format!("wanyrix-daemon-stale-{}.sock", std::process::id()));
         std::fs::write(&stale, b"not a socket").unwrap();
-        let opts2 = ServerOptions { max_requests: 1 };
+        let opts2 = ServerOptions {
+            max_requests: 1,
+            ..Default::default()
+        };
         let stale_for_thread = stale.clone();
         let server2 = std::thread::spawn(move || super::run_server(&stale_for_thread, &opts2));
         let mut rebound = false;
@@ -979,7 +1093,15 @@ mod tests {
             std::env::temp_dir().join(format!("wanyrix-daemon-perm-{}.sock", std::process::id()));
         let handle = std::thread::spawn({
             let sock = sock.clone();
-            move || super::run_server(&sock, &ServerOptions { max_requests: 1 })
+            move || {
+                super::run_server(
+                    &sock,
+                    &ServerOptions {
+                        max_requests: 1,
+                        ..Default::default()
+                    },
+                )
+            }
         });
         let mut bound = false;
         for _ in 0..250 {

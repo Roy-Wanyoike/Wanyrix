@@ -507,12 +507,22 @@ pub enum ExperimentCmd {
         pretty: bool,
     },
     /// Grant `verified` — only when baseline and candidate are real,
-    /// successful measurements and the candidate is measurably faster.
+    /// successful measurements and the candidate is faster by MORE than
+    /// the minimum margin (issue #143: a delta within build-timing noise is
+    /// an explicit `within-noise` outcome that never upgrades the tier).
     Verify {
         #[arg(long)]
         name: String,
         #[arg(long, default_value = ".")]
         path: PathBuf,
+        /// Minimum measured improvement (as a percentage of the measured
+        /// baseline wall clock) required to grant `verified`. A candidate
+        /// faster by at most this much is reported `within-noise` — the
+        /// delta could be pure timing noise, so the evidence tier stays
+        /// `measured`. Default 10%; `0` accepts any strictly faster delta
+        /// (operator-accepted noise risk); values above 100 are refused.
+        #[arg(long, default_value_t = crate::product::DEFAULT_MIN_MARGIN_PCT)]
+        min_margin_pct: f64,
         #[arg(long)]
         json: bool,
         /// Pretty-print the JSON (has no effect without --json).
@@ -561,6 +571,13 @@ pub enum StoreCmd {
         /// Only scans of this workspace name (exact match).
         #[arg(long)]
         workspace: Option<String>,
+        /// Emit the wanyrix.store-scans/v1 collection envelope instead of
+        /// the human table (design rule 1: every read command has --json).
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
     },
     /// Integrity check: every scan must have its complete findings row
     /// set; reports (and with --repair removes) kill-between-commits
@@ -571,6 +588,13 @@ pub enum StoreCmd {
         /// Delete orphaned/inconsistent rows instead of only reporting them.
         #[arg(long)]
         repair: bool,
+        /// Emit the wanyrix.store-fsck/v1 envelope instead of the human
+        /// summary (design rule 1: every read command has --json).
+        #[arg(long)]
+        json: bool,
+        /// Pretty-print the JSON (has no effect without --json).
+        #[arg(long)]
+        pretty: bool,
     },
 }
 
@@ -583,6 +607,13 @@ pub enum DaemonCmd {
         /// Unix domain socket path (created with mode 0600).
         #[arg(long)]
         socket: PathBuf,
+        /// Workspace root to anchor the daemon to: RELATIVE request paths
+        /// resolve against this directory instead of the server's CWD
+        /// (parity with `daemon call --path`, issue #143). Absolute request
+        /// paths are unaffected; without the flag the server behaves
+        /// exactly as before (process CWD).
+        #[arg(long)]
+        path: Option<PathBuf>,
         /// Stop after serving N requests (0 = serve until shutdown).
         #[arg(long, default_value_t = 0)]
         max_requests: u64,
@@ -745,8 +776,26 @@ pub fn store_run(cmd: StoreCmd) -> Result<String, EngineError> {
                 db.display()
             ))
         }
-        StoreCmd::List { db, workspace } => {
+        StoreCmd::List {
+            db,
+            workspace,
+            json,
+            pretty,
+        } => {
             let rows = store::list(&db, workspace.as_deref())?;
+            if json {
+                // Design rule 1 (issue #143): the read surface speaks the
+                // versioned envelope too — wanyrix.store-scans/v1.
+                let value = store::StoreScansEnvelope {
+                    schema: store::STORE_SCANS_SCHEMA,
+                    db: db.display().to_string(),
+                    workspace: workspace.as_ref(),
+                    count: rows.len(),
+                    scans: rows,
+                    generated_at: iso8601_now(),
+                };
+                return serialize_json(&value, pretty);
+            }
             let mut out = String::new();
             match &workspace {
                 Some(w) => out.push_str(&format!(
@@ -767,8 +816,42 @@ pub fn store_run(cmd: StoreCmd) -> Result<String, EngineError> {
             );
             Ok(out)
         }
-        StoreCmd::Fsck { db, repair } => {
+        StoreCmd::Fsck {
+            db,
+            repair,
+            json,
+            pretty,
+        } => {
             let report = store::fsck(&db, repair)?;
+            if json {
+                // wanyrix.store-fsck/v1 (issue #143): every problem class
+                // the human summary prints, machine-readable. Tuple triples
+                // become named objects — never positional arrays.
+                let triple = |v: &[(i64, i64, i64)]| {
+                    v.iter()
+                        .map(|(id, stored, actual)| store::StoreFsckTriple {
+                            scan_id: *id,
+                            finding_count: *stored,
+                            actual_rows: *actual,
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let value = store::StoreFsckEnvelope {
+                    schema: store::STORE_FSCK_SCHEMA,
+                    db: db.display().to_string(),
+                    repair,
+                    healthy: report.healthy(),
+                    scans_checked: report.scans_checked,
+                    findings_rows: report.findings_rows,
+                    incomplete_scans: triple(&report.incomplete_scans),
+                    count_mismatches: triple(&report.count_mismatches),
+                    orphan_findings: report.orphan_findings,
+                    removed_scans: report.removed_scans,
+                    removed_findings: report.removed_findings,
+                    generated_at: iso8601_now(),
+                };
+                return serialize_json(&value, pretty);
+            }
             let mut out = format!(
                 "wanyrix store fsck — {}{}\n",
                 db.display(),
@@ -828,9 +911,16 @@ pub fn daemon_run(cmd: DaemonCmd) -> Result<String, EngineError> {
     match cmd {
         DaemonCmd::Start {
             socket,
+            path,
             max_requests,
         } => {
-            let report = daemon::run_server(&socket, &daemon::ServerOptions { max_requests })?;
+            let report = daemon::run_server(
+                &socket,
+                &daemon::ServerOptions {
+                    max_requests,
+                    workspace_root: path,
+                },
+            )?;
             Ok(daemon::human_server_summary(&report))
         }
         DaemonCmd::Call {
@@ -1012,14 +1102,61 @@ pub fn product_experiment_run(cmd: crate::cli::ExperimentCmd) -> Result<String, 
         ExperimentCmd::Verify {
             name,
             path,
+            min_margin_pct,
             json,
             pretty,
         } => {
-            let rec = product::experiment_verify(&path, &name)?;
-            if json {
-                serialize_json(&rec, pretty)
-            } else {
-                Ok(format!("verified:\n{}", product::experiment_human(&rec)))
+            let outcome = product::experiment_verify(&path, &name, min_margin_pct)?;
+            match outcome {
+                product::VerifyOutcome::Verified(rec) => {
+                    if json {
+                        // The upgraded envelope states its outcome explicitly
+                        // (issue #143): status "verified" + verifyOutcome.
+                        let mut value = serde_json::to_value(&rec)
+                            .map_err(|e| EngineError::Json(e.to_string()))?;
+                        if let Some(obj) = value.as_object_mut() {
+                            obj.insert(
+                                "verifyOutcome".into(),
+                                serde_json::Value::String("verified".into()),
+                            );
+                        }
+                        serialize_json(&value, pretty)
+                    } else {
+                        Ok(format!("verified:\n{}", product::experiment_human(&rec)))
+                    }
+                }
+                product::VerifyOutcome::WithinNoise {
+                    record,
+                    baseline_ms,
+                    candidate_ms,
+                    delta_ms,
+                    margin_ms,
+                } => {
+                    if json {
+                        let mut value = serde_json::to_value(&record)
+                            .map_err(|e| EngineError::Json(e.to_string()))?;
+                        if let Some(obj) = value.as_object_mut() {
+                            obj.insert(
+                                "verifyOutcome".into(),
+                                serde_json::Value::String("within-noise".into()),
+                            );
+                            obj.insert("measuredDeltaMs".into(), serde_json::json!(delta_ms));
+                            obj.insert("minMarginMs".into(), serde_json::json!(margin_ms));
+                            obj.insert(
+                                "note".into(),
+                                serde_json::json!(format!(
+                                    "the measured candidate ({candidate_ms} ms) is faster than the measured baseline ({baseline_ms} ms) by {delta_ms} ms — at or below the {margin_ms} ms minimum margin (build-timing noise); the evidence tier stays 'measured' and nothing was verified. Re-measure for a larger delta or pass --min-margin-pct explicitly."
+                                )),
+                            );
+                        }
+                        serialize_json(&value, pretty)
+                    } else {
+                        Ok(format!(
+                            "within-noise — the evidence tier stays 'measured' (NOT verified):\n{}\n  measured delta: baseline {baseline_ms} ms − candidate {candidate_ms} ms = {delta_ms} ms\n  minimum margin: {margin_ms} ms (--min-margin-pct) — the delta does not exceed it, so the improvement could be pure timing noise\n  next: re-measure for a larger delta, or re-run verify with an explicit --min-margin-pct if you accept the noise risk",
+                            product::experiment_human(&record)
+                        ))
+                    }
+                }
             }
         }
         ExperimentCmd::List { path, json, pretty } => {
