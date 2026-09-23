@@ -1,4 +1,4 @@
-# Cloud mode — design direction (issue #61)
+# Cloud mode — design direction (umbrella issue #66)
 
 Status: **design only — nothing in this document is implemented.** The product
 remains local-first; the deterministic engine and the web dashboard run fully
