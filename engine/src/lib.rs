@@ -67,6 +67,12 @@
 //! - [`export`] — artifacts-as-code export (issue #91): one measured pass
 //!   written as clock-free, path-relative JSON artifacts + a sha256-bound
 //!   manifest (`wanyrix.export/v1`) so teams can diff evidence in PRs
+//! - [`compare`] — the time-machine diff of two STORED scans (issue #115):
+//!   findings added/resolved/changed, crate add/remove/version deltas and
+//!   severity deltas, read back verbatim from the store into a clock-free
+//!   `wanyrix.compare/v1` envelope (`generatedAt` is the literal
+//!   `not-measured` — repeated runs are byte-identical); the public
+//!   diff core is reused by the PR-regression surface (issue #116)
 //! - [`entitlement`] — local-first subscription layer (issue #94): offline
 //!   ed25519 license verification (`wanyrix activate`), the cached
 //!   entitlement envelope (`wanyrix.entitlement/v1`), maintainer keygen/issue
@@ -86,6 +92,7 @@ pub mod analysis;
 pub mod build;
 pub mod change;
 pub mod cli;
+pub mod compare;
 pub mod daemon;
 pub mod entitlement;
 pub mod events;
@@ -107,6 +114,7 @@ pub mod timestamp;
 
 pub use analysis::{Evidence, Finding};
 pub use build::{ArtifactRow, BuildOptions, BuildReport, BUILD_PROFILE, BUILD_SCHEMA};
+pub use compare::{CompareReport, COMPARE_SCHEMA};
 pub use entitlement::{
     EntitlementReport, EntitlementState, GateGrant, Plan, SignedToken, TokenPayload,
     ENTITLEMENT_SCHEMA, REVALIDATION_GRACE_DAYS, SURFACE_REGISTRY, TOKEN_SCHEMA,
@@ -118,7 +126,7 @@ pub use model::{
 };
 pub use report::{DoctorReport, GraphReport, HealthReport};
 pub use scan::{scan_workspace, scan_workspace_excluding};
-pub use store::{SaveOutcome, ScanRow, STORE_SCHEMA_VERSION};
+pub use store::{CrateSnapshot, SaveOutcome, ScanRow, STORE_SCHEMA_VERSION};
 pub use sync::{workspace_id, SyncPullReport, SyncPushReport, SYNC_SCHEMA};
 pub use synth::{SynthOutcome, SynthPlan, DEFAULT_SEED, MAX_CRATES};
 pub use telemetry::{TelemetryReport, TELEMETRY_SCHEMA};

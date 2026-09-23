@@ -268,6 +268,12 @@ pub enum EngineError {
     /// (sync artifacts and workspace ids must be machine-independent, the
     /// export relative-paths-only contract), or an empty remote value.
     Sync(String),
+    /// The compare surface (issue #115) refused: an unknown scan id, a
+    /// cross-workspace pair, or a store entry too corrupt to diff
+    /// (findings rows disagree with the committed count). The precise
+    /// reason and a remediation are preserved verbatim — never a partial
+    /// diff, never a guessed one.
+    Compare(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -310,6 +316,7 @@ impl std::fmt::Display for EngineError {
             EngineError::SyncBranch(e) => write!(f, "sync registry branch unavailable: {e}"),
             EngineError::SyncConflict(e) => write!(f, "sync conflict: {e}"),
             EngineError::Sync(e) => write!(f, "sync error: {e}"),
+            EngineError::Compare(e) => write!(f, "compare error: {e}"),
         }
     }
 }
